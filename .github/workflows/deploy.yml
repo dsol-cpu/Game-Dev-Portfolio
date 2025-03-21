@@ -1,0 +1,62 @@
+name: Deploy to GitHub Pages
+
+on:
+  pull_request:
+    branches: ["main"]
+  push:
+    branches: ["main"]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  # Build and verify job - runs on all PRs and main pushes
+  build_site:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 8
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "pnpm"
+          cache-dependency-path: "./src/front_end/pnpm-lock.yaml"
+
+      - name: Install dependencies
+        working-directory: ./src/front_end
+        run: pnpm install
+
+      - name: build
+        working-directory: ./src/front_end
+        env:
+          BASE_PATH: "/${{ github.event.repository.name }}"
+        run: pnpm run build
+
+      # Only upload artifacts if we're on main branch
+      - name: Upload Artifacts
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "src/front_end/build/"
+
+  # Deploy job - only runs on main branch
+  deploy:
+    needs: build_site
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-config
+  namespace: portfolio
+data:
+  NODE_ENV: "development"
+  FRONTEND_PORT: "8081"
+  BACKEND_URL: ${BACKEND_URL}
+  BACKEND_ROUTE: ${BACKEND_ROUTE}
+  PAGE_VISIT_ROUTE_PATH: ${PAGE_VISIT_ROUTE_PATH}

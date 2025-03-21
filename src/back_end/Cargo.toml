@@ -1,0 +1,65 @@
+[package]
+name = "back_end"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+actix-cors = "0.7.0"
+actix-governor = "0.7.0"
+actix-web = "4"
+async-graphql = "7.0.14"
+async-graphql-actix-web = "7.0.14"
+awc = "3.5.1"
+chrono = { version = "0.4.38", features = ["clock", "now", "rkyv", "serde"] }
+deadpool-postgres = "0.14.0"
+dotenv = "0.15.0"
+env_logger = "0.11.5"
+log = "0.4.22"
+serde = { version = "1.0.214", features = ["derive"] }
+serde_json = "1.0.123"
+supabase_rs = "0.4.0"
+octocrab = "0.43.0"
+redis = "0.28.1"
+futures = "0.3.31"
+reqwest = "0.12.12"
+
+[dev-dependencies]
+utoipa = "5.3.1"
+utoipa-swagger-ui = "9.0.0"
+
+[[bin]]
+name = "back_end"
+path = "src/main.rs"  # Ensure this points to your main.rs file
+
+[profile.dev]
+opt-level = 0               # Disable optimizations completely
+debug = 0                   # No debug symbols for faster builds
+debug-assertions = true     # Keep debug assertions
+overflow-checks = true      # Keep overflow checks
+lto = "off"                 # Disable Link Time Optimization
+panic = "unwind"            # Use unwinding for panics
+incremental = true          # Enable incremental compilation
+codegen-units = 512         # Maximum parallel codegen units
+split-debuginfo = "unpacked" # Faster debug info generation on supported platforms
+rpath = false               # Disable rpath
+
+# Settings for dependencies in dev mode
+[profile.dev.package."*"]
+opt-level = 0               # No optimization for dependencies
+debug = 0                   # No debug symbols for dependencies
+debug-assertions = false    # Disable debug assertions for dependencies
+strip = 'debuginfo'         # Strip debug info from dependencies
+
+# Profile for build dependencies
+[profile.dev.build-override]
+opt-level = 0               # No optimization for build dependencies
+codegen-units = 512         # Maximum parallel codegen units for build dependencies
+debug = 0                   # No debug info for build dependencies
+
+# Release profile remains optimized
+[profile.release]
+opt-level = 3              # Maximum optimization
+lto = true                 # Enable Link Time Optimization
+codegen-units = 1          # Single codegen unit for maximum optimization
+panic = "abort"            # Abort on panic
+strip = true               # Strip symbols

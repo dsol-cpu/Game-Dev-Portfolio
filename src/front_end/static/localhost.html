@@ -1,0 +1,3163 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+		<meta charset="utf-8" />
+		<link rel="icon" href="http://localhost:5173/open_folder.png" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+		<!--[-->
+		<meta property="og:title" content="David Solinsky's software engineer portfolio website" />
+		<meta
+			property="og:description"
+			content="David Solinsky's software engineer portfolio website"
+		/>
+		<meta property="og:image" content="portfolio_website_icon.svg" />
+		<meta property="og:url" content="https://dsol-cpu.github.io/SWE-Portfolio" />
+		<meta property="og:type" content="website" />
+		<meta name="twitter:card" content="portfolio_website_icon.svg" />
+		<meta name="twitter:title" content="David Solinsky's software engineer portfolio website" />
+		<meta
+			name="twitter:description"
+			content="David Solinsky's software engineer portfolio website."
+		/>
+		<meta name="twitter:image" content="portfolio_website_icon.svg" />
+		<!--]-->
+		<style id="hide_comments_everywhere">
+			.o2-display-comments-toggle,
+			.o2-post-comments,
+			.o2-post-comment-controls,
+			#discourse-comments,
+			#disqus_thread,
+			#disqus_thread > iframe,
+			.fb-comments,
+			#hyvor-talk-view,
+			[href$='hyvor-talk-view'],
+			hyvor-talk-comment-count,
+			#commentarea,
+			.commentlist,
+			.responsesStreamWrapper,
+			#spotim-specific,
+			#spotIm-conversations-module-wrapper,
+			.spot-im-comments,
+			[data-spotim-module='conversation'],
+			#vuukle-comments,
+			#add_comment,
+			#comment,
+			#Comment,
+			#commentform,
+			#comment-form,
+			#comment-thread,
+			#comment-wrapper,
+			#commenting,
+			#comments,
+			#Comments,
+			#comments-section,
+			#guestbook,
+			#postcomment,
+			#replybox,
+			#respond,
+			.comment,
+			.Comment,
+			.comments,
+			.Comments,
+			.commenting,
+			.comment_area,
+			.comments_area,
+			.comment-area,
+			.comment-form,
+			.comment-thread,
+			.comments-area,
+			.comments-link,
+			.comments-section,
+			.comments-title,
+			.feedback,
+			.guestbook,
+			.respond,
+			.gsc-comments,
+			.giscus-frame {
+				display: none !important;
+				visibility: hidden !important;
+			}
+			code .comment,
+			pre .comment,
+			textarea.comments {
+				display: unset !important;
+				visibility: unset !important;
+			}
+		</style>
+		<style type="text/css" data-vite-dev-id="/app/src/app.css">
+			*,
+			::before,
+			::after {
+				--tw-border-spacing-x: 0;
+				--tw-border-spacing-y: 0;
+				--tw-translate-x: 0;
+				--tw-translate-y: 0;
+				--tw-rotate: 0;
+				--tw-skew-x: 0;
+				--tw-skew-y: 0;
+				--tw-scale-x: 1;
+				--tw-scale-y: 1;
+				--tw-pan-x:  ;
+				--tw-pan-y:  ;
+				--tw-pinch-zoom:  ;
+				--tw-scroll-snap-strictness: proximity;
+				--tw-gradient-from-position:  ;
+				--tw-gradient-via-position:  ;
+				--tw-gradient-to-position:  ;
+				--tw-ordinal:  ;
+				--tw-slashed-zero:  ;
+				--tw-numeric-figure:  ;
+				--tw-numeric-spacing:  ;
+				--tw-numeric-fraction:  ;
+				--tw-ring-inset:  ;
+				--tw-ring-offset-width: 0px;
+				--tw-ring-offset-color: #fff;
+				--tw-ring-color: rgb(59 130 246 / 0.5);
+				--tw-ring-offset-shadow: 0 0 #0000;
+				--tw-ring-shadow: 0 0 #0000;
+				--tw-shadow: 0 0 #0000;
+				--tw-shadow-colored: 0 0 #0000;
+				--tw-blur:  ;
+				--tw-brightness:  ;
+				--tw-contrast:  ;
+				--tw-grayscale:  ;
+				--tw-hue-rotate:  ;
+				--tw-invert:  ;
+				--tw-saturate:  ;
+				--tw-sepia:  ;
+				--tw-drop-shadow:  ;
+				--tw-backdrop-blur:  ;
+				--tw-backdrop-brightness:  ;
+				--tw-backdrop-contrast:  ;
+				--tw-backdrop-grayscale:  ;
+				--tw-backdrop-hue-rotate:  ;
+				--tw-backdrop-invert:  ;
+				--tw-backdrop-opacity:  ;
+				--tw-backdrop-saturate:  ;
+				--tw-backdrop-sepia:  ;
+				--tw-contain-size:  ;
+				--tw-contain-layout:  ;
+				--tw-contain-paint:  ;
+				--tw-contain-style:  ;
+			}
+
+			::backdrop {
+				--tw-border-spacing-x: 0;
+				--tw-border-spacing-y: 0;
+				--tw-translate-x: 0;
+				--tw-translate-y: 0;
+				--tw-rotate: 0;
+				--tw-skew-x: 0;
+				--tw-skew-y: 0;
+				--tw-scale-x: 1;
+				--tw-scale-y: 1;
+				--tw-pan-x:  ;
+				--tw-pan-y:  ;
+				--tw-pinch-zoom:  ;
+				--tw-scroll-snap-strictness: proximity;
+				--tw-gradient-from-position:  ;
+				--tw-gradient-via-position:  ;
+				--tw-gradient-to-position:  ;
+				--tw-ordinal:  ;
+				--tw-slashed-zero:  ;
+				--tw-numeric-figure:  ;
+				--tw-numeric-spacing:  ;
+				--tw-numeric-fraction:  ;
+				--tw-ring-inset:  ;
+				--tw-ring-offset-width: 0px;
+				--tw-ring-offset-color: #fff;
+				--tw-ring-color: rgb(59 130 246 / 0.5);
+				--tw-ring-offset-shadow: 0 0 #0000;
+				--tw-ring-shadow: 0 0 #0000;
+				--tw-shadow: 0 0 #0000;
+				--tw-shadow-colored: 0 0 #0000;
+				--tw-blur:  ;
+				--tw-brightness:  ;
+				--tw-contrast:  ;
+				--tw-grayscale:  ;
+				--tw-hue-rotate:  ;
+				--tw-invert:  ;
+				--tw-saturate:  ;
+				--tw-sepia:  ;
+				--tw-drop-shadow:  ;
+				--tw-backdrop-blur:  ;
+				--tw-backdrop-brightness:  ;
+				--tw-backdrop-contrast:  ;
+				--tw-backdrop-grayscale:  ;
+				--tw-backdrop-hue-rotate:  ;
+				--tw-backdrop-invert:  ;
+				--tw-backdrop-opacity:  ;
+				--tw-backdrop-saturate:  ;
+				--tw-backdrop-sepia:  ;
+				--tw-contain-size:  ;
+				--tw-contain-layout:  ;
+				--tw-contain-paint:  ;
+				--tw-contain-style:  ;
+			} /*
+! tailwindcss v3.4.17 | MIT License | https://tailwindcss.com
+*/ /*
+1. Prevent padding and border from affecting element width. (https://github.com/mozdevs/cssremedy/issues/4)
+2. Allow adding a border to an element by just adding a border-width. (https://github.com/tailwindcss/tailwindcss/pull/116)
+*/
+
+			*,
+			::before,
+			::after {
+				box-sizing: border-box; /* 1 */
+				border-width: 0; /* 2 */
+				border-style: solid; /* 2 */
+				border-color: #e5e7eb; /* 2 */
+			}
+
+			::before,
+			::after {
+				--tw-content: '';
+			}
+
+			/*
+1. Use a consistent sensible line-height in all browsers.
+2. Prevent adjustments of font size after orientation changes in iOS.
+3. Use a more readable tab size.
+4. Use the user's configured `sans` font-family by default.
+5. Use the user's configured `sans` font-feature-settings by default.
+6. Use the user's configured `sans` font-variation-settings by default.
+7. Disable tap highlights on iOS
+*/
+
+			html,
+			:host {
+				line-height: 1.5; /* 1 */
+				-webkit-text-size-adjust: 100%; /* 2 */
+				-moz-tab-size: 4; /* 3 */
+				-o-tab-size: 4;
+				tab-size: 4; /* 3 */
+				font-family: ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+					'Segoe UI Symbol', 'Noto Color Emoji'; /* 4 */
+				font-feature-settings: normal; /* 5 */
+				font-variation-settings: normal; /* 6 */
+				-webkit-tap-highlight-color: transparent; /* 7 */
+			}
+
+			/*
+1. Remove the margin in all browsers.
+2. Inherit line-height from `html` so users can set them as a class directly on the `html` element.
+*/
+
+			body {
+				margin: 0; /* 1 */
+				line-height: inherit; /* 2 */
+			}
+
+			/*
+1. Add the correct height in Firefox.
+2. Correct the inheritance of border color in Firefox. (https://bugzilla.mozilla.org/show_bug.cgi?id=190655)
+3. Ensure horizontal rules are visible by default.
+*/
+
+			hr {
+				height: 0; /* 1 */
+				color: inherit; /* 2 */
+				border-top-width: 1px; /* 3 */
+			}
+
+			/*
+Add the correct text decoration in Chrome, Edge, and Safari.
+*/
+
+			abbr:where([title]) {
+				-webkit-text-decoration: underline dotted;
+				text-decoration: underline dotted;
+			}
+
+			/*
+Remove the default font size and weight for headings.
+*/
+
+			h1,
+			h2,
+			h3,
+			h4,
+			h5,
+			h6 {
+				font-size: inherit;
+				font-weight: inherit;
+			}
+
+			/*
+Reset links to optimize for opt-in styling instead of opt-out.
+*/
+
+			a {
+				color: inherit;
+				text-decoration: inherit;
+			}
+
+			/*
+Add the correct font weight in Edge and Safari.
+*/
+
+			b,
+			strong {
+				font-weight: bolder;
+			}
+
+			/*
+1. Use the user's configured `mono` font-family by default.
+2. Use the user's configured `mono` font-feature-settings by default.
+3. Use the user's configured `mono` font-variation-settings by default.
+4. Correct the odd `em` font sizing in all browsers.
+*/
+
+			code,
+			kbd,
+			samp,
+			pre {
+				font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+					'Courier New', monospace; /* 1 */
+				font-feature-settings: normal; /* 2 */
+				font-variation-settings: normal; /* 3 */
+				font-size: 1em; /* 4 */
+			}
+
+			/*
+Add the correct font size in all browsers.
+*/
+
+			small {
+				font-size: 80%;
+			}
+
+			/*
+Prevent `sub` and `sup` elements from affecting the line height in all browsers.
+*/
+
+			sub,
+			sup {
+				font-size: 75%;
+				line-height: 0;
+				position: relative;
+				vertical-align: baseline;
+			}
+
+			sub {
+				bottom: -0.25em;
+			}
+
+			sup {
+				top: -0.5em;
+			}
+
+			/*
+1. Remove text indentation from table contents in Chrome and Safari. (https://bugs.chromium.org/p/chromium/issues/detail?id=999088, https://bugs.webkit.org/show_bug.cgi?id=201297)
+2. Correct table border color inheritance in all Chrome and Safari. (https://bugs.chromium.org/p/chromium/issues/detail?id=935729, https://bugs.webkit.org/show_bug.cgi?id=195016)
+3. Remove gaps between table borders by default.
+*/
+
+			table {
+				text-indent: 0; /* 1 */
+				border-color: inherit; /* 2 */
+				border-collapse: collapse; /* 3 */
+			}
+
+			/*
+1. Change the font styles in all browsers.
+2. Remove the margin in Firefox and Safari.
+3. Remove default padding in all browsers.
+*/
+
+			button,
+			input,
+			optgroup,
+			select,
+			textarea {
+				font-family: inherit; /* 1 */
+				font-feature-settings: inherit; /* 1 */
+				font-variation-settings: inherit; /* 1 */
+				font-size: 100%; /* 1 */
+				font-weight: inherit; /* 1 */
+				line-height: inherit; /* 1 */
+				letter-spacing: inherit; /* 1 */
+				color: inherit; /* 1 */
+				margin: 0; /* 2 */
+				padding: 0; /* 3 */
+			}
+
+			/*
+Remove the inheritance of text transform in Edge and Firefox.
+*/
+
+			button,
+			select {
+				text-transform: none;
+			}
+
+			/*
+1. Correct the inability to style clickable types in iOS and Safari.
+2. Remove default button styles.
+*/
+
+			button,
+			input:where([type='button']),
+			input:where([type='reset']),
+			input:where([type='submit']) {
+				-webkit-appearance: button; /* 1 */
+				background-color: transparent; /* 2 */
+				background-image: none; /* 2 */
+			}
+
+			/*
+Use the modern Firefox focus style for all focusable elements.
+*/
+
+			:-moz-focusring {
+				outline: auto;
+			}
+
+			/*
+Remove the additional `:invalid` styles in Firefox. (https://github.com/mozilla/gecko-dev/blob/2f9eacd9d3d995c937b4251a5557d95d494c9be1/layout/style/res/forms.css#L728-L737)
+*/
+
+			:-moz-ui-invalid {
+				box-shadow: none;
+			}
+
+			/*
+Add the correct vertical alignment in Chrome and Firefox.
+*/
+
+			progress {
+				vertical-align: baseline;
+			}
+
+			/*
+Correct the cursor style of increment and decrement buttons in Safari.
+*/
+
+			::-webkit-inner-spin-button,
+			::-webkit-outer-spin-button {
+				height: auto;
+			}
+
+			/*
+1. Correct the odd appearance in Chrome and Safari.
+2. Correct the outline style in Safari.
+*/
+
+			[type='search'] {
+				-webkit-appearance: textfield; /* 1 */
+				outline-offset: -2px; /* 2 */
+			}
+
+			/*
+Remove the inner padding in Chrome and Safari on macOS.
+*/
+
+			::-webkit-search-decoration {
+				-webkit-appearance: none;
+			}
+
+			/*
+1. Correct the inability to style clickable types in iOS and Safari.
+2. Change font properties to `inherit` in Safari.
+*/
+
+			::-webkit-file-upload-button {
+				-webkit-appearance: button; /* 1 */
+				font: inherit; /* 2 */
+			}
+
+			/*
+Add the correct display in Chrome and Safari.
+*/
+
+			summary {
+				display: list-item;
+			}
+
+			/*
+Removes the default spacing and border for appropriate elements.
+*/
+
+			blockquote,
+			dl,
+			dd,
+			h1,
+			h2,
+			h3,
+			h4,
+			h5,
+			h6,
+			hr,
+			figure,
+			p,
+			pre {
+				margin: 0;
+			}
+
+			fieldset {
+				margin: 0;
+				padding: 0;
+			}
+
+			legend {
+				padding: 0;
+			}
+
+			ol,
+			ul,
+			menu {
+				list-style: none;
+				margin: 0;
+				padding: 0;
+			}
+
+			/*
+Reset default styling for dialogs.
+*/
+			dialog {
+				padding: 0;
+			}
+
+			/*
+Prevent resizing textareas horizontally by default.
+*/
+
+			textarea {
+				resize: vertical;
+			}
+
+			/*
+1. Reset the default placeholder opacity in Firefox. (https://github.com/tailwindlabs/tailwindcss/issues/3300)
+2. Set the default placeholder color to the user's configured gray 400 color.
+*/
+
+			input::-moz-placeholder,
+			textarea::-moz-placeholder {
+				opacity: 1; /* 1 */
+				color: #9ca3af; /* 2 */
+			}
+
+			input::placeholder,
+			textarea::placeholder {
+				opacity: 1; /* 1 */
+				color: #9ca3af; /* 2 */
+			}
+
+			/*
+Set the default cursor for buttons.
+*/
+
+			button,
+			[role='button'] {
+				cursor: pointer;
+			}
+
+			/*
+Make sure disabled buttons don't get the pointer cursor.
+*/
+			:disabled {
+				cursor: default;
+			}
+
+			/*
+1. Make replaced elements `display: block` by default. (https://github.com/mozdevs/cssremedy/issues/14)
+2. Add `vertical-align: middle` to align replaced elements more sensibly by default. (https://github.com/jensimmons/cssremedy/issues/14#issuecomment-634934210)
+   This can trigger a poorly considered lint error in some tools but is included by design.
+*/
+
+			img,
+			svg,
+			video,
+			canvas,
+			audio,
+			iframe,
+			embed,
+			object {
+				display: block; /* 1 */
+				vertical-align: middle; /* 2 */
+			}
+
+			/*
+Constrain images and videos to the parent width and preserve their intrinsic aspect ratio. (https://github.com/mozdevs/cssremedy/issues/14)
+*/
+
+			img,
+			video {
+				max-width: 100%;
+				height: auto;
+			}
+
+			/* Make elements with the HTML hidden attribute stay hidden by default */
+			[hidden]:where(:not([hidden='until-found'])) {
+				display: none;
+			}
+			.container {
+				width: 100%;
+			}
+			@media (min-width: 640px) {
+				.container {
+					max-width: 640px;
+				}
+			}
+			@media (min-width: 768px) {
+				.container {
+					max-width: 768px;
+				}
+			}
+			@media (min-width: 1024px) {
+				.container {
+					max-width: 1024px;
+				}
+			}
+			@media (min-width: 1280px) {
+				.container {
+					max-width: 1280px;
+				}
+			}
+			@media (min-width: 1536px) {
+				.container {
+					max-width: 1536px;
+				}
+			}
+			.fixed {
+				position: fixed;
+			}
+			.absolute {
+				position: absolute;
+			}
+			.relative {
+				position: relative;
+			}
+			.-inset-3 {
+				inset: -0.75rem;
+			}
+			.inset-0 {
+				inset: 0px;
+			}
+			.left-0 {
+				left: 0px;
+			}
+			.right-0 {
+				right: 0px;
+			}
+			.top-0 {
+				top: 0px;
+			}
+			.top-full {
+				top: 100%;
+			}
+			.z-50 {
+				z-index: 50;
+			}
+			.z-\[-1\] {
+				z-index: -1;
+			}
+			.mx-auto {
+				margin-left: auto;
+				margin-right: auto;
+			}
+			.my-auto {
+				margin-top: auto;
+				margin-bottom: auto;
+			}
+			.mb-16 {
+				margin-bottom: 4rem;
+			}
+			.mb-6 {
+				margin-bottom: 1.5rem;
+			}
+			.ml-auto {
+				margin-left: auto;
+			}
+			.mt-0 {
+				margin-top: 0px;
+			}
+			.mt-4 {
+				margin-top: 1rem;
+			}
+			.mt-6 {
+				margin-top: 1.5rem;
+			}
+			.mt-7 {
+				margin-top: 1.75rem;
+			}
+			.mt-8 {
+				margin-top: 2rem;
+			}
+			.mb-12 {
+				margin-bottom: 3rem;
+			}
+			.block {
+				display: block;
+			}
+			.inline-block {
+				display: inline-block;
+			}
+			.flex {
+				display: flex;
+			}
+			.grid {
+				display: grid;
+			}
+			.contents {
+				display: contents;
+			}
+			.hidden {
+				display: none;
+			}
+			.aspect-square {
+				aspect-ratio: 1 / 1;
+			}
+			.h-10 {
+				height: 2.5rem;
+			}
+			.h-48 {
+				height: 12rem;
+			}
+			.h-6 {
+				height: 1.5rem;
+			}
+			.h-8 {
+				height: 2rem;
+			}
+			.h-\[17px\] {
+				height: 17px;
+			}
+			.h-\[200px\] {
+				height: 200px;
+			}
+			.h-auto {
+				height: auto;
+			}
+			.h-full {
+				height: 100%;
+			}
+			.h-16 {
+				height: 4rem;
+			}
+			.min-h-\[28rem\] {
+				min-height: 28rem;
+			}
+			.min-h-screen {
+				min-height: 100vh;
+			}
+			.w-10 {
+				width: 2.5rem;
+			}
+			.w-6 {
+				width: 1.5rem;
+			}
+			.w-8 {
+				width: 2rem;
+			}
+			.w-\[17px\] {
+				width: 17px;
+			}
+			.w-\[200px\] {
+				width: 200px;
+			}
+			.w-full {
+				width: 100%;
+			}
+			.w-16 {
+				width: 4rem;
+			}
+			.max-w-3xl {
+				max-width: 48rem;
+			}
+			.max-w-5xl {
+				max-width: 64rem;
+			}
+			.max-w-6xl {
+				max-width: 72rem;
+			}
+			.max-w-7xl {
+				max-width: 80rem;
+			}
+			.max-w-\[300px\] {
+				max-width: 300px;
+			}
+			.max-w-\[600px\] {
+				max-width: 600px;
+			}
+			.max-w-md {
+				max-width: 28rem;
+			}
+			.max-w-4xl {
+				max-width: 56rem;
+			}
+			.flex-1 {
+				flex: 1 1 0%;
+			}
+			.flex-shrink {
+				flex-shrink: 1;
+			}
+			.flex-shrink-0 {
+				flex-shrink: 0;
+			}
+			.shrink-0 {
+				flex-shrink: 0;
+			}
+			.transform {
+				transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate))
+					skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x))
+					scaleY(var(--tw-scale-y));
+			}
+			.list-inside {
+				list-style-position: inside;
+			}
+			.list-disc {
+				list-style-type: disc;
+			}
+			.grid-cols-1 {
+				grid-template-columns: repeat(1, minmax(0, 1fr));
+			}
+			.flex-col {
+				flex-direction: column;
+			}
+			.flex-wrap {
+				flex-wrap: wrap;
+			}
+			.items-start {
+				align-items: flex-start;
+			}
+			.items-end {
+				align-items: flex-end;
+			}
+			.items-center {
+				align-items: center;
+			}
+			.justify-end {
+				justify-content: flex-end;
+			}
+			.justify-center {
+				justify-content: center;
+			}
+			.justify-between {
+				justify-content: space-between;
+			}
+			.gap-2 {
+				gap: 0.5rem;
+			}
+			.gap-3 {
+				gap: 0.75rem;
+			}
+			.gap-4 {
+				gap: 1rem;
+			}
+			.gap-5 {
+				gap: 1.25rem;
+			}
+			.gap-6 {
+				gap: 1.5rem;
+			}
+			.gap-7 {
+				gap: 1.75rem;
+			}
+			.gap-8 {
+				gap: 2rem;
+			}
+			.gap-1 {
+				gap: 0.25rem;
+			}
+			.space-y-1 > :not([hidden]) ~ :not([hidden]) {
+				--tw-space-y-reverse: 0;
+				margin-top: calc(0.25rem * calc(1 - var(--tw-space-y-reverse)));
+				margin-bottom: calc(0.25rem * var(--tw-space-y-reverse));
+			}
+			.space-y-2 > :not([hidden]) ~ :not([hidden]) {
+				--tw-space-y-reverse: 0;
+				margin-top: calc(0.5rem * calc(1 - var(--tw-space-y-reverse)));
+				margin-bottom: calc(0.5rem * var(--tw-space-y-reverse));
+			}
+			.space-y-4 > :not([hidden]) ~ :not([hidden]) {
+				--tw-space-y-reverse: 0;
+				margin-top: calc(1rem * calc(1 - var(--tw-space-y-reverse)));
+				margin-bottom: calc(1rem * var(--tw-space-y-reverse));
+			}
+			.space-y-6 > :not([hidden]) ~ :not([hidden]) {
+				--tw-space-y-reverse: 0;
+				margin-top: calc(1.5rem * calc(1 - var(--tw-space-y-reverse)));
+				margin-bottom: calc(1.5rem * var(--tw-space-y-reverse));
+			}
+			.self-center {
+				align-self: center;
+			}
+			.self-stretch {
+				align-self: stretch;
+			}
+			.overflow-hidden {
+				overflow: hidden;
+			}
+			.rounded {
+				border-radius: 0.25rem;
+			}
+			.rounded-2xl {
+				border-radius: 1rem;
+			}
+			.rounded-full {
+				border-radius: 9999px;
+			}
+			.rounded-lg {
+				border-radius: 0.5rem;
+			}
+			.rounded-xl {
+				border-radius: 0.75rem;
+			}
+			.border-2 {
+				border-width: 2px;
+			}
+			.border-solid {
+				border-style: solid;
+			}
+			.border-white {
+				--tw-border-opacity: 1;
+				border-color: rgb(255 255 255 / var(--tw-border-opacity, 1));
+			}
+			.bg-\[\#1C1C1C\] {
+				--tw-bg-opacity: 1;
+				background-color: rgb(28 28 28 / var(--tw-bg-opacity, 1));
+			}
+			.bg-blue-500\/20 {
+				background-color: rgb(59 130 246 / 0.2);
+			}
+			.bg-emerald-500\/20 {
+				background-color: rgb(16 185 129 / 0.2);
+			}
+			.bg-gray-500\/20 {
+				background-color: rgb(107 114 128 / 0.2);
+			}
+			.bg-green-500\/20 {
+				background-color: rgb(34 197 94 / 0.2);
+			}
+			.bg-neutral-800\/90 {
+				background-color: rgb(38 38 38 / 0.9);
+			}
+			.bg-purple-500\/20 {
+				background-color: rgb(168 85 247 / 0.2);
+			}
+			.bg-white\/5 {
+				background-color: rgb(255 255 255 / 0.05);
+			}
+			.bg-yellow-500\/20 {
+				background-color: rgb(234 179 8 / 0.2);
+			}
+			.bg-zinc-700\/50 {
+				background-color: rgb(63 63 70 / 0.5);
+			}
+			.bg-zinc-800 {
+				--tw-bg-opacity: 1;
+				background-color: rgb(39 39 42 / var(--tw-bg-opacity, 1));
+			}
+			.bg-zinc-900 {
+				--tw-bg-opacity: 1;
+				background-color: rgb(24 24 27 / var(--tw-bg-opacity, 1));
+			}
+			.bg-gray-800 {
+				--tw-bg-opacity: 1;
+				background-color: rgb(31 41 55 / var(--tw-bg-opacity, 1));
+			}
+			.bg-lime-900 {
+				--tw-bg-opacity: 1;
+				background-color: rgb(54 83 20 / var(--tw-bg-opacity, 1));
+			}
+			.bg-green-900 {
+				--tw-bg-opacity: 1;
+				background-color: rgb(20 83 45 / var(--tw-bg-opacity, 1));
+			}
+			.fill-current {
+				fill: currentColor;
+			}
+			.object-contain {
+				-o-object-fit: contain;
+				object-fit: contain;
+			}
+			.object-cover {
+				-o-object-fit: cover;
+				object-fit: cover;
+			}
+			.p-2 {
+				padding: 0.5rem;
+			}
+			.p-4 {
+				padding: 1rem;
+			}
+			.p-6 {
+				padding: 1.5rem;
+			}
+			.px-2 {
+				padding-left: 0.5rem;
+				padding-right: 0.5rem;
+			}
+			.px-3 {
+				padding-left: 0.75rem;
+				padding-right: 0.75rem;
+			}
+			.px-4 {
+				padding-left: 1rem;
+				padding-right: 1rem;
+			}
+			.px-6 {
+				padding-left: 1.5rem;
+				padding-right: 1.5rem;
+			}
+			.py-1 {
+				padding-top: 0.25rem;
+				padding-bottom: 0.25rem;
+			}
+			.py-12 {
+				padding-top: 3rem;
+				padding-bottom: 3rem;
+			}
+			.py-2 {
+				padding-top: 0.5rem;
+				padding-bottom: 0.5rem;
+			}
+			.py-3 {
+				padding-top: 0.75rem;
+				padding-bottom: 0.75rem;
+			}
+			.py-4 {
+				padding-top: 1rem;
+				padding-bottom: 1rem;
+			}
+			.py-8 {
+				padding-top: 2rem;
+				padding-bottom: 2rem;
+			}
+			.text-center {
+				text-align: center;
+			}
+			.text-2xl {
+				font-size: 1.5rem;
+				line-height: 2rem;
+			}
+			.text-base {
+				font-size: 1rem;
+				line-height: 1.5rem;
+			}
+			.text-lg {
+				font-size: 1.125rem;
+				line-height: 1.75rem;
+			}
+			.text-sm {
+				font-size: 0.875rem;
+				line-height: 1.25rem;
+			}
+			.text-xl {
+				font-size: 1.25rem;
+				line-height: 1.75rem;
+			}
+			.text-xs {
+				font-size: 0.75rem;
+				line-height: 1rem;
+			}
+			.font-bold {
+				font-weight: 700;
+			}
+			.font-light {
+				font-weight: 300;
+			}
+			.font-medium {
+				font-weight: 500;
+			}
+			.font-semibold {
+				font-weight: 600;
+			}
+			.uppercase {
+				text-transform: uppercase;
+			}
+			.leading-6 {
+				line-height: 1.5rem;
+			}
+			.tracking-\[2\.4px\] {
+				letter-spacing: 2.4px;
+			}
+			.tracking-wide {
+				letter-spacing: 0.025em;
+			}
+			.tracking-wider {
+				letter-spacing: 0.05em;
+			}
+			.text-blue-300 {
+				--tw-text-opacity: 1;
+				color: rgb(147 197 253 / var(--tw-text-opacity, 1));
+			}
+			.text-emerald-300 {
+				--tw-text-opacity: 1;
+				color: rgb(110 231 183 / var(--tw-text-opacity, 1));
+			}
+			.text-gray-300 {
+				--tw-text-opacity: 1;
+				color: rgb(209 213 219 / var(--tw-text-opacity, 1));
+			}
+			.text-gray-400 {
+				--tw-text-opacity: 1;
+				color: rgb(156 163 175 / var(--tw-text-opacity, 1));
+			}
+			.text-green-300 {
+				--tw-text-opacity: 1;
+				color: rgb(134 239 172 / var(--tw-text-opacity, 1));
+			}
+			.text-purple-300 {
+				--tw-text-opacity: 1;
+				color: rgb(216 180 254 / var(--tw-text-opacity, 1));
+			}
+			.text-red-500 {
+				--tw-text-opacity: 1;
+				color: rgb(239 68 68 / var(--tw-text-opacity, 1));
+			}
+			.text-stone-300 {
+				--tw-text-opacity: 1;
+				color: rgb(214 211 209 / var(--tw-text-opacity, 1));
+			}
+			.text-stone-400 {
+				--tw-text-opacity: 1;
+				color: rgb(168 162 158 / var(--tw-text-opacity, 1));
+			}
+			.text-white {
+				--tw-text-opacity: 1;
+				color: rgb(255 255 255 / var(--tw-text-opacity, 1));
+			}
+			.text-yellow-300 {
+				--tw-text-opacity: 1;
+				color: rgb(253 224 71 / var(--tw-text-opacity, 1));
+			}
+			.opacity-0 {
+				opacity: 0;
+			}
+			.opacity-70 {
+				opacity: 0.7;
+			}
+			.shadow-lg {
+				--tw-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+				--tw-shadow-colored: 0 10px 15px -3px var(--tw-shadow-color),
+					0 4px 6px -4px var(--tw-shadow-color);
+				box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000),
+					var(--tw-shadow);
+			}
+			.shadow-md {
+				--tw-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+				--tw-shadow-colored: 0 4px 6px -1px var(--tw-shadow-color),
+					0 2px 4px -2px var(--tw-shadow-color);
+				box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000),
+					var(--tw-shadow);
+			}
+			.outline {
+				outline-style: solid;
+			}
+			.brightness-0 {
+				--tw-brightness: brightness(0);
+				filter: var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale)
+					var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia)
+					var(--tw-drop-shadow);
+			}
+			.grayscale {
+				--tw-grayscale: grayscale(100%);
+				filter: var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale)
+					var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia)
+					var(--tw-drop-shadow);
+			}
+			.invert {
+				--tw-invert: invert(100%);
+				filter: var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale)
+					var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia)
+					var(--tw-drop-shadow);
+			}
+			.filter {
+				filter: var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale)
+					var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia)
+					var(--tw-drop-shadow);
+			}
+			.backdrop-blur-sm {
+				--tw-backdrop-blur: blur(4px);
+				-webkit-backdrop-filter: var(--tw-backdrop-blur) var(--tw-backdrop-brightness)
+					var(--tw-backdrop-contrast) var(--tw-backdrop-grayscale) var(--tw-backdrop-hue-rotate)
+					var(--tw-backdrop-invert) var(--tw-backdrop-opacity) var(--tw-backdrop-saturate)
+					var(--tw-backdrop-sepia);
+				backdrop-filter: var(--tw-backdrop-blur) var(--tw-backdrop-brightness)
+					var(--tw-backdrop-contrast) var(--tw-backdrop-grayscale) var(--tw-backdrop-hue-rotate)
+					var(--tw-backdrop-invert) var(--tw-backdrop-opacity) var(--tw-backdrop-saturate)
+					var(--tw-backdrop-sepia);
+			}
+			.transition {
+				transition-property:
+					color,
+					background-color,
+					border-color,
+					text-decoration-color,
+					fill,
+					stroke,
+					opacity,
+					box-shadow,
+					transform,
+					filter,
+					-webkit-backdrop-filter;
+				transition-property: color, background-color, border-color, text-decoration-color, fill,
+					stroke, opacity, box-shadow, transform, filter, backdrop-filter;
+				transition-property:
+					color,
+					background-color,
+					border-color,
+					text-decoration-color,
+					fill,
+					stroke,
+					opacity,
+					box-shadow,
+					transform,
+					filter,
+					backdrop-filter,
+					-webkit-backdrop-filter;
+				transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+				transition-duration: 150ms;
+			}
+			.transition-all {
+				transition-property: all;
+				transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+				transition-duration: 150ms;
+			}
+			.transition-colors {
+				transition-property: color, background-color, border-color, text-decoration-color, fill,
+					stroke;
+				transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+				transition-duration: 150ms;
+			}
+			.transition-opacity {
+				transition-property: opacity;
+				transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+				transition-duration: 150ms;
+			}
+			.transition-transform {
+				transition-property: transform;
+				transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+				transition-duration: 150ms;
+			}
+			.duration-200 {
+				transition-duration: 200ms;
+			}
+			.duration-300 {
+				transition-duration: 300ms;
+			}
+			.duration-500 {
+				transition-duration: 500ms;
+			}
+			.ease-in-out {
+				transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+			}
+			.after\:absolute::after {
+				content: var(--tw-content);
+				position: absolute;
+			}
+			.after\:bottom-\[-4px\]::after {
+				content: var(--tw-content);
+				bottom: -4px;
+			}
+			.after\:left-0::after {
+				content: var(--tw-content);
+				left: 0px;
+			}
+			.after\:h-\[2px\]::after {
+				content: var(--tw-content);
+				height: 2px;
+			}
+			.after\:w-0::after {
+				content: var(--tw-content);
+				width: 0px;
+			}
+			.after\:bg-blue-400::after {
+				content: var(--tw-content);
+				--tw-bg-opacity: 1;
+				background-color: rgb(96 165 250 / var(--tw-bg-opacity, 1));
+			}
+			.after\:transition-all::after {
+				content: var(--tw-content);
+				transition-property: all;
+				transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+				transition-duration: 150ms;
+			}
+			.after\:duration-300::after {
+				content: var(--tw-content);
+				transition-duration: 300ms;
+			}
+			.hover\:-translate-y-2:hover {
+				--tw-translate-y: -0.5rem;
+				transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate))
+					skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x))
+					scaleY(var(--tw-scale-y));
+			}
+			.hover\:scale-\[1\.02\]:hover {
+				--tw-scale-x: 1.02;
+				--tw-scale-y: 1.02;
+				transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate))
+					skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x))
+					scaleY(var(--tw-scale-y));
+			}
+			.hover\:scale-110:hover {
+				--tw-scale-x: 1.1;
+				--tw-scale-y: 1.1;
+				transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate))
+					skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x))
+					scaleY(var(--tw-scale-y));
+			}
+			.hover\:bg-neutral-700:hover {
+				--tw-bg-opacity: 1;
+				background-color: rgb(64 64 64 / var(--tw-bg-opacity, 1));
+			}
+			.hover\:bg-zinc-600\/50:hover {
+				background-color: rgb(82 82 91 / 0.5);
+			}
+			.hover\:text-blue-400:hover {
+				--tw-text-opacity: 1;
+				color: rgb(96 165 250 / var(--tw-text-opacity, 1));
+			}
+			.hover\:text-white:hover {
+				--tw-text-opacity: 1;
+				color: rgb(255 255 255 / var(--tw-text-opacity, 1));
+			}
+			.hover\:shadow-xl:hover {
+				--tw-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+				--tw-shadow-colored: 0 20px 25px -5px var(--tw-shadow-color),
+					0 8px 10px -6px var(--tw-shadow-color);
+				box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000),
+					var(--tw-shadow);
+			}
+			.hover\:after\:w-full:hover::after {
+				content: var(--tw-content);
+				width: 100%;
+			}
+			.focus\:outline-none:focus {
+				outline: 2px solid transparent;
+				outline-offset: 2px;
+			}
+			.focus\:ring-2:focus {
+				--tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width)
+					var(--tw-ring-offset-color);
+				--tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(2px + var(--tw-ring-offset-width))
+					var(--tw-ring-color);
+				box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
+			}
+			.focus\:ring-blue-500:focus {
+				--tw-ring-opacity: 1;
+				--tw-ring-color: rgb(59 130 246 / var(--tw-ring-opacity, 1));
+			}
+			.group:hover .group-hover\:scale-105 {
+				--tw-scale-x: 1.05;
+				--tw-scale-y: 1.05;
+				transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate))
+					skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x))
+					scaleY(var(--tw-scale-y));
+			}
+			.group:hover .group-hover\:opacity-100 {
+				opacity: 1;
+			}
+			.group:hover .group-hover\:brightness-125 {
+				--tw-brightness: brightness(1.25);
+				filter: var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale)
+					var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia)
+					var(--tw-drop-shadow);
+			}
+			@media (min-width: 640px) {
+				.sm\:mt-0 {
+					margin-top: 0px;
+				}
+
+				.sm\:mt-10 {
+					margin-top: 2.5rem;
+				}
+
+				.sm\:mt-12 {
+					margin-top: 3rem;
+				}
+
+				.sm\:mt-16 {
+					margin-top: 4rem;
+				}
+
+				.sm\:h-\[250px\] {
+					height: 250px;
+				}
+
+				.sm\:w-\[250px\] {
+					width: 250px;
+				}
+
+				.sm\:w-auto {
+					width: auto;
+				}
+
+				.sm\:grid-cols-2 {
+					grid-template-columns: repeat(2, minmax(0, 1fr));
+				}
+
+				.sm\:flex-row {
+					flex-direction: row;
+				}
+
+				.sm\:items-start {
+					align-items: flex-start;
+				}
+
+				.sm\:justify-between {
+					justify-content: space-between;
+				}
+
+				.sm\:self-start {
+					align-self: flex-start;
+				}
+
+				.sm\:p-6 {
+					padding: 1.5rem;
+				}
+
+				.sm\:px-7 {
+					padding-left: 1.75rem;
+					padding-right: 1.75rem;
+				}
+
+				.sm\:px-8 {
+					padding-left: 2rem;
+					padding-right: 2rem;
+				}
+
+				.sm\:py-16 {
+					padding-top: 4rem;
+					padding-bottom: 4rem;
+				}
+
+				.sm\:py-4 {
+					padding-top: 1rem;
+					padding-bottom: 1rem;
+				}
+
+				.sm\:text-3xl {
+					font-size: 1.875rem;
+					line-height: 2.25rem;
+				}
+
+				.sm\:text-lg {
+					font-size: 1.125rem;
+					line-height: 1.75rem;
+				}
+
+				.sm\:text-xl {
+					font-size: 1.25rem;
+					line-height: 1.75rem;
+				}
+			}
+			@media (min-width: 768px) {
+				.md\:mt-6 {
+					margin-top: 1.5rem;
+				}
+
+				.md\:inline {
+					display: inline;
+				}
+
+				.md\:flex {
+					display: flex;
+				}
+
+				.md\:hidden {
+					display: none;
+				}
+
+				.md\:grid-cols-3 {
+					grid-template-columns: repeat(3, minmax(0, 1fr));
+				}
+
+				.md\:flex-row {
+					flex-direction: row;
+				}
+
+				.md\:items-center {
+					align-items: center;
+				}
+
+				.md\:justify-start {
+					justify-content: flex-start;
+				}
+
+				.md\:gap-5 {
+					gap: 1.25rem;
+				}
+
+				.md\:gap-8 {
+					gap: 2rem;
+				}
+
+				.md\:p-6 {
+					padding: 1.5rem;
+				}
+
+				.md\:px-16 {
+					padding-left: 4rem;
+					padding-right: 4rem;
+				}
+
+				.md\:py-6 {
+					padding-top: 1.5rem;
+					padding-bottom: 1.5rem;
+				}
+
+				.md\:text-left {
+					text-align: left;
+				}
+
+				.md\:text-2xl {
+					font-size: 1.5rem;
+					line-height: 2rem;
+				}
+			}
+			@media (min-width: 1024px) {
+				.lg\:h-\[300px\] {
+					height: 300px;
+				}
+
+				.lg\:w-\[300px\] {
+					width: 300px;
+				}
+
+				.lg\:w-auto {
+					width: auto;
+				}
+
+				.lg\:grid-cols-3 {
+					grid-template-columns: repeat(3, minmax(0, 1fr));
+				}
+
+				.lg\:flex-row {
+					flex-direction: row;
+				}
+
+				.lg\:items-start {
+					align-items: flex-start;
+				}
+
+				.lg\:items-center {
+					align-items: center;
+				}
+
+				.lg\:justify-start {
+					justify-content: flex-start;
+				}
+
+				.lg\:gap-12 {
+					gap: 3rem;
+				}
+
+				.lg\:px-12 {
+					padding-left: 3rem;
+					padding-right: 3rem;
+				}
+
+				.lg\:py-20 {
+					padding-top: 5rem;
+					padding-bottom: 5rem;
+				}
+
+				.lg\:text-left {
+					text-align: left;
+				}
+
+				.lg\:text-4xl {
+					font-size: 2.25rem;
+					line-height: 2.5rem;
+				}
+			}
+			@media (min-width: 1280px) {
+				.xl\:px-16 {
+					padding-left: 4rem;
+					padding-right: 4rem;
+				}
+			}
+		</style>
+		<style
+			type="text/css"
+			data-vite-dev-id="/app/src/components/SocialIcon.svelte?svelte&amp;type=style&amp;lang.css"
+		>
+			.social-link.s-laeek5hkpNwQ {
+				transition: opacity 0.2s ease-in-out;
+			}
+			.social-link.s-laeek5hkpNwQ:hover {
+				opacity: 0.8;
+			}
+			.s-laeek5hkpNwQ {
+			}
+		</style>
+		<style
+			type="text/css"
+			data-vite-dev-id="/app/src/components/EmailContact.svelte?svelte&amp;type=style&amp;lang.css"
+		>
+			/* Optional: Add any component-specific styles here */
+			a.s-ft6vQ-u65Qv_:focus-visible {
+				outline: 2px solid white;
+				outline-offset: 2px;
+			}
+			.s-ft6vQ-u65Qv_ {
+			}
+		</style>
+		<style
+			type="text/css"
+			data-vite-dev-id="/app/src/sections/Hero.svelte?svelte&amp;type=style&amp;lang.css"
+		>
+			.styled-section.s-IlDzQT7FegU5 {
+				background-color: #1c1c1c; /* Dark background for the section */
+				border-radius: 20px; /* Rounded edges */
+				padding: 40px 20px; /* Padding for content */
+				margin-bottom: 20px; /* Space below the section */
+				box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); /* Optional shadow */
+				position: relative; /* For pseudo-element positioning */
+			}
+
+			.styled-section.s-IlDzQT7FegU5::before {
+				content: '';
+				position: absolute;
+				top: 0;
+				left: 0;
+				right: 0;
+				bottom: 0;
+				border-radius: 20px; /* Match section border radius */
+				background: linear-gradient(
+					180deg,
+					rgba(255, 255, 255, 0.1),
+					rgba(255, 255, 255, 0) 50%
+				); /* Subtle gradient border effect */
+				z-index: -1; /* Send it behind the section */
+			}
+
+			.outline-button.s-IlDzQT7FegU5 {
+				border-radius: 50px;
+			}
+
+			.outline-button.s-IlDzQT7FegU5:hover {
+				background-color: white;
+				color: #171717;
+			}
+			.s-IlDzQT7FegU5 {
+			}
+		</style>
+		<style
+			type="text/css"
+			data-vite-dev-id="/app/src/components/IconWithName.svelte?svelte&amp;type=style&amp;lang.css"
+		>
+			.icon-container.s-p8TayeGkhv7a {
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				text-align: center; /* Center the name under the icon */
+			}
+
+			.icon.s-p8TayeGkhv7a {
+				-o-object-fit: contain;
+				object-fit: contain; /* Ensure the icon maintains aspect ratio */
+				transition: transform 0.1s ease-in-out;
+			}
+
+			.icon-container.s-p8TayeGkhv7a:hover .icon:where(.s-p8TayeGkhv7a) {
+				transform: scale(1.1); /* Scale effect on hover */
+			}
+
+			.icon-name.s-p8TayeGkhv7a {
+				margin-top: 4px; /* Space between icon and name */
+				color: white; /* Text color */
+				font-size: 12px; /* Font size for the name */
+			}
+			.s-p8TayeGkhv7a {
+			}
+		</style>
+		<style
+			type="text/css"
+			data-vite-dev-id="/app/src/components/ProjectCard.svelte?svelte&amp;type=style&amp;lang.css"
+		>
+			article.s-mHqezsfL2a7b::after {
+				content: '';
+				position: absolute;
+				inset: 0;
+				background: linear-gradient(to bottom, transparent 0%, rgba(0, 0, 0, 0.1) 100%);
+				opacity: 0;
+				transition: opacity 0.3s ease;
+				pointer-events: none;
+				border-radius: 1rem;
+			}
+
+			article.s-mHqezsfL2a7b:hover::after {
+				opacity: 1;
+			}
+			.s-mHqezsfL2a7b {
+			}
+		</style>
+		<style
+			type="text/css"
+			data-vite-dev-id="/app/src/sections/Projects.svelte?svelte&amp;type=style&amp;lang.css"
+		>
+			.styled-section.s-TnuOwwvAfaAL {
+				background-color: #1c1c1c; /* Dark background for the section */
+				border-radius: 20px; /* Rounded edges */
+				padding: 40px 20px; /* Padding for content */
+				margin-bottom: 20px; /* Space below the section */
+				box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); /* Optional shadow */
+				position: relative; /* For pseudo-element positioning */
+			}
+
+			.styled-section.s-TnuOwwvAfaAL::before {
+				content: '';
+				position: absolute;
+				top: 0;
+				left: 0;
+				right: 0;
+				bottom: 0;
+				border-radius: 20px; /* Match section border radius */
+				background: linear-gradient(
+					180deg,
+					rgba(255, 255, 255, 0.1),
+					rgba(255, 255, 255, 0) 50%
+				); /* Subtle gradient border effect */
+				z-index: -1; /* Send it behind the section */
+			}
+			.s-TnuOwwvAfaAL {
+			}
+		</style>
+		<style
+			type="text/css"
+			data-vite-dev-id="/app/src/sections/Experience.svelte?svelte&amp;type=style&amp;lang.css"
+		>
+			.styled-section.s-7V_DNp9Dg9cE {
+				background-color: #1c1c1c; /* Dark background for the section */
+				border-radius: 20px; /* Rounded edges */
+				padding: 40px 20px; /* Padding for content */
+				margin-bottom: 20px; /* Space below the section */
+				box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); /* Optional shadow */
+				position: relative; /* For pseudo-element positioning */
+			}
+
+			.styled-section.s-7V_DNp9Dg9cE::before {
+				content: '';
+				position: absolute;
+				top: 0;
+				left: 0;
+				right: 0;
+				bottom: 0;
+				border-radius: 20px; /* Match section border radius */
+				background: linear-gradient(
+					180deg,
+					rgba(255, 255, 255, 0.1),
+					rgba(255, 255, 255, 0) 50%
+				); /* Subtle gradient border effect */
+				z-index: -1; /* Send it behind the section */
+			}
+
+			.styled-section {
+				width: 100%;
+			}
+			.s-7V_DNp9Dg9cE {
+			}
+		</style>
+		<style
+			type="text/css"
+			data-vite-dev-id="/app/src/sections/Footer.svelte?svelte&amp;type=style&amp;lang.css"
+		>
+			/* (unused) .styled-section {
+	background-color: #1c1c1c; /* Dark background for the section *\/
+	border-radius: 20px; /* Rounded edges *\/
+	padding: 40px 20px; /* Padding for content *\/
+	margin-bottom: 20px; /* Space below the section *\/
+	box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); /* Optional shadow *\/
+	position: relative; /* For pseudo-element positioning *\/
+}*/
+
+			/* (unused) .styled-section::before {
+	content: '';
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	border-radius: 20px; /* Match section border radius *\/
+	background: linear-gradient(
+		180deg,
+		rgba(255, 255, 255, 0.1),
+		rgba(255, 255, 255, 0) 50%
+	); /* Subtle gradient border effect *\/
+	z-index: -1; /* Send it behind the section *\/
+}*/
+
+			.outline-button.s-W68D3AlqipKB {
+				border-radius: 50px;
+			}
+
+			.outline-button.s-W68D3AlqipKB:hover {
+				background-color: green;
+				color: #ffd3fe;
+			}
+			.s-W68D3AlqipKB {
+			}
+		</style>
+		<style
+			type="text/css"
+			data-vite-dev-id="/app/src/components/TechCategory.svelte?svelte&amp;type=style&amp;lang.css"
+		>
+			.tech-icon svg {
+				fill: currentColor;
+				color: inherit;
+				background: transparent !important;
+			}
+
+			.tech-icon svg path {
+				fill: currentColor;
+			}
+
+			/* Optional: Add a subtle gradient animation to the background */
+			div.s-IZAjFSU0pctN .tech-container {
+				background: linear-gradient(45deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.06));
+				background-size: 200% 200%;
+				animation: s-IZAjFSU0pctN-gradient 15s ease infinite;
+			}
+
+			@keyframes s-IZAjFSU0pctN-gradient {
+				0% {
+					background-position: 0% 50%;
+				}
+				50% {
+					background-position: 100% 50%;
+				}
+				100% {
+					background-position: 0% 50%;
+				}
+			}
+			.s-IZAjFSU0pctN {
+			}
+		</style>
+		<style
+			type="text/css"
+			data-vite-dev-id="/app/src/sections/Portfolio.svelte?svelte&amp;type=style&amp;lang.css"
+		>
+			.bg-color.s-l_VPySslJWUT {
+				background-color: #4e1939; /* yellow */
+			}
+			.s-l_VPySslJWUT {
+			}
+		</style>
+	</head>
+	<body data-sveltekit-preload-data="hover">
+		<div style="display: contents">
+			<!--[--><!--[--><!----><!---->
+			<main class="bg-color s-l_VPySslJWUT flex flex-col items-center overflow-hidden">
+				<div class="s-l_VPySslJWUT bg-[#1C1C1C]">
+					<header
+						class="fixed left-0 right-0 top-0 z-50 flex w-full items-center justify-end bg-neutral-800/90 px-4 py-3 text-white backdrop-blur-sm transition-all duration-300 ease-in-out md:px-16"
+					>
+						<button
+							class="ml-auto block rounded p-2 hover:bg-neutral-700 focus:outline-none focus:ring-2 focus:ring-blue-500 md:hidden"
+							aria-labelledby="menu-button-text"
+						>
+							<svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									stroke-width="2"
+									d="M4 6h16M4 12h16M4 18h16"
+								></path>
+							</svg>
+						</button>
+						<nav class="hidden w-full justify-end md:flex md:items-center md:gap-8">
+							<a
+								href="#home"
+								class="relative font-medium transition-colors duration-200 after:absolute after:bottom-[-4px] after:left-0 after:h-[2px] after:w-0 after:bg-blue-400 after:transition-all after:duration-300 hover:text-blue-400 hover:after:w-full"
+								>Home</a
+							>
+							<a
+								href="#experience"
+								class="relative font-medium transition-colors duration-200 after:absolute after:bottom-[-4px] after:left-0 after:h-[2px] after:w-0 after:bg-blue-400 after:transition-all after:duration-300 hover:text-blue-400 hover:after:w-full"
+								>Experience</a
+							>
+							<a
+								href="#projects"
+								class="relative font-medium transition-colors duration-200 after:absolute after:bottom-[-4px] after:left-0 after:h-[2px] after:w-0 after:bg-blue-400 after:transition-all after:duration-300 hover:text-blue-400 hover:after:w-full"
+								>Projects</a
+							>
+							<a
+								href="http://localhost:5173/David_Solinsky_resume.pdf"
+								target="_blank"
+								class="relative font-medium transition-colors duration-200 after:absolute after:bottom-[-4px] after:left-0 after:h-[2px] after:w-0 after:bg-blue-400 after:transition-all after:duration-300 hover:text-blue-400 hover:after:w-full"
+								>Resume</a
+							>
+						</nav>
+						<div
+							id="mobile-menu"
+							class="absolute left-0 right-0 top-full hidden w-full bg-neutral-800/90 py-2 shadow-lg backdrop-blur-sm md:hidden"
+						>
+							<nav class="flex flex-col space-y-2 px-4">
+								<a
+									href="#home"
+									class="rounded-lg px-3 py-2 font-medium transition-colors duration-200 hover:bg-neutral-700"
+									>Home</a
+								>
+								<a
+									href="#experience"
+									class="rounded-lg px-3 py-2 font-medium transition-colors duration-200 hover:bg-neutral-700"
+									>Experience</a
+								>
+								<a
+									href="#projects"
+									class="rounded-lg px-3 py-2 font-medium transition-colors duration-200 hover:bg-neutral-700"
+									>Projects</a
+								>
+								<a
+									href="http://localhost:5173/David_Solinsky_resume.pdf"
+									target="_blank"
+									class="rounded-lg px-3 py-2 font-medium transition-colors duration-200 hover:bg-neutral-700"
+									>Resume</a
+								>
+							</nav>
+						</div>
+					</header>
+					<!---->
+					<section
+						id="home"
+						class="styled-section s-IlDzQT7FegU5 flex items-center px-4 sm:px-8 lg:px-12 xl:px-16"
+					>
+						<div class="s-IlDzQT7FegU5 mx-auto w-full max-w-7xl py-12 sm:py-16 lg:py-20">
+							<div
+								class="s-IlDzQT7FegU5 flex flex-col items-center gap-8 lg:flex-row lg:items-center lg:gap-12"
+							>
+								<div class="s-IlDzQT7FegU5 w-full max-w-[300px] flex-shrink-0 lg:w-auto">
+									<img
+										loading="lazy"
+										src="localhost_files/me.png"
+										alt="Profile Avatar"
+										class="s-IlDzQT7FegU5 mx-auto h-[200px] w-[200px] rounded-full object-cover sm:h-[250px] sm:w-[250px] lg:h-[300px] lg:w-[300px]"
+									/>
+								</div>
+								<div
+									class="s-IlDzQT7FegU5 flex w-full flex-shrink flex-col items-center text-center lg:items-start lg:text-left"
+								>
+									<h1
+										class="s-IlDzQT7FegU5 text-2xl font-semibold tracking-[2.4px] text-stone-300 sm:text-3xl lg:text-4xl"
+									>
+										David Solinsky
+									</h1>
+									<p
+										class="s-IlDzQT7FegU5 mt-4 max-w-[600px] text-base font-light tracking-wide text-stone-300 sm:text-lg"
+									>
+										Software Engineer and Game Developer.<br class="s-IlDzQT7FegU5" />
+									</p>
+									<div class="s-IlDzQT7FegU5 mt-6 flex w-full flex-col items-center lg:items-start">
+										<div class="s-IlDzQT7FegU5 flex w-full justify-center lg:justify-start">
+											<div class="s-IlDzQT7FegU5 w-full max-w-md">
+												<div
+													class="s-ft6vQ-u65Qv_ flex w-full items-center justify-center gap-2 lg:justify-start"
+												>
+													<img
+														src="localhost_files/a1164e8c39919f9a28435c6fa8d6973ddf84a873d3f806476e64af1f3435.svg"
+														alt="Email Icon"
+														loading="lazy"
+														class="s-ft6vQ-u65Qv_ h-[17px] w-[17px] object-contain"
+													/>
+													<a
+														href="mailto:solinsky.david@gmail.com"
+														class="s-ft6vQ-u65Qv_ text-sm font-semibold tracking-wide text-stone-300 transition-colors duration-200 hover:text-white"
+														>solinsky.david@gmail.com</a
+													>
+												</div>
+												<!---->
+											</div>
+										</div>
+										<nav
+											class="s-IlDzQT7FegU5 mt-4 flex w-full justify-center gap-7 lg:justify-start"
+										>
+											<!--[--><a
+												target="_blank"
+												href="https://github.com/dsol-cpu"
+												aria-label="Github Profile"
+												class="social-link s-laeek5hkpNwQ"
+												><img
+													loading="lazy"
+													src="localhost_files/github_icon.svg"
+													alt=""
+													class="s-laeek5hkpNwQ my-auto aspect-square shrink-0 self-stretch object-contain"
+													style="width: 30px" /></a
+											><!----><a
+												target="_blank"
+												href="https://www.upwork.com/freelancers/~0179a1a2a2df5212fd"
+												aria-label="Upwork Profile"
+												class="social-link s-laeek5hkpNwQ"
+												><img
+													loading="lazy"
+													src="localhost_files/upwork_icon.svg"
+													alt=""
+													class="s-laeek5hkpNwQ my-auto aspect-square shrink-0 self-stretch object-contain"
+													style="width: 30px" /></a
+											><!----><a
+												target="_blank"
+												href="https://www.linkedin.com/in/david-solinsky"
+												aria-label="Linkedin Profile"
+												class="social-link s-laeek5hkpNwQ"
+												><img
+													loading="lazy"
+													src="localhost_files/linkedin_icon.svg"
+													alt=""
+													class="s-laeek5hkpNwQ my-auto aspect-square shrink-0 self-stretch object-contain"
+													style="width: 30px" /></a
+											><!----><!--]-->
+										</nav>
+									</div>
+									<div class="s-IlDzQT7FegU5 mt-8 w-full sm:mt-10">
+										<a
+											href="http://localhost:5173/David_Solinsky_resume.pdf"
+											target="_blank"
+											class="s-IlDzQT7FegU5 inline-block w-full sm:w-auto"
+											><button
+												class="outline-button s-IlDzQT7FegU5 w-full border-2 border-solid border-white px-6 py-3 text-white transition-colors duration-300 sm:px-7 sm:py-4"
+											>
+												Download Resume
+											</button></a
+										>
+									</div>
+								</div>
+							</div>
+						</div>
+					</section>
+					<!---->
+					<section
+						id="experience"
+						class="styled-section s-7V_DNp9Dg9cE flex flex-col items-center text-white"
+					>
+						<div class="s-7V_DNp9Dg9cE container mx-auto px-4 py-8">
+							<div class="mb-12 flex justify-center">
+								<div class="grid w-full max-w-4xl grid-cols-1 gap-8 md:grid-cols-3">
+									<!--[-->
+									<div
+										class="flex flex-col items-center gap-6 rounded-lg bg-gray-800 p-6 shadow-lg"
+									>
+										<h3 class="text-center text-xl font-bold">Systems &amp; Embedded</h3>
+										<div class="flex flex-wrap justify-center gap-6">
+											<!--[-->
+											<div class="icon-container s-p8TayeGkhv7a">
+												<img
+													loading="lazy"
+													src="localhost_files/c-original.svg"
+													class="icon s-p8TayeGkhv7a"
+													style="width: 48px; height: 48px"
+												/>
+												<span class="icon-name s-p8TayeGkhv7a" style="font-size: 16px"></span>
+											</div>
+											<!---->
+											<div class="icon-container s-p8TayeGkhv7a">
+												<img
+													loading="lazy"
+													src="localhost_files/cplusplus-original.svg"
+													class="icon s-p8TayeGkhv7a"
+													style="width: 48px; height: 48px"
+												/>
+												<span class="icon-name s-p8TayeGkhv7a" style="font-size: 16px"></span>
+											</div>
+											<!---->
+											<div class="icon-container s-p8TayeGkhv7a">
+												<img
+													loading="lazy"
+													src="localhost_files/rust-original.svg"
+													class="icon s-p8TayeGkhv7a"
+													style="width: 48px; height: 48px"
+												/>
+												<span class="icon-name s-p8TayeGkhv7a" style="font-size: 16px"></span>
+											</div>
+											<!----><!--]-->
+										</div>
+									</div>
+									<div
+										class="flex flex-col items-center gap-6 rounded-lg bg-gray-800 p-6 shadow-lg"
+									>
+										<h3 class="text-center text-xl font-bold">Frontend</h3>
+										<div class="flex flex-wrap justify-center gap-6">
+											<!--[-->
+											<div class="icon-container s-p8TayeGkhv7a">
+												<img
+													loading="lazy"
+													src="localhost_files/typescript-original.svg"
+													class="icon s-p8TayeGkhv7a"
+													style="width: 48px; height: 48px"
+												/>
+												<span class="icon-name s-p8TayeGkhv7a" style="font-size: 16px"></span>
+											</div>
+											<!---->
+											<div class="icon-container s-p8TayeGkhv7a">
+												<img
+													loading="lazy"
+													src="localhost_files/react-original.svg"
+													class="icon s-p8TayeGkhv7a"
+													style="width: 48px; height: 48px"
+												/>
+												<span class="icon-name s-p8TayeGkhv7a" style="font-size: 16px"></span>
+											</div>
+											<!---->
+											<div class="icon-container s-p8TayeGkhv7a">
+												<img
+													loading="lazy"
+													src="localhost_files/svelte-original.svg"
+													class="icon s-p8TayeGkhv7a"
+													style="width: 48px; height: 48px"
+												/>
+												<span class="icon-name s-p8TayeGkhv7a" style="font-size: 16px"></span>
+											</div>
+											<!----><!--]-->
+										</div>
+									</div>
+									<div
+										class="flex flex-col items-center gap-6 rounded-lg bg-gray-800 p-6 shadow-lg"
+									>
+										<h3 class="text-center text-xl font-bold">Backend</h3>
+										<div class="flex flex-wrap justify-center gap-6">
+											<!--[-->
+											<div class="icon-container s-p8TayeGkhv7a">
+												<img
+													loading="lazy"
+													src="localhost_files/python-original.svg"
+													class="icon s-p8TayeGkhv7a"
+													style="width: 48px; height: 48px"
+												/>
+												<span class="icon-name s-p8TayeGkhv7a" style="font-size: 16px"></span>
+											</div>
+											<!---->
+											<div class="icon-container s-p8TayeGkhv7a">
+												<img
+													loading="lazy"
+													src="localhost_files/rust-original.svg"
+													class="icon s-p8TayeGkhv7a"
+													style="width: 48px; height: 48px"
+												/>
+												<span class="icon-name s-p8TayeGkhv7a" style="font-size: 16px"></span>
+											</div>
+											<!----><!--]-->
+										</div>
+									</div>
+									<!--]-->
+								</div>
+							</div>
+							<!---->
+							<div class="s-7V_DNp9Dg9cE mx-auto flex max-w-4xl flex-col items-center space-y-6">
+								<!--[-->
+								<div
+									class="group relative w-full max-w-4xl overflow-hidden rounded-2xl bg-zinc-800 p-6 shadow-lg transition-all duration-300 hover:shadow-xl"
+								>
+									<div class="flex flex-col gap-4 sm:flex-row sm:items-start">
+										<img
+											src="localhost_files/SWIFT_logo.svg"
+											alt="SWIFT logo"
+											class="h-16 w-16 self-center rounded-lg object-contain transition-transform duration-500 group-hover:scale-105 sm:self-start"
+											style="filter: invert(90%)"
+										/>
+										<div class="flex flex-1 flex-col space-y-2">
+											<div class="flex flex-col items-center gap-1 sm:flex-row sm:justify-between">
+												<h3 class="text-xl font-bold text-white">SWIFT</h3>
+											</div>
+											<h4 class="text-lg text-gray-300">Associate Developer/Systems Engineer</h4>
+											<!--[-->
+											<p class="text-gray-400">
+												Contributing to the development of a new financial messaging format.
+											</p>
+											<!--]-->
+											<!--[-->
+											<div class="flex flex-wrap gap-6">
+												<!--[-->
+												<div class="icon-container s-p8TayeGkhv7a">
+													<img
+														loading="lazy"
+														src="localhost_files/cplusplus-original.svg"
+														class="icon s-p8TayeGkhv7a"
+														style="width: 40px; height: 40px"
+													/>
+													<span class="icon-name s-p8TayeGkhv7a" style="font-size: 16px"></span>
+												</div>
+												<!---->
+												<div class="icon-container s-p8TayeGkhv7a">
+													<img
+														loading="lazy"
+														src="localhost_files/bash-original.svg"
+														class="icon s-p8TayeGkhv7a"
+														style="width: 40px; height: 40px"
+													/>
+													<span class="icon-name s-p8TayeGkhv7a" style="font-size: 16px"></span>
+												</div>
+												<!---->
+												<div class="icon-container s-p8TayeGkhv7a">
+													<img
+														loading="lazy"
+														src="localhost_files/ansible-original.svg"
+														class="icon s-p8TayeGkhv7a"
+														style="width: 40px; height: 40px"
+													/>
+													<span class="icon-name s-p8TayeGkhv7a" style="font-size: 16px"></span>
+												</div>
+												<!---->
+												<div class="icon-container s-p8TayeGkhv7a">
+													<img
+														loading="lazy"
+														src="localhost_files/bitbucket-original.svg"
+														class="icon s-p8TayeGkhv7a"
+														style="width: 40px; height: 40px"
+													/>
+													<span class="icon-name s-p8TayeGkhv7a" style="font-size: 16px"></span>
+												</div>
+												<!----><!--]-->
+											</div>
+											<!--]-->
+										</div>
+									</div>
+								</div>
+								<!---->
+								<div
+									class="group relative w-full max-w-4xl overflow-hidden rounded-2xl bg-zinc-800 p-6 shadow-lg transition-all duration-300 hover:shadow-xl"
+								>
+									<div class="flex flex-col gap-4 sm:flex-row sm:items-start">
+										<img
+											src="localhost_files/geost_icon.svg"
+											alt="GEOST logo"
+											class="h-16 w-16 self-center rounded-lg object-contain transition-transform duration-500 group-hover:scale-105 sm:self-start"
+										/>
+										<div class="flex flex-1 flex-col space-y-2">
+											<div class="flex flex-col items-center gap-1 sm:flex-row sm:justify-between">
+												<h3 class="text-xl font-bold text-white">GEOST</h3>
+											</div>
+											<h4 class="text-lg text-gray-300">Mission Systems Software Engineer</h4>
+											<!--[-->
+											<p class="text-gray-400">
+												I developed satellite payload test software with NASA's Core Flight System
+												(cFS) framework for controlling a camera payload in orbit as well as a
+												ground interface to interface with and command it. Split into multiple
+												dockerized microservices to process different Space Packet Protocol (SPP)
+												data packet types (Commands, Command Responses, Telemetry).
+											</p>
+											<!--]-->
+											<!--[-->
+											<div class="flex flex-wrap gap-6">
+												<!--[-->
+												<div class="icon-container s-p8TayeGkhv7a">
+													<img
+														loading="lazy"
+														src="localhost_files/c-original.svg"
+														class="icon s-p8TayeGkhv7a"
+														style="width: 40px; height: 40px"
+													/>
+													<span class="icon-name s-p8TayeGkhv7a" style="font-size: 16px"></span>
+												</div>
+												<!---->
+												<div class="icon-container s-p8TayeGkhv7a">
+													<img
+														loading="lazy"
+														src="localhost_files/python-original.svg"
+														class="icon s-p8TayeGkhv7a"
+														style="width: 40px; height: 40px"
+													/>
+													<span class="icon-name s-p8TayeGkhv7a" style="font-size: 16px"></span>
+												</div>
+												<!---->
+												<div class="icon-container s-p8TayeGkhv7a">
+													<img
+														loading="lazy"
+														src="localhost_files/typescript-original.svg"
+														class="icon s-p8TayeGkhv7a"
+														style="width: 40px; height: 40px"
+													/>
+													<span class="icon-name s-p8TayeGkhv7a" style="font-size: 16px"></span>
+												</div>
+												<!---->
+												<div class="icon-container s-p8TayeGkhv7a">
+													<img
+														loading="lazy"
+														src="localhost_files/docker-original.svg"
+														class="icon s-p8TayeGkhv7a"
+														style="width: 40px; height: 40px"
+													/>
+													<span class="icon-name s-p8TayeGkhv7a" style="font-size: 16px"></span>
+												</div>
+												<!---->
+												<div class="icon-container s-p8TayeGkhv7a">
+													<img
+														loading="lazy"
+														src="localhost_files/amazonwebservices-original-wordmark.svg"
+														class="icon s-p8TayeGkhv7a"
+														style="width: 40px; height: 40px"
+													/>
+													<span class="icon-name s-p8TayeGkhv7a" style="font-size: 16px"></span>
+												</div>
+												<!---->
+												<div class="icon-container s-p8TayeGkhv7a">
+													<img
+														loading="lazy"
+														src="localhost_files/bitbucket-original.svg"
+														class="icon s-p8TayeGkhv7a"
+														style="width: 40px; height: 40px"
+													/>
+													<span class="icon-name s-p8TayeGkhv7a" style="font-size: 16px"></span>
+												</div>
+												<!----><!--]-->
+											</div>
+											<!--]-->
+										</div>
+									</div>
+								</div>
+								<!---->
+								<div
+									class="group relative w-full max-w-4xl overflow-hidden rounded-2xl bg-zinc-800 p-6 shadow-lg transition-all duration-300 hover:shadow-xl"
+								>
+									<div class="flex flex-col gap-4 sm:flex-row sm:items-start">
+										<img
+											src="localhost_files/raytheon_icon.svg"
+											alt="Raytheon Technologies logo"
+											class="h-16 w-16 self-center rounded-lg object-contain transition-transform duration-500 group-hover:scale-105 sm:self-start"
+										/>
+										<div class="flex flex-1 flex-col space-y-2">
+											<div class="flex flex-col items-center gap-1 sm:flex-row sm:justify-between">
+												<h3 class="text-xl font-bold text-white">Raytheon Technologies</h3>
+											</div>
+											<h4 class="text-lg text-gray-300">Software Engineer</h4>
+											<!--[-->
+											<p class="text-gray-400">
+												I maintained the weather hazards alert system (AWIPS2) software in
+												communication with National Weather Service (NWS) offices and meteorologists
+												in the area.
+											</p>
+											<!--]-->
+											<!--[-->
+											<div class="flex flex-wrap gap-6">
+												<!--[-->
+												<div class="icon-container s-p8TayeGkhv7a">
+													<img
+														loading="lazy"
+														src="localhost_files/java-original.svg"
+														class="icon s-p8TayeGkhv7a"
+														style="width: 40px; height: 40px"
+													/>
+													<span class="icon-name s-p8TayeGkhv7a" style="font-size: 16px"></span>
+												</div>
+												<!---->
+												<div class="icon-container s-p8TayeGkhv7a">
+													<img
+														loading="lazy"
+														src="localhost_files/python-original.svg"
+														class="icon s-p8TayeGkhv7a"
+														style="width: 40px; height: 40px"
+													/>
+													<span class="icon-name s-p8TayeGkhv7a" style="font-size: 16px"></span>
+												</div>
+												<!---->
+												<div class="icon-container s-p8TayeGkhv7a">
+													<img
+														loading="lazy"
+														src="localhost_files/xml-original.svg"
+														class="icon s-p8TayeGkhv7a"
+														style="width: 40px; height: 40px"
+													/>
+													<span class="icon-name s-p8TayeGkhv7a" style="font-size: 16px"></span>
+												</div>
+												<!---->
+												<div class="icon-container s-p8TayeGkhv7a">
+													<img
+														loading="lazy"
+														src="localhost_files/eclipse-original.svg"
+														class="icon s-p8TayeGkhv7a"
+														style="width: 40px; height: 40px"
+													/>
+													<span class="icon-name s-p8TayeGkhv7a" style="font-size: 16px"></span>
+												</div>
+												<!---->
+												<div class="icon-container s-p8TayeGkhv7a">
+													<img
+														loading="lazy"
+														src="localhost_files/git-original.svg"
+														class="icon s-p8TayeGkhv7a"
+														style="width: 40px; height: 40px"
+													/>
+													<span class="icon-name s-p8TayeGkhv7a" style="font-size: 16px"></span>
+												</div>
+												<!---->
+												<div class="icon-container s-p8TayeGkhv7a">
+													<img
+														loading="lazy"
+														src="localhost_files/centos-original.svg"
+														class="icon s-p8TayeGkhv7a"
+														style="width: 40px; height: 40px"
+													/>
+													<span class="icon-name s-p8TayeGkhv7a" style="font-size: 16px"></span>
+												</div>
+												<!---->
+												<div class="icon-container s-p8TayeGkhv7a">
+													<img
+														loading="lazy"
+														src="localhost_files/rhel_icon.svg"
+														class="icon s-p8TayeGkhv7a"
+														style="width: 40px; height: 40px"
+													/>
+													<span class="icon-name s-p8TayeGkhv7a" style="font-size: 16px"></span>
+												</div>
+												<!----><!--]-->
+											</div>
+											<!--]-->
+										</div>
+									</div>
+								</div>
+								<!----><!--]-->
+							</div>
+						</div>
+					</section>
+					<!---->
+					<section
+						id="projects"
+						class="styled-section s-TnuOwwvAfaAL mb-16 flex flex-col items-center rounded-lg p-6"
+					>
+						<h3
+							class="s-TnuOwwvAfaAL mt-7 text-center text-lg font-semibold tracking-[2.4px] text-stone-300 sm:mt-16 sm:text-xl"
+						>
+							PROJECTS
+						</h3>
+						<div class="s-TnuOwwvAfaAL mt-7 w-full max-w-5xl px-4">
+							<div class="s-TnuOwwvAfaAL grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+								<!--[-->
+								<article
+									class="s-mHqezsfL2a7b group relative h-auto min-h-[28rem] w-full overflow-hidden rounded-2xl bg-zinc-800 transition-all duration-300 hover:shadow-xl"
+								>
+									<a
+										target="_blank"
+										rel="noopener noreferrer"
+										class="s-mHqezsfL2a7b block h-48 overflow-hidden"
+										><img
+											loading="lazy"
+											src="localhost_files/portfolio_website_icon.svg"
+											alt="Portfolio Website"
+											class="s-mHqezsfL2a7b h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+									/></a>
+									<div class="s-mHqezsfL2a7b flex flex-col justify-between p-4 sm:p-6">
+										<div class="s-mHqezsfL2a7b space-y-4">
+											<div class="s-mHqezsfL2a7b flex items-start justify-between">
+												<h3 class="s-mHqezsfL2a7b flex-1 text-lg font-bold text-white sm:text-xl">
+													Portfolio Website
+												</h3>
+												<div class="s-mHqezsfL2a7b relative">
+													<div
+														class="s-mHqezsfL2a7b absolute right-0 top-0 flex flex-col items-end space-y-2"
+													>
+														<!--[--><a
+															href="https://github.com/dsol-cpu/SWE-Portfolio"
+															target="_blank"
+															rel="noopener noreferrer"
+															class="s-mHqezsfL2a7b flex h-10 w-10 items-center justify-center rounded-full bg-zinc-700/50 p-2 transition-all duration-300 hover:bg-zinc-600/50"
+															aria-label="View source on GitHub"
+															><img
+																src="localhost_files/github-original.svg"
+																alt="GitHub"
+																class="s-mHqezsfL2a7b h-6 w-6 transition-all duration-300 hover:scale-[1.02] group-hover:brightness-125" /></a
+														><!--]-->
+														<!--[!--><!--]-->
+														<!--[--><a
+															href="https://dsol-cpu.github.io/SWE-Portfolio"
+															target="_blank"
+															rel="noopener noreferrer"
+															class="s-mHqezsfL2a7b flex h-10 w-10 items-center justify-center rounded-full bg-zinc-700/50 p-2 transition-all duration-300 hover:bg-zinc-600/50"
+															aria-label="View live demo"
+															><svg
+																xmlns="http://www.w3.org/2000/svg"
+																class="s-mHqezsfL2a7b h-6 w-6 text-white"
+																fill="none"
+																viewBox="0 0 24 24"
+																stroke="currentColor"
+															>
+																<path
+																	stroke-linecap="round"
+																	stroke-linejoin="round"
+																	stroke-width="2"
+																	d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+																	class="s-mHqezsfL2a7b"
+																></path></svg></a
+														><!--]-->
+													</div>
+												</div>
+											</div>
+											<div class="s-mHqezsfL2a7b flex flex-wrap gap-2 text-xs">
+												<span
+													class="s-mHqezsfL2a7b rounded-full bg-blue-500/20 px-2 py-1 text-blue-300"
+													>In Progress</span
+												>
+												<span
+													class="s-mHqezsfL2a7b rounded-full bg-emerald-500/20 px-2 py-1 text-emerald-300"
+													>Live</span
+												>
+												<!--[!--><!--]-->
+											</div>
+											<p class="s-mHqezsfL2a7b text-sm text-gray-300">
+												You're here! I wanted to better organize my portfolio website from the one I
+												did in ReactJS a couple years ago, so here we are!
+											</p>
+											<div class="s-mHqezsfL2a7b space-y-2">
+												<h4 class="s-mHqezsfL2a7b text-sm font-semibold text-gray-400">
+													Technologies
+												</h4>
+												<div class="s-mHqezsfL2a7b flex flex-wrap gap-4">
+													<!--[-->
+													<div class="icon-container s-p8TayeGkhv7a">
+														<img
+															loading="lazy"
+															src="localhost_files/svelte-original.svg"
+															class="icon s-p8TayeGkhv7a"
+															style="width: 24px; height: 24px"
+														/>
+														<span class="icon-name s-p8TayeGkhv7a" style="font-size: 12px"></span>
+													</div>
+													<!---->
+													<div class="icon-container s-p8TayeGkhv7a">
+														<img
+															loading="lazy"
+															src="localhost_files/rust-original.svg"
+															class="icon s-p8TayeGkhv7a"
+															style="width: 24px; height: 24px"
+														/>
+														<span class="icon-name s-p8TayeGkhv7a" style="font-size: 12px"></span>
+													</div>
+													<!---->
+													<div class="icon-container s-p8TayeGkhv7a">
+														<img
+															loading="lazy"
+															src="localhost_files/simple-icons_actix.svg"
+															class="icon s-p8TayeGkhv7a"
+															style="width: 24px; height: 24px"
+														/>
+														<span class="icon-name s-p8TayeGkhv7a" style="font-size: 12px"></span>
+													</div>
+													<!---->
+													<div class="icon-container s-p8TayeGkhv7a">
+														<img
+															loading="lazy"
+															src="localhost_files/github_icon.svg"
+															class="icon s-p8TayeGkhv7a"
+															style="width: 24px; height: 24px"
+														/>
+														<span class="icon-name s-p8TayeGkhv7a" style="font-size: 12px"></span>
+													</div>
+													<!---->
+													<div class="icon-container s-p8TayeGkhv7a">
+														<img
+															loading="lazy"
+															src="localhost_files/redis-original.svg"
+															class="icon s-p8TayeGkhv7a"
+															style="width: 24px; height: 24px"
+														/>
+														<span class="icon-name s-p8TayeGkhv7a" style="font-size: 12px"></span>
+													</div>
+													<!---->
+													<div class="icon-container s-p8TayeGkhv7a">
+														<img
+															loading="lazy"
+															src="localhost_files/mongodb-original-wordmark.svg"
+															class="icon s-p8TayeGkhv7a"
+															style="width: 24px; height: 24px"
+														/>
+														<span class="icon-name s-p8TayeGkhv7a" style="font-size: 12px"></span>
+													</div>
+													<!----><!--]-->
+												</div>
+											</div>
+											<div class="s-mHqezsfL2a7b space-y-2">
+												<h4 class="s-mHqezsfL2a7b text-sm font-semibold text-gray-400">
+													Key Features
+												</h4>
+												<ul
+													class="s-mHqezsfL2a7b list-inside list-disc space-y-1 text-sm text-gray-300"
+												>
+													<!--[-->
+													<li class="s-mHqezsfL2a7b">Front-end</li>
+													<li class="s-mHqezsfL2a7b">Back-end</li>
+													<li class="s-mHqezsfL2a7b">RESTful API</li>
+													<li class="s-mHqezsfL2a7b">Serverless</li>
+													<!--]-->
+												</ul>
+											</div>
+											<!--[!--><!--]-->
+										</div>
+									</div>
+								</article>
+								<!---->
+								<article
+									class="s-mHqezsfL2a7b group relative h-auto min-h-[28rem] w-full overflow-hidden rounded-2xl bg-zinc-800 transition-all duration-300 hover:shadow-xl"
+								>
+									<a
+										target="_blank"
+										rel="noopener noreferrer"
+										class="s-mHqezsfL2a7b block h-48 overflow-hidden"
+										><img
+											loading="lazy"
+											src="localhost_files/0.jpg"
+											alt=""
+											class="s-mHqezsfL2a7b h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+									/></a>
+									<div class="s-mHqezsfL2a7b flex flex-col justify-between p-4 sm:p-6">
+										<div class="s-mHqezsfL2a7b space-y-4">
+											<div class="s-mHqezsfL2a7b flex items-start justify-between">
+												<h3 class="s-mHqezsfL2a7b flex-1 text-lg font-bold text-white sm:text-xl">
+													Geospatial Mapping Challenge
+												</h3>
+												<div class="s-mHqezsfL2a7b relative">
+													<div
+														class="s-mHqezsfL2a7b absolute right-0 top-0 flex flex-col items-end space-y-2"
+													>
+														<!--[--><a
+															href="https://github.com/dsol-cpu/GeospatialDataVisualization-Aug2024"
+															target="_blank"
+															rel="noopener noreferrer"
+															class="s-mHqezsfL2a7b flex h-10 w-10 items-center justify-center rounded-full bg-zinc-700/50 p-2 transition-all duration-300 hover:bg-zinc-600/50"
+															aria-label="View source on GitHub"
+															><img
+																src="localhost_files/github-original.svg"
+																alt="GitHub"
+																class="s-mHqezsfL2a7b h-6 w-6 transition-all duration-300 hover:scale-[1.02] group-hover:brightness-125" /></a
+														><!--]-->
+														<!--[--><a
+															href="https://youtu.be/coCoAvOaSBM"
+															target="_blank"
+															rel="noopener noreferrer"
+															class="s-mHqezsfL2a7b flex h-10 w-10 items-center justify-center rounded-full bg-zinc-700/50 p-2 transition-all duration-300 hover:bg-zinc-600/50"
+															aria-label="Watch demo on YouTube"
+															><svg
+																class="s-mHqezsfL2a7b h-6 w-6 fill-current text-red-500"
+																viewBox="0 0 24 24"
+															>
+																<path
+																	d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"
+																	class="s-mHqezsfL2a7b"
+																></path></svg></a
+														><!--]-->
+														<!--[--><a
+															href="https://dsol-cpu.github.io/GeospatialDataVisualization-Aug2024/"
+															target="_blank"
+															rel="noopener noreferrer"
+															class="s-mHqezsfL2a7b flex h-10 w-10 items-center justify-center rounded-full bg-zinc-700/50 p-2 transition-all duration-300 hover:bg-zinc-600/50"
+															aria-label="View live demo"
+															><svg
+																xmlns="http://www.w3.org/2000/svg"
+																class="s-mHqezsfL2a7b h-6 w-6 text-white"
+																fill="none"
+																viewBox="0 0 24 24"
+																stroke="currentColor"
+															>
+																<path
+																	stroke-linecap="round"
+																	stroke-linejoin="round"
+																	stroke-width="2"
+																	d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+																	class="s-mHqezsfL2a7b"
+																></path></svg></a
+														><!--]-->
+													</div>
+												</div>
+											</div>
+											<div class="s-mHqezsfL2a7b flex flex-wrap gap-2 text-xs">
+												<span
+													class="s-mHqezsfL2a7b rounded-full bg-green-500/20 px-2 py-1 text-green-300"
+													>Completed</span
+												>
+												<span
+													class="s-mHqezsfL2a7b rounded-full bg-emerald-500/20 px-2 py-1 text-emerald-300"
+													>Live</span
+												>
+												<!--[!--><!--]-->
+											</div>
+											<p class="s-mHqezsfL2a7b text-sm text-gray-300">
+												Parses a json file for geospatial data and uses a regex to deal with
+												dirty/corrupted/invalid data. That data is correlated with each pin
+												instantiated on the globe, allowing the user to mouse hover and display the
+												corresponding location data.
+											</p>
+											<div class="s-mHqezsfL2a7b space-y-2">
+												<h4 class="s-mHqezsfL2a7b text-sm font-semibold text-gray-400">
+													Technologies
+												</h4>
+												<div class="s-mHqezsfL2a7b flex flex-wrap gap-4">
+													<!--[-->
+													<div class="icon-container s-p8TayeGkhv7a">
+														<img
+															loading="lazy"
+															src="localhost_files/unity-original.svg"
+															class="icon s-p8TayeGkhv7a"
+															style="width: 24px; height: 24px"
+														/>
+														<span class="icon-name s-p8TayeGkhv7a" style="font-size: 12px"></span>
+													</div>
+													<!---->
+													<div class="icon-container s-p8TayeGkhv7a">
+														<img
+															loading="lazy"
+															src="localhost_files/csharp-original.svg"
+															class="icon s-p8TayeGkhv7a"
+															style="width: 24px; height: 24px"
+														/>
+														<span class="icon-name s-p8TayeGkhv7a" style="font-size: 12px"></span>
+													</div>
+													<!---->
+													<div class="icon-container s-p8TayeGkhv7a">
+														<img
+															loading="lazy"
+															src="localhost_files/json-original.svg"
+															class="icon s-p8TayeGkhv7a"
+															style="width: 24px; height: 24px"
+														/>
+														<span class="icon-name s-p8TayeGkhv7a" style="font-size: 12px"></span>
+													</div>
+													<!---->
+													<div class="icon-container s-p8TayeGkhv7a">
+														<img
+															loading="lazy"
+															src="localhost_files/blender-original.svg"
+															class="icon s-p8TayeGkhv7a"
+															style="width: 24px; height: 24px"
+														/>
+														<span class="icon-name s-p8TayeGkhv7a" style="font-size: 12px"></span>
+													</div>
+													<!----><!--]-->
+												</div>
+											</div>
+											<div class="s-mHqezsfL2a7b space-y-2">
+												<h4 class="s-mHqezsfL2a7b text-sm font-semibold text-gray-400">
+													Key Features
+												</h4>
+												<ul
+													class="s-mHqezsfL2a7b list-inside list-disc space-y-1 text-sm text-gray-300"
+												>
+													<!--[-->
+													<li class="s-mHqezsfL2a7b">Data Visualization</li>
+													<li class="s-mHqezsfL2a7b">Game Development</li>
+													<!--]-->
+												</ul>
+											</div>
+											<!--[!--><!--]-->
+										</div>
+									</div>
+								</article>
+								<!---->
+								<article
+									class="s-mHqezsfL2a7b group relative h-auto min-h-[28rem] w-full overflow-hidden rounded-2xl bg-zinc-800 transition-all duration-300 hover:shadow-xl"
+								>
+									<a
+										target="_blank"
+										rel="noopener noreferrer"
+										class="s-mHqezsfL2a7b block h-48 overflow-hidden"
+										><img
+											loading="lazy"
+											src="localhost_files/alien_search_icon.svg"
+											alt=""
+											class="s-mHqezsfL2a7b h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+									/></a>
+									<div class="s-mHqezsfL2a7b flex flex-col justify-between p-4 sm:p-6">
+										<div class="s-mHqezsfL2a7b space-y-4">
+											<div class="s-mHqezsfL2a7b flex items-start justify-between">
+												<h3 class="s-mHqezsfL2a7b flex-1 text-lg font-bold text-white sm:text-xl">
+													UFO Sightings Challenge
+												</h3>
+												<div class="s-mHqezsfL2a7b relative">
+													<div
+														class="s-mHqezsfL2a7b absolute right-0 top-0 flex flex-col items-end space-y-2"
+													>
+														<!--[--><a
+															href="https://github.com/dsol-cpu/alien-search"
+															target="_blank"
+															rel="noopener noreferrer"
+															class="s-mHqezsfL2a7b flex h-10 w-10 items-center justify-center rounded-full bg-zinc-700/50 p-2 transition-all duration-300 hover:bg-zinc-600/50"
+															aria-label="View source on GitHub"
+															><img
+																src="localhost_files/github-original.svg"
+																alt="GitHub"
+																class="s-mHqezsfL2a7b h-6 w-6 transition-all duration-300 hover:scale-[1.02] group-hover:brightness-125" /></a
+														><!--]-->
+														<!--[!--><!--]-->
+														<!--[--><a
+															href="https://dsol-cpu.github.io/alien-search/"
+															target="_blank"
+															rel="noopener noreferrer"
+															class="s-mHqezsfL2a7b flex h-10 w-10 items-center justify-center rounded-full bg-zinc-700/50 p-2 transition-all duration-300 hover:bg-zinc-600/50"
+															aria-label="View live demo"
+															><svg
+																xmlns="http://www.w3.org/2000/svg"
+																class="s-mHqezsfL2a7b h-6 w-6 text-white"
+																fill="none"
+																viewBox="0 0 24 24"
+																stroke="currentColor"
+															>
+																<path
+																	stroke-linecap="round"
+																	stroke-linejoin="round"
+																	stroke-width="2"
+																	d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+																	class="s-mHqezsfL2a7b"
+																></path></svg></a
+														><!--]-->
+													</div>
+												</div>
+											</div>
+											<div class="s-mHqezsfL2a7b flex flex-wrap gap-2 text-xs">
+												<span
+													class="s-mHqezsfL2a7b rounded-full bg-green-500/20 px-2 py-1 text-green-300"
+													>Completed</span
+												>
+												<span
+													class="s-mHqezsfL2a7b rounded-full bg-emerald-500/20 px-2 py-1 text-emerald-300"
+													>Live</span
+												>
+												<!--[!--><!--]-->
+											</div>
+											<p class="s-mHqezsfL2a7b text-sm text-gray-300">
+												This was a challenge to gameify ufo sightings data. Extracts a number of
+												random pieces of data and displays on UI near screens. Intended behavior was
+												that all screens would amount to a password using the data and the ship
+												would take that password, ending the game.
+											</p>
+											<div class="s-mHqezsfL2a7b space-y-2">
+												<h4 class="s-mHqezsfL2a7b text-sm font-semibold text-gray-400">
+													Technologies
+												</h4>
+												<div class="s-mHqezsfL2a7b flex flex-wrap gap-4">
+													<!--[-->
+													<div class="icon-container s-p8TayeGkhv7a">
+														<img
+															loading="lazy"
+															src="localhost_files/unity-original.svg"
+															class="icon s-p8TayeGkhv7a"
+															style="width: 24px; height: 24px"
+														/>
+														<span class="icon-name s-p8TayeGkhv7a" style="font-size: 12px"></span>
+													</div>
+													<!---->
+													<div class="icon-container s-p8TayeGkhv7a">
+														<img
+															loading="lazy"
+															src="localhost_files/csharp-original.svg"
+															class="icon s-p8TayeGkhv7a"
+															style="width: 24px; height: 24px"
+														/>
+														<span class="icon-name s-p8TayeGkhv7a" style="font-size: 12px"></span>
+													</div>
+													<!---->
+													<div class="icon-container s-p8TayeGkhv7a">
+														<img
+															loading="lazy"
+															src="localhost_files/json-original.svg"
+															class="icon s-p8TayeGkhv7a"
+															style="width: 24px; height: 24px"
+														/>
+														<span class="icon-name s-p8TayeGkhv7a" style="font-size: 12px"></span>
+													</div>
+													<!----><!--]-->
+												</div>
+											</div>
+											<div class="s-mHqezsfL2a7b space-y-2">
+												<h4 class="s-mHqezsfL2a7b text-sm font-semibold text-gray-400">
+													Key Features
+												</h4>
+												<ul
+													class="s-mHqezsfL2a7b list-inside list-disc space-y-1 text-sm text-gray-300"
+												>
+													<!--[-->
+													<li class="s-mHqezsfL2a7b">Data Visualization</li>
+													<li class="s-mHqezsfL2a7b">Game Development</li>
+													<!--]-->
+												</ul>
+											</div>
+											<!--[!--><!--]-->
+										</div>
+									</div>
+								</article>
+								<!---->
+								<article
+									class="s-mHqezsfL2a7b group relative h-auto min-h-[28rem] w-full overflow-hidden rounded-2xl bg-zinc-800 transition-all duration-300 hover:shadow-xl"
+								>
+									<a
+										target="_blank"
+										rel="noopener noreferrer"
+										class="s-mHqezsfL2a7b block h-48 overflow-hidden"
+										><img
+											loading="lazy"
+											src="localhost_files/0_002.jpg"
+											alt="Mario Kart Blender Addon"
+											class="s-mHqezsfL2a7b h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+									/></a>
+									<div class="s-mHqezsfL2a7b flex flex-col justify-between p-4 sm:p-6">
+										<div class="s-mHqezsfL2a7b space-y-4">
+											<div class="s-mHqezsfL2a7b flex items-start justify-between">
+												<h3 class="s-mHqezsfL2a7b flex-1 text-lg font-bold text-white sm:text-xl">
+													Moving Terrain Editor Addon (Mario Kart)
+												</h3>
+												<div class="s-mHqezsfL2a7b relative">
+													<div
+														class="s-mHqezsfL2a7b absolute right-0 top-0 flex flex-col items-end space-y-2"
+													>
+														<!--[--><a
+															href="https://github.com/dsol-cpu/MK-AREAS-plugin"
+															target="_blank"
+															rel="noopener noreferrer"
+															class="s-mHqezsfL2a7b flex h-10 w-10 items-center justify-center rounded-full bg-zinc-700/50 p-2 transition-all duration-300 hover:bg-zinc-600/50"
+															aria-label="View source on GitHub"
+															><img
+																src="localhost_files/github-original.svg"
+																alt="GitHub"
+																class="s-mHqezsfL2a7b h-6 w-6 transition-all duration-300 hover:scale-[1.02] group-hover:brightness-125" /></a
+														><!--]-->
+														<!--[--><a
+															href="https://www.youtube.com/watch?v=QDt2I_BZKrI"
+															target="_blank"
+															rel="noopener noreferrer"
+															class="s-mHqezsfL2a7b flex h-10 w-10 items-center justify-center rounded-full bg-zinc-700/50 p-2 transition-all duration-300 hover:bg-zinc-600/50"
+															aria-label="Watch demo on YouTube"
+															><svg
+																class="s-mHqezsfL2a7b h-6 w-6 fill-current text-red-500"
+																viewBox="0 0 24 24"
+															>
+																<path
+																	d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"
+																	class="s-mHqezsfL2a7b"
+																></path></svg></a
+														><!--]-->
+														<!--[!--><!--]-->
+													</div>
+												</div>
+											</div>
+											<div class="s-mHqezsfL2a7b flex flex-wrap gap-2 text-xs">
+												<span
+													class="s-mHqezsfL2a7b rounded-full bg-green-500/20 px-2 py-1 text-green-300"
+													>Completed</span
+												>
+												<span
+													class="s-mHqezsfL2a7b rounded-full bg-gray-500/20 px-2 py-1 text-gray-300"
+													>Local Only</span
+												>
+												<!--[!--><!--]-->
+											</div>
+											<p class="s-mHqezsfL2a7b text-sm text-gray-300">
+												Allows the user to import .kmp files and represent data as cube primitives,
+												manipulate primitives' transform in Blender, and export transforms to
+												manipulate their corresponding moving terrain (Conveyor belts, water current
+												surfaces)
+											</p>
+											<div class="s-mHqezsfL2a7b space-y-2">
+												<h4 class="s-mHqezsfL2a7b text-sm font-semibold text-gray-400">
+													Technologies
+												</h4>
+												<div class="s-mHqezsfL2a7b flex flex-wrap gap-4">
+													<!--[-->
+													<div class="icon-container s-p8TayeGkhv7a">
+														<img
+															loading="lazy"
+															src="localhost_files/blender-original.svg"
+															class="icon s-p8TayeGkhv7a"
+															style="width: 24px; height: 24px"
+														/>
+														<span class="icon-name s-p8TayeGkhv7a" style="font-size: 12px"></span>
+													</div>
+													<!---->
+													<div class="icon-container s-p8TayeGkhv7a">
+														<img
+															loading="lazy"
+															src="localhost_files/python-original.svg"
+															class="icon s-p8TayeGkhv7a"
+															style="width: 24px; height: 24px"
+														/>
+														<span class="icon-name s-p8TayeGkhv7a" style="font-size: 12px"></span>
+													</div>
+													<!----><!--]-->
+												</div>
+											</div>
+											<div class="s-mHqezsfL2a7b space-y-2">
+												<h4 class="s-mHqezsfL2a7b text-sm font-semibold text-gray-400">
+													Key Features
+												</h4>
+												<ul
+													class="s-mHqezsfL2a7b list-inside list-disc space-y-1 text-sm text-gray-300"
+												>
+													<!--[-->
+													<li class="s-mHqezsfL2a7b">Data Visualization</li>
+													<li class="s-mHqezsfL2a7b">Blender Addon</li>
+													<!--]-->
+												</ul>
+											</div>
+											<!--[!--><!--]-->
+										</div>
+									</div>
+								</article>
+								<!---->
+								<article
+									class="s-mHqezsfL2a7b group relative h-auto min-h-[28rem] w-full overflow-hidden rounded-2xl bg-zinc-800 transition-all duration-300 hover:shadow-xl"
+								>
+									<a
+										target="_blank"
+										rel="noopener noreferrer"
+										class="s-mHqezsfL2a7b block h-48 overflow-hidden"
+										><img
+											loading="lazy"
+											src="localhost_files/db_icon.svg"
+											alt="MMORPG Database and Interface"
+											class="s-mHqezsfL2a7b h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+									/></a>
+									<div class="s-mHqezsfL2a7b flex flex-col justify-between p-4 sm:p-6">
+										<div class="s-mHqezsfL2a7b space-y-4">
+											<div class="s-mHqezsfL2a7b flex items-start justify-between">
+												<h3 class="s-mHqezsfL2a7b flex-1 text-lg font-bold text-white sm:text-xl">
+													MMORPG Database &amp; Interface
+												</h3>
+												<div class="s-mHqezsfL2a7b relative">
+													<div
+														class="s-mHqezsfL2a7b absolute right-0 top-0 flex flex-col items-end space-y-2"
+													>
+														<!--[--><a
+															href="https://github.com/dsol-cpu/MMORG-DB"
+															target="_blank"
+															rel="noopener noreferrer"
+															class="s-mHqezsfL2a7b flex h-10 w-10 items-center justify-center rounded-full bg-zinc-700/50 p-2 transition-all duration-300 hover:bg-zinc-600/50"
+															aria-label="View source on GitHub"
+															><img
+																src="localhost_files/github-original.svg"
+																alt="GitHub"
+																class="s-mHqezsfL2a7b h-6 w-6 transition-all duration-300 hover:scale-[1.02] group-hover:brightness-125" /></a
+														><!--]-->
+														<!--[!--><!--]-->
+														<!--[!--><!--]-->
+													</div>
+												</div>
+											</div>
+											<div class="s-mHqezsfL2a7b flex flex-wrap gap-2 text-xs">
+												<span
+													class="s-mHqezsfL2a7b rounded-full bg-green-500/20 px-2 py-1 text-green-300"
+													>Completed</span
+												>
+												<span
+													class="s-mHqezsfL2a7b rounded-full bg-gray-500/20 px-2 py-1 text-gray-300"
+													>Local Only</span
+												>
+												<!--[!--><!--]-->
+											</div>
+											<p class="s-mHqezsfL2a7b text-sm text-gray-300">
+												A small python CLI interface made for a mock MMORPG relational database
+												postgreSQL
+											</p>
+											<div class="s-mHqezsfL2a7b space-y-2">
+												<h4 class="s-mHqezsfL2a7b text-sm font-semibold text-gray-400">
+													Technologies
+												</h4>
+												<div class="s-mHqezsfL2a7b flex flex-wrap gap-4">
+													<!--[-->
+													<div class="icon-container s-p8TayeGkhv7a">
+														<img
+															loading="lazy"
+															src="localhost_files/python-original.svg"
+															class="icon s-p8TayeGkhv7a"
+															style="width: 24px; height: 24px"
+														/>
+														<span class="icon-name s-p8TayeGkhv7a" style="font-size: 12px"></span>
+													</div>
+													<!---->
+													<div class="icon-container s-p8TayeGkhv7a">
+														<img
+															loading="lazy"
+															src="localhost_files/postgresql-original.svg"
+															class="icon s-p8TayeGkhv7a"
+															style="width: 24px; height: 24px"
+														/>
+														<span class="icon-name s-p8TayeGkhv7a" style="font-size: 12px"></span>
+													</div>
+													<!----><!--]-->
+												</div>
+											</div>
+											<div class="s-mHqezsfL2a7b space-y-2">
+												<h4 class="s-mHqezsfL2a7b text-sm font-semibold text-gray-400">
+													Key Features
+												</h4>
+												<ul
+													class="s-mHqezsfL2a7b list-inside list-disc space-y-1 text-sm text-gray-300"
+												>
+													<!--[-->
+													<li class="s-mHqezsfL2a7b">CLI</li>
+													<li class="s-mHqezsfL2a7b">Database</li>
+													<!--]-->
+												</ul>
+											</div>
+											<!--[!--><!--]-->
+										</div>
+									</div>
+								</article>
+								<!----><!--]-->
+							</div>
+						</div>
+					</section>
+					<!---->
+				</div>
+				<footer id="contact" class="s-W68D3AlqipKB relative w-full">
+					<div class="s-W68D3AlqipKB absolute inset-0 bg-zinc-900"></div>
+					<div class="s-W68D3AlqipKB relative mx-auto max-w-7xl px-6 py-4 md:px-16 md:py-6">
+						<div class="s-W68D3AlqipKB text-center">
+							<p class="s-W68D3AlqipKB text-stone-300">©2025 David Solinsky.</p>
+							<p class="s-W68D3AlqipKB text-stone-300">All rights reserved.</p>
+						</div>
+						<div class="s-W68D3AlqipKB mt-8 w-full text-center sm:mt-10">
+							<a
+								href="http://localhost:5173/David_Solinsky_resume.pdf"
+								target="_blank"
+								class="s-W68D3AlqipKB inline-block w-full sm:w-auto"
+								><button
+									class="outline-button s-W68D3AlqipKB w-full border-2 border-solid border-white px-6 py-3 text-white transition-colors duration-300 sm:px-7 sm:py-4"
+								>
+									Download Resume
+								</button></a
+							>
+						</div>
+					</div>
+				</footer>
+				<!---->
+			</main>
+			<!----><!----><!----><!----><!--]-->
+			<!--[!-->
+			<div
+				id="svelte-announcer"
+				aria-live="assertive"
+				aria-atomic="true"
+				style="
+					position: absolute;
+					left: 0;
+					top: 0;
+					clip: rect(0 0 0 0);
+					clip-path: inset(50%);
+					overflow: hidden;
+					white-space: nowrap;
+					width: 1px;
+					height: 1px;
+				"
+			>
+				<!---->
+			</div>
+			<!--]--><!--]-->
+
+			<script>
+				{
+					__sveltekit_dev = {
+						base: new URL('.', location).pathname.slice(0, -1),
+						env: {}
+					};
+
+					const element = document.currentScript.parentElement;
+
+					Promise.all([
+						import(
+							'/node_modules/.pnpm/@sveltejs+kit@2.16.1_@sveltejs+vite-plugin-svelte@4.0.4_svelte@5.19.6_vite@5.4.14_terser@5.37_5s4o7xkuctollqhxtbg2lodjg4/node_modules/@sveltejs/kit/src/runtime/client/entry.js'
+						),
+						import('/@fs/app/.svelte-kit/generated/client/app.js')
+					]).then(([kit, app]) => {
+						kit.start(app, element, {
+							node_ids: [0, 2],
+							data: [null, null],
+							form: null,
+							error: null
+						});
+					});
+				}
+			</script>
+		</div>
+		<div class="absolute left-0 top-0 z-[-1] min-h-screen w-full opacity-70">
+			<div id="particles-js" class="absolute inset-0"></div>
+		</div>
+	</body>
+</html>
