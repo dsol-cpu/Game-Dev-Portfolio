@@ -2,7 +2,14 @@ import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
 
 const createThemeStore = () => {
-	const defaultTheme = browser ? localStorage.getItem('theme') || 'dark' : 'dark';
+	// Determine the default theme based on system preferences if no theme is set
+	const systemTheme = browser
+		? window.matchMedia('(prefers-color-scheme: dark)').matches
+			? 'dark'
+			: 'light'
+		: 'dark'; // Default to dark theme if not in the browser
+
+	const defaultTheme = browser ? (localStorage.getItem('theme') ?? systemTheme) : 'dark';
 	const store = writable(defaultTheme);
 
 	if (browser) {
@@ -14,7 +21,7 @@ const createThemeStore = () => {
 		subscribe: store.subscribe,
 		toggleTheme: () => {
 			if (browser) {
-				const currentTheme = localStorage.getItem('theme') || 'dark';
+				const currentTheme = localStorage.getItem('theme') ?? systemTheme;
 				const newTheme = currentTheme === 'light' ? 'dark' : 'light';
 				localStorage.setItem('theme', newTheme);
 				// Apply the new theme class to the root element

@@ -3,7 +3,7 @@ services:
   frontend:
     env_file:
       - ./src/front_end/.env.dev
-    image: sweportfoliosite_frontend:latest
+    image: gamedevportfoliosite_frontend:latest
     build:
       context: .
       dockerfile: src/front_end/Dockerfile
@@ -27,7 +27,7 @@ services:
   backend:
     env_file:
       - src/back_end/.env.dev
-    image: sweportfoliosite_backend:latest
+    image: gamedevfoliosite_backend:latest
     build:
       context: .
       dockerfile: ./src/back_end/Dockerfile

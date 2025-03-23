@@ -1,11 +1,8 @@
 import { defineConfig } from 'vitest/config';
 import { sveltekit } from '@sveltejs/kit/vite';
 
-const basePath = process.env.BASE_PATH || '/';
-
 export default defineConfig({
 	plugins: [sveltekit()],
-	base: basePath,
 	server: {
 		proxy: {
 			'/api': {
@@ -25,7 +22,7 @@ export default defineConfig({
 		}
 	},
 	build: {
-		sourcemap: process.env.NODE_ENV === 'production' ? false : true,
+		sourcemap: process.env.NODE_ENV !== 'production',
 		minify: 'terser',
 		target: 'es2020'
 	}

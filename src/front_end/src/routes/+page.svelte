@@ -15,4 +15,5 @@
 {#if themeApplied}
 	<ResumeModal />
 	<Portfolio />
+	<!-- <PageFlip /> -->
 {/if}

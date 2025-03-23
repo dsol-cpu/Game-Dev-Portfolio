@@ -1,7 +1,7 @@
 <script>
 	import { onMount, onDestroy } from 'svelte';
 	import { fade, fly } from 'svelte/transition';
-	import { resumeModalOpen } from '../lib/stores/resumeModal.js';
+	import { resumeModalOpen } from '../lib/stores/resumeModal';
 	import { theme } from '../lib/stores/theme';
 	import { browser } from '$app/environment';
 
