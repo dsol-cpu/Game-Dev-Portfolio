@@ -15,11 +15,10 @@ RUN pnpm install
 COPY src/front_end/. .
 
 # Build the application
-RUN pnpm build
+RUN pnpm run build
 
 # Expose the development server port
 EXPOSE 5173
-EXPOSE 3000
 
 # Start the development server
 CMD ["pnpm", "run", "dev", "--host"]
