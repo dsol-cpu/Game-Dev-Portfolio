@@ -12,7 +12,7 @@
 Cargo.lock
 src/back_end/target
 
-# from svelte
+# from Solid
 src/front_end/node_modules
 src/front_end/dist/
 src/front_end/package-lock.json

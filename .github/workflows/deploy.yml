@@ -46,7 +46,7 @@ jobs:
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@v3
         with:
-          path: "src/front_end/build/"
+          path: "src/front_end/dist/"
 
   # Deploy job - only runs on main branch
   deploy:
