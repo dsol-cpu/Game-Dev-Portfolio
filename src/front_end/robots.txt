@@ -1,0 +1,17 @@
+User-agent: *
+Disallow: /
+
+User-agent: Googlebot
+Allow: /
+
+User-agent: DuckDuckBot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: Slurp
+Allow: /
+
+Baidu: Baiduspider
+Allow: /

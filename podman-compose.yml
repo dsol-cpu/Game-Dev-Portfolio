@@ -1,0 +1,53 @@
+---
+services:
+  frontend:
+    env_file:
+      - ./src/front_end/.env.dev
+    image: gamedevportfoliosite_frontend:latest
+    build:
+      context: .
+      dockerfile: src/front_end/Dockerfile
+    ports:
+      - "5173:5173"
+    restart: unless-stopped
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "http://localhost:5173"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    volumes:
+      - ./src/front_end:/app:Z
+      - /app/node_modules # Direct link to my node_modules to avoid duplication
+    environment:
+      - CHOKIDAR_USEPOLLING=true # Flag to watch for changes and enable hot reload
+    command: ["pnpm", "run", "dev", "--host"]
+
+  backend:
+    env_file:
+      - src/back_end/.env.dev
+    image: gamedevfoliosite_backend:latest
+    build:
+      context: .
+      dockerfile: ./src/back_end/Dockerfile
+    ports:
+      - ${PORT-10000}:${PORT:-10000}
+    volumes:
+      - app-data:/app/data
+    restart: unless-stopped
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "${BACKEND_URL}${HEALTH_CHECK_URL_SUFFIX}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  app-data:
+    driver: local
+
+networks:
+  app-network:
+    driver: bridge
