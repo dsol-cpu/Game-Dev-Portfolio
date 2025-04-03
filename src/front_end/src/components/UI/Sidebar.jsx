@@ -1,14 +1,28 @@
 import { createSignal, createEffect } from "solid-js";
-import { createThemeManager } from "../lib/stores/theme";
+import { createThemeManager } from "../../stores/theme";
+import ThemeToggle from "../ThemeToggle";
+import { navigationStore } from "../../stores/navigationStore";
 
 export default function Sidebar() {
-  const { theme, isDark } = createThemeManager();
+  const { theme, toggleTheme, isDark } = createThemeManager();
   const [isOpen, setIsOpen] = createSignal(false);
   const [position] = createSignal("left");
   const [width] = createSignal("280px");
   const [toggleButton] = createSignal(true);
   const [activeSection, setActiveSection] = createSignal("home");
   const [isBookOpen, setIsBookOpen] = createSignal(false);
+
+  // Import the navigation store
+  const {
+    setTargetIsland,
+    setIsNavigating,
+    setDestinationSection,
+    isNavigating,
+    navigationProgress,
+    setNavigationProgress,
+    navigatingSection,
+    setNavigatingSection,
+  } = navigationStore;
 
   // New state for book navigation
   const [bookNavigation, setBookNavigation] = createSignal(null);
@@ -30,10 +44,18 @@ export default function Sidebar() {
       ? "bg-blue-900/60 text-green-400 border-l-4 border-green-500"
       : "bg-teal-200/70 text-blue-900 border-l-4 border-blue-600";
 
+  // Reset active section when navigation completes
+  createEffect(() => {
+    if (!isNavigating() && navigatingSection()) {
+      setActiveSection(navigatingSection());
+      setNavigatingSection(null);
+    }
+  });
+
   // Handle outside clicks to close sidebar on mobile
   createEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      const target = event.target as HTMLElement;
+    const handleClickOutside = (event) => {
+      const target = event.target;
       if (
         isOpen() &&
         !target.closest(".sidebar") &&
@@ -52,18 +74,16 @@ export default function Sidebar() {
     setIsOpen(!isOpen());
   };
 
-  // Handle smooth scrolling navigation
-  const smoothScroll = (sectionId: string, event: MouseEvent) => {
+  // Navigate to island and section
+  const navigateToIsland = (sectionId, islandIndex, event) => {
     event.preventDefault();
-    setActiveSection(sectionId);
+    setNavigatingSection(sectionId);
+    setDestinationSection(sectionId);
 
-    const element = document.getElementById(sectionId);
-    if (element) {
-      element.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }
+    // Set the target island index for the ship to navigate to
+    setTargetIsland(islandIndex);
+    setIsNavigating(true);
+    setNavigationProgress(0);
 
     // Close sidebar on mobile
     if (window.innerWidth < 768) {
@@ -71,29 +91,39 @@ export default function Sidebar() {
     }
   };
 
-  // Modify openBook to handle book page navigation
-  const openBook = () => {
+  // Handle resume book
+  const openBook = (event) => {
+    event.preventDefault();
     setIsBookOpen(true);
-    setActiveSection("resume");
+    setNavigatingSection("resume");
     setCurrentBookPage(0);
 
+    // Navigate to the resume island (using index 3 for resume)
+    setTargetIsland(3);
+    setIsNavigating(true);
+    setNavigationProgress(0);
+    setDestinationSection("resume");
+
     // Close sidebar on mobile
     if (window.innerWidth < 768) {
       setIsOpen(false);
     }
   };
 
-  // Add book page navigation methods
-  const nextBookPage = () => {
-    if (bookNavigation()) {
-      bookNavigation().nextPage();
-    }
+  // Map sections to island indices
+  const sectionToIslandMap = {
+    home: 0,
+    experience: 1,
+    projects: 2,
+    resume: 3,
   };
 
-  const prevBookPage = () => {
-    if (bookNavigation()) {
-      bookNavigation().prevPage();
+  // Get navigation status text
+  const getNavigationStatus = (section) => {
+    if (isNavigating() && navigatingSection() === section) {
+      return ` (Flying ${Math.round(navigationProgress())}%)`;
     }
+    return "";
   };
 
   return (
@@ -162,6 +192,7 @@ export default function Sidebar() {
             </h2>
             <p class="mt-1 text-sm opacity-80">Game Developer & Designer</p>
           </div>
+          <ThemeToggle />
 
           <nav class="flex-1 overflow-y-auto px-4">
             <ul class="space-y-2 py-4">
@@ -170,8 +201,11 @@ export default function Sidebar() {
                   <button
                     class={`flex w-full items-center rounded-lg px-4 py-3 font-medium transition-all duration-200 ${
                       activeSection() === section ? activeClass() : itemClass()
-                    }`}
-                    onClick={(e) => smoothScroll(section, e)}
+                    } ${isNavigating() ? "opacity-50 pointer-events-none" : ""}`}
+                    onClick={(e) =>
+                      navigateToIsland(section, sectionToIslandMap[section], e)
+                    }
+                    disabled={isNavigating()}
                   >
                     <span class="mr-3">
                       {section === "home" && (
@@ -202,7 +236,10 @@ export default function Sidebar() {
                         </svg>
                       )}
                     </span>
-                    <span class="capitalize">{section}</span>
+                    <span class="capitalize">
+                      {section}
+                      {getNavigationStatus(section)}
+                    </span>
                   </button>
                 </li>
               ))}
@@ -210,8 +247,9 @@ export default function Sidebar() {
                 <button
                   class={`flex w-full items-center rounded-lg px-4 py-3 font-medium transition-all duration-200 ${
                     activeSection() === "resume" ? activeClass() : itemClass()
-                  }`}
+                  } ${isNavigating() ? "opacity-50 pointer-events-none" : ""}`}
                   onClick={openBook}
+                  disabled={isNavigating()}
                 >
                   <span class="mr-3">
                     <svg
@@ -222,41 +260,20 @@ export default function Sidebar() {
                       <path d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"></path>
                     </svg>
                   </span>
-                  <span>Resume</span>
+                  <span>
+                    Resume
+                    {getNavigationStatus("resume")}
+                  </span>
                 </button>
               </li>
             </ul>
           </nav>
 
           <div class="border-t border-cyan-500/30 p-4 text-center text-xs opacity-70">
-            <span>LEVEL 99 • DEV BUILD v2.5</span>
+            <span>©{new Date().getFullYear()} David Solinsky</span>
           </div>
         </div>
       </aside>
-
-      {/* Book Overlay */}
-      {isBookOpen() && (
-        <div
-          class="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-          onClick={() => setIsBookOpen(false)}
-        >
-          <div
-            class="w-[80vw] h-[80vh] bg-white rounded-lg shadow-2xl overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* WebGL Book Flip Component Goes Here */}
-            <div class="p-6">
-              <h2 class="text-2xl font-bold mb-4">Resume</h2>
-              <button
-                class="absolute top-4 right-4 bg-red-500 text-white px-4 py-2 rounded"
-                onClick={() => setIsBookOpen(false)}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 }

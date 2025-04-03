@@ -21,9 +21,9 @@
   "dependencies": {
     "@tailwindcss/vite": "^4.0.16",
     "autoprefixer": "^10.4.21",
-    "gl-matrix": "^3.4.3",
     "postcss": "^8.5.3",
     "solid-js": "^1.9.5",
-    "tailwindcss": "^4.0.16"
+    "tailwindcss": "^4.0.16",
+    "three": "^0.175.0"
   }
 }
