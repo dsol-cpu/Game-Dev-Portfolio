@@ -26,6 +26,11 @@ export function useShipControls(ship, setShipHeight) {
     new THREE.Quaternion()
   );
 
+  // Mobile controls state
+  const [mobileMovementX, setMobileMovementX] = createSignal(0); // -1 to 1, left to right
+  const [mobileMovementY, setMobileMovementY] = createSignal(0); // -1 to 1, forward to backward
+  const [mobileAltitudeChange, setMobileAltitudeChange] = createSignal(0); // -1, 0, or 1
+
   // Setup keyboard controls
   const setupControls = () => {
     const handleKeyDown = (e) => {
@@ -94,6 +99,25 @@ export function useShipControls(ship, setShipHeight) {
     return true; // Orientation reset was processed
   };
 
+  // Set mobile movement values (from joystick)
+  const setMobileMovement = (x, y) => {
+    setMobileMovementX(x);
+    setMobileMovementY(y);
+  };
+
+  // Altitude control functions for mobile
+  const increaseAltitude = () => {
+    setMobileAltitudeChange(1);
+  };
+
+  const decreaseAltitude = () => {
+    setMobileAltitudeChange(-1);
+  };
+
+  const stopAltitudeChange = () => {
+    setMobileAltitudeChange(0);
+  };
+
   // Ship controls update
   const updateShipControls = () => {
     if (!ship() || resetOrientationInProgress()) return false;
@@ -114,10 +138,24 @@ export function useShipControls(ship, setShipHeight) {
     const acceleration = SHIP.ACCELERATION * speedMultiplier;
     const deceleration = SHIP.DECELERATION * speedMultiplier;
 
-    if (keys["ArrowUp"]) {
-      velocity = Math.min(maxSpeed, velocity + acceleration);
-    } else if (keys["ArrowDown"]) {
-      velocity = Math.max(-maxSpeed, velocity - acceleration);
+    // Combine keyboard and mobile inputs for movement
+    const movingForward = keys["ArrowUp"] || mobileMovementY() > 0.2;
+    const movingBackward = keys["ArrowDown"] || mobileMovementY() < -0.2;
+
+    if (movingForward) {
+      // Use the stronger of the two inputs
+      const inputStrength = Math.max(
+        keys["ArrowUp"] ? 1 : 0,
+        mobileMovementY() > 0.2 ? mobileMovementY() : 0
+      );
+      velocity = Math.min(maxSpeed * inputStrength, velocity + acceleration);
+    } else if (movingBackward) {
+      // Use the stronger of the two inputs
+      const inputStrength = Math.max(
+        keys["ArrowDown"] ? 1 : 0,
+        mobileMovementY() < -0.2 ? -mobileMovementY() : 0
+      );
+      velocity = Math.max(-maxSpeed * inputStrength, velocity - acceleration);
     } else {
       // Apply deceleration
       velocity =
@@ -137,7 +175,17 @@ export function useShipControls(ship, setShipHeight) {
     const verticalAcceleration = SHIP.VERTICAL_ACCELERATION * speedMultiplier;
     const verticalDeceleration = SHIP.VERTICAL_DECELERATION * speedMultiplier;
 
-    if (keys["Space"] && ship().position.y < HEIGHT.MAX) {
+    // Combine keyboard and mobile inputs for vertical movement
+    const movingUp =
+      (keys["Space"] || mobileAltitudeChange() > 0) &&
+      ship().position.y < HEIGHT.MAX;
+    const movingDown =
+      (keys["ControlLeft"] ||
+        keys["ControlRight"] ||
+        mobileAltitudeChange() < 0) &&
+      ship().position.y > HEIGHT.MIN;
+
+    if (movingUp) {
       verticalVelocity = Math.min(
         verticalMaxSpeed,
         verticalVelocity + verticalAcceleration
@@ -146,10 +194,7 @@ export function useShipControls(ship, setShipHeight) {
       // Apply tilt based on movement direction
       targetP =
         velocity > 0 ? SHIP.TILT_AMOUNT : velocity < 0 ? -SHIP.TILT_AMOUNT : 0;
-    } else if (
-      (keys["ControlLeft"] || keys["ControlRight"]) &&
-      ship().position.y > HEIGHT.MIN
-    ) {
+    } else if (movingDown) {
       verticalVelocity = Math.max(
         -verticalMaxSpeed,
         verticalVelocity - verticalAcceleration
@@ -188,12 +233,30 @@ export function useShipControls(ship, setShipHeight) {
 
     let turnRate = currentTurnRate();
 
-    if (keys["ArrowLeft"]) {
-      // Left turn (positive direction)
-      turnRate = Math.min(maxTurnRate, turnRate + turnAcceleration);
-    } else if (keys["ArrowRight"]) {
-      // Right turn (negative direction)
-      turnRate = Math.max(-maxTurnRate, turnRate - turnAcceleration);
+    // Combine keyboard and mobile inputs for turning
+    const turningLeft = keys["ArrowLeft"] || mobileMovementX() < -0.2;
+    const turningRight = keys["ArrowRight"] || mobileMovementX() > 0.2;
+
+    if (turningLeft) {
+      // Use the stronger of the two inputs for left turn
+      const inputStrength = Math.max(
+        keys["ArrowLeft"] ? 1 : 0,
+        mobileMovementX() < -0.2 ? -mobileMovementX() : 0
+      );
+      turnRate = Math.min(
+        maxTurnRate * inputStrength,
+        turnRate + turnAcceleration
+      );
+    } else if (turningRight) {
+      // Use the stronger of the two inputs for right turn
+      const inputStrength = Math.max(
+        keys["ArrowRight"] ? 1 : 0,
+        mobileMovementX() > 0.2 ? mobileMovementX() : 0
+      );
+      turnRate = Math.max(
+        -maxTurnRate * inputStrength,
+        turnRate - turnAcceleration
+      );
     } else {
       // Decelerate turning when no keys pressed
       if (Math.abs(turnRate) < turnDeceleration) {
@@ -294,5 +357,10 @@ export function useShipControls(ship, setShipHeight) {
     updateOrientationReset,
     updateCamera,
     startOrientationReset,
+    // Mobile control functions
+    setMobileMovement,
+    increaseAltitude,
+    decreaseAltitude,
+    stopAltitudeChange,
   };
 }
