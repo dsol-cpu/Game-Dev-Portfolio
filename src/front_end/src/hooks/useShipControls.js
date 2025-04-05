@@ -25,6 +25,7 @@ export function useShipControls(ship, setShipHeight) {
   const [originalOrientation, setOriginalOrientation] = createSignal(
     new THREE.Quaternion()
   );
+  const [isFullscreen, setIsFullscreen] = createSignal(false); // New: track fullscreen state
 
   // Mobile controls state
   const [mobileMovementX, setMobileMovementX] = createSignal(0); // -1 to 1, left to right
@@ -33,11 +34,31 @@ export function useShipControls(ship, setShipHeight) {
 
   // Setup keyboard controls
   const setupControls = () => {
-    const handleKeyDown = (e) => {
-      const newKeys = { ...keysPressed() };
-      newKeys[e.code] = true;
-      setKeysPressed(newKeys);
+    // Add fullscreen detection
+    const updateFullscreenState = () => {
+      setIsFullscreen(
+        document.fullscreenElement ||
+          document.webkitFullscreenElement ||
+          document.mozFullScreenElement ||
+          document.msFullscreenElement
+      );
+    };
 
+    // Initial fullscreen check
+    updateFullscreenState();
+
+    // Listen for fullscreen changes
+    document.addEventListener("fullscreenchange", updateFullscreenState);
+    document.addEventListener("webkitfullscreenchange", updateFullscreenState);
+    document.addEventListener("mozfullscreenchange", updateFullscreenState);
+    document.addEventListener("MSFullscreenChange", updateFullscreenState);
+
+    const handleKeyDown = (e) => {
+      // In SolidJS, we need to create a new object for reactivity
+      // REMOVED FULLSCREEN CHECK FOR WASD - we now accept WASD in all modes
+      setKeysPressed((prev) => ({ ...prev, [e.code]: true }));
+
+      // Prevent default browser behavior for game controls
       if (
         [
           "ArrowUp",
@@ -47,24 +68,93 @@ export function useShipControls(ship, setShipHeight) {
           "Space",
           "ControlLeft",
           "ControlRight",
+          "KeyW",
+          "KeyA",
+          "KeyS",
+          "KeyD",
         ].includes(e.code)
       ) {
         e.preventDefault();
       }
+
+      // Critical: Handle modifier key combinations specifically
+      if (
+        (e.ctrlKey || e.metaKey) &&
+        ["KeyW", "KeyA", "KeyS", "KeyD"].includes(e.code)
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false; // Try to stop the event completely
+      }
     };
 
     const handleKeyUp = (e) => {
-      const newKeys = { ...keysPressed() };
-      newKeys[e.code] = false;
-      setKeysPressed(newKeys);
+      // In SolidJS, we need to create a new object for reactivity
+      setKeysPressed((prev) => ({ ...prev, [e.code]: false }));
+
+      // Also prevent default on key up for the same keys
+      if (
+        [
+          "ArrowUp",
+          "ArrowDown",
+          "ArrowLeft",
+          "ArrowRight",
+          "Space",
+          "ShiftLeft",
+          "ShiftRight",
+          "KeyW",
+          "KeyA",
+          "KeyS",
+          "KeyD",
+        ].includes(e.code)
+      ) {
+        e.preventDefault();
+      }
+
+      // Handle modifier key combinations on key up too
+      if (
+        (e.shiftKey || e.metaKey) &&
+        ["KeyW", "KeyA", "KeyS", "KeyD"].includes(e.code)
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("keyup", handleKeyUp);
+    // Add event listeners with capture phase to intercept events early
+    window.addEventListener("keydown", handleKeyDown, true);
+    window.addEventListener("keyup", handleKeyUp, true);
+
+    // Prevent browser shortcuts with capture
+    const preventBrowserShortcuts = (e) => {
+      // Prevent context menu
+      if (e.type === "contextmenu") {
+        e.preventDefault();
+        return;
+      }
+    };
+
+    document.addEventListener("keydown", preventBrowserShortcuts, true);
+    document.addEventListener("keyup", preventBrowserShortcuts, true);
+    document.addEventListener("contextmenu", preventBrowserShortcuts);
 
     onCleanup(() => {
-      window.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("keyup", handleKeyUp);
+      window.removeEventListener("keydown", handleKeyDown, true);
+      window.removeEventListener("keyup", handleKeyUp, true);
+      document.removeEventListener("keydown", preventBrowserShortcuts, true);
+      document.removeEventListener("keyup", preventBrowserShortcuts, true);
+      document.removeEventListener("contextmenu", preventBrowserShortcuts);
+      document.removeEventListener("fullscreenchange", updateFullscreenState);
+      document.removeEventListener(
+        "webkitfullscreenchange",
+        updateFullscreenState
+      );
+      document.removeEventListener(
+        "mozfullscreenchange",
+        updateFullscreenState
+      );
+      document.removeEventListener("MSFullscreenChange", updateFullscreenState);
     });
   };
 
@@ -139,20 +229,23 @@ export function useShipControls(ship, setShipHeight) {
     const deceleration = SHIP.DECELERATION * speedMultiplier;
 
     // Combine keyboard and mobile inputs for movement
-    const movingForward = keys["ArrowUp"] || mobileMovementY() > 0.2;
-    const movingBackward = keys["ArrowDown"] || mobileMovementY() < -0.2;
+    // Support both arrow keys and WASD (WASD now works in all modes)
+    const movingForward =
+      keys["ArrowUp"] || keys["KeyW"] || mobileMovementY() > 0.2;
+    const movingBackward =
+      keys["ArrowDown"] || keys["KeyS"] || mobileMovementY() < -0.2;
 
     if (movingForward) {
-      // Use the stronger of the two inputs
+      // Use the stronger of the inputs
       const inputStrength = Math.max(
-        keys["ArrowUp"] ? 1 : 0,
+        keys["ArrowUp"] || keys["KeyW"] ? 1 : 0,
         mobileMovementY() > 0.2 ? mobileMovementY() : 0
       );
       velocity = Math.min(maxSpeed * inputStrength, velocity + acceleration);
     } else if (movingBackward) {
-      // Use the stronger of the two inputs
+      // Use the stronger of the inputs
       const inputStrength = Math.max(
-        keys["ArrowDown"] ? 1 : 0,
+        keys["ArrowDown"] || keys["KeyS"] ? 1 : 0,
         mobileMovementY() < -0.2 ? -mobileMovementY() : 0
       );
       velocity = Math.max(-maxSpeed * inputStrength, velocity - acceleration);
@@ -180,9 +273,7 @@ export function useShipControls(ship, setShipHeight) {
       (keys["Space"] || mobileAltitudeChange() > 0) &&
       ship().position.y < HEIGHT.MAX;
     const movingDown =
-      (keys["ControlLeft"] ||
-        keys["ControlRight"] ||
-        mobileAltitudeChange() < 0) &&
+      (keys["ShiftLeft"] || keys["ShiftRight"] || mobileAltitudeChange() < 0) &&
       ship().position.y > HEIGHT.MIN;
 
     if (movingUp) {
@@ -234,13 +325,15 @@ export function useShipControls(ship, setShipHeight) {
     let turnRate = currentTurnRate();
 
     // Combine keyboard and mobile inputs for turning
-    const turningLeft = keys["ArrowLeft"] || mobileMovementX() < -0.2;
-    const turningRight = keys["ArrowRight"] || mobileMovementX() > 0.2;
+    const turningLeft =
+      keys["ArrowLeft"] || keys["KeyA"] || mobileMovementX() < -0.2;
+    const turningRight =
+      keys["ArrowRight"] || keys["KeyD"] || mobileMovementX() > 0.2;
 
     if (turningLeft) {
-      // Use the stronger of the two inputs for left turn
+      // Use the stronger of the inputs for left turn
       const inputStrength = Math.max(
-        keys["ArrowLeft"] ? 1 : 0,
+        keys["ArrowLeft"] || keys["KeyA"] ? 1 : 0,
         mobileMovementX() < -0.2 ? -mobileMovementX() : 0
       );
       turnRate = Math.min(
@@ -248,9 +341,9 @@ export function useShipControls(ship, setShipHeight) {
         turnRate + turnAcceleration
       );
     } else if (turningRight) {
-      // Use the stronger of the two inputs for right turn
+      // Use the stronger of the inputs for right turn
       const inputStrength = Math.max(
-        keys["ArrowRight"] ? 1 : 0,
+        keys["ArrowRight"] || keys["KeyD"] ? 1 : 0,
         mobileMovementX() > 0.2 ? mobileMovementX() : 0
       );
       turnRate = Math.max(
@@ -352,6 +445,7 @@ export function useShipControls(ship, setShipHeight) {
     setKeysPressed,
     shipYawRotation,
     resetOrientationInProgress,
+    isFullscreen, // Export the fullscreen state
     setupControls,
     updateShipControls,
     updateOrientationReset,

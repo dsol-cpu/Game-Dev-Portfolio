@@ -15,22 +15,22 @@ export const NAVIGATION = {
 export const ISLAND_DATA = [
   {
     name: "Home Island",
-    position: new THREE.Vector3(0, 0, 0),
+    position: new THREE.Vector3(10, -5, 0),
     section: "home",
   },
   {
     name: "Experience Island",
-    position: new THREE.Vector3(15, 2, 15),
+    position: new THREE.Vector3(60, 20, 20),
     section: "experience",
   },
   {
     name: "Projects Island",
-    position: new THREE.Vector3(-15, 0, -15),
+    position: new THREE.Vector3(-20, 5, -50),
     section: "projects",
   },
   {
     name: "Resume Island",
-    position: new THREE.Vector3(-10, 3, 20),
+    position: new THREE.Vector3(-10, 5, 40),
     section: "resume",
   },
 ];

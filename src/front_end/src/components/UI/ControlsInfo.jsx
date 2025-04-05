@@ -1,8 +1,18 @@
-import { createSignal, Show, onMount } from "solid-js";
+import { createSignal, Show, onMount, createEffect } from "solid-js";
 
 const ControlsInfo = () => {
-  const [showInfo, setShowInfo] = createSignal(false);
   const [isMobile, setIsMobile] = createSignal(false);
+  const [isVisible, setIsVisible] = createSignal(true);
+  const [isCollapsed, setIsCollapsed] = createSignal(false);
+  const [isHovering, setIsHovering] = createSignal(false);
+
+  // Create a derived signal for panel opacity
+  const [panelOpacity, setPanelOpacity] = createSignal("0.4");
+
+  // Update opacity when hover state changes
+  createEffect(() => {
+    setPanelOpacity(isHovering() ? "1" : "0.4");
+  });
 
   // Check if device is mobile
   onMount(() => {
@@ -17,85 +27,217 @@ const ControlsInfo = () => {
     checkMobile();
     window.addEventListener("resize", checkMobile);
 
+    // Global keyboard shortcut for toggling collapsed state
+    const handleKeyDown = (e) => {
+      if (e.key === "h" || e.key === "H") {
+        setIsCollapsed(!isCollapsed());
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+
     return () => {
       window.removeEventListener("resize", checkMobile);
+      window.removeEventListener("keydown", handleKeyDown);
     };
   });
 
+  // Helper to render control items
+  const ControlItem = (props) => (
+    <div class="flex items-center mb-2 text-sm">
+      <div class="flex items-center justify-center bg-blue-600 rounded-lg p-1 mr-2 w-8 h-8">
+        {props.icon}
+      </div>
+      <span>{props.text}</span>
+    </div>
+  );
+
+  // Event handlers for mouse events
+  const handleMouseEnter = () => setIsHovering(true);
+  const handleMouseLeave = () => setIsHovering(false);
+
+  // Toggle collapsed state
+  const toggleCollapsed = () => setIsCollapsed(!isCollapsed());
+
   return (
-    <div class="fixed top-4 right-4 z-50">
-      <button
-        class="bg-black bg-opacity-50 text-white rounded-full p-2 flex items-center justify-center"
-        onClick={() => setShowInfo(!showInfo())}
+    <Show when={isVisible()}>
+      <div
+        class="absolute top-4 left-4 text-white p-3 rounded-lg z-10 animate-fadeIn"
+        style={{
+          "background-color": "rgba(0, 0, 0, 0.65)",
+          "backdrop-filter": "blur(10px)",
+          "-webkit-backdrop-filter": "blur(10px)",
+          "box-shadow":
+            "0 4px 6px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.08)",
+          border: "1px solid rgba(255, 255, 255, 0.1)",
+          opacity: panelOpacity(),
+          transition: "opacity 0.3s ease-in-out, width 0.3s ease-in-out",
+          width: isCollapsed() ? "auto" : "16rem", // 16rem = w-64
+        }}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
       >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          class="h-6 w-6"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-          />
-        </svg>
-      </button>
+        <div class="flex justify-between items-center mb-3">
+          <h3 class="text-lg font-bold">Game Controls</h3>
+          <button
+            onClick={toggleCollapsed}
+            class="text-gray-300 hover:text-white"
+            aria-label={isCollapsed() ? "Expand controls" : "Collapse controls"}
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              class="h-4 w-4"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+            >
+              <path
+                fill-rule="evenodd"
+                d={
+                  isCollapsed()
+                    ? "M4 8a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1zm0 4a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1z" // Expand icon
+                    : "M3 7a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 6a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" // Collapse icon
+                }
+                clip-rule="evenodd"
+              />
+            </svg>
+          </button>
+        </div>
 
-      <Show when={showInfo()}>
-        <div class="absolute top-full right-0 mt-2 p-4 bg-black bg-opacity-70 text-white rounded-lg w-64 shadow-lg">
-          <h3 class="text-xl font-bold mb-2">Controls</h3>
-
+        <Show when={!isCollapsed()}>
           <Show
             when={isMobile()}
             fallback={
               <div>
-                <p class="mb-2">
-                  <span class="font-bold">Arrow Keys</span> - Move ship
-                  forward/backward and turn
-                </p>
-                <p class="mb-2">
-                  <span class="font-bold">Space</span> - Increase altitude
-                </p>
-                <p class="mb-2">
-                  <span class="font-bold">Ctrl</span> - Decrease altitude
-                </p>
-                <p class="mb-2">
-                  <span class="font-bold">Spacebar (double tap)</span> - Reset
-                  orientation
-                </p>
+                <ControlItem
+                  icon={
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      class="h-4 w-4"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path
+                        fill-rule="evenodd"
+                        d="M5 10a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1z"
+                        clip-rule="evenodd"
+                      />
+                      <path
+                        fill-rule="evenodd"
+                        d="M12 5a1 1 0 011 1v8a1 1 0 11-2 0V6a1 1 0 011-1z"
+                        clip-rule="evenodd"
+                      />
+                    </svg>
+                  }
+                  text="WASD/Arrow Keys - Move ship and turn"
+                />
+                <ControlItem
+                  icon={
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      class="h-4 w-4"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path
+                        fill-rule="evenodd"
+                        d="M10 5a1 1 0 011 1v8a1 1 0 11-2 0V6a1 1 0 011-1z"
+                        clip-rule="evenodd"
+                      />
+                    </svg>
+                  }
+                  text="Space - Increase altitude"
+                />
+                <ControlItem
+                  icon={
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      class="h-4 w-4"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                    >
+                      <path
+                        fill-rule="evenodd"
+                        d="M5 10a1 1 0 011-1h8a1 1 0 110 2H6a1 1 0 01-1-1z"
+                        clip-rule="evenodd"
+                      />
+                    </svg>
+                  }
+                  text="Shift - Decrease altitude"
+                />
               </div>
             }
           >
             <div>
-              <p class="mb-2">
-                <span class="font-bold">Left Joystick</span> - Move ship and
-                turn
-              </p>
-              <p class="mb-2">
-                <span class="font-bold">Blue Button</span> - Increase altitude
-              </p>
-              <p class="mb-2">
-                <span class="font-bold">Red Button</span> - Decrease altitude
-              </p>
-              <p class="mb-2">
-                <span class="font-bold">Double tap joystick</span> - Reset
-                orientation
-              </p>
+              <ControlItem
+                icon={
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="h-4 w-4"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                  >
+                    <path
+                      fill-rule="evenodd"
+                      d="M10 18a8 8 0 100-16 8 8 0 000 16z"
+                      clip-rule="evenodd"
+                    />
+                  </svg>
+                }
+                text="Left Joystick - Move ship and turn"
+              />
+              <ControlItem
+                icon={
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="h-4 w-4"
+                    fill="blue"
+                    viewBox="0 0 20 20"
+                  >
+                    <circle cx="10" cy="10" r="8" />
+                  </svg>
+                }
+                text="Blue Button - Increase altitude"
+              />
+              <ControlItem
+                icon={
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="h-4 w-4"
+                    fill="red"
+                    viewBox="0 0 20 20"
+                  >
+                    <circle cx="10" cy="10" r="8" />
+                  </svg>
+                }
+                text="Red Button - Decrease altitude"
+              />
+              <ControlItem
+                icon={
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="h-4 w-4"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                  >
+                    <path
+                      fill-rule="evenodd"
+                      d="M10 18a8 8 0 100-16 8 8 0 000 16z"
+                      clip-rule="evenodd"
+                    />
+                  </svg>
+                }
+                text="Double tap - Reset orientation"
+              />
             </div>
           </Show>
+        </Show>
 
-          <button
-            class="mt-3 px-4 py-1 bg-blue-600 text-white rounded"
-            onClick={() => setShowInfo(false)}
-          >
-            Close
-          </button>
+        {/* Always visible hotkey hint regardless of collapsed state */}
+        <div class="mt-3 pt-2 border-t border-gray-600 text-xs text-gray-400">
+          Press H to {isCollapsed() ? "expand" : "collapse"} controls
         </div>
-      </Show>
-    </div>
+      </div>
+    </Show>
   );
 };
 

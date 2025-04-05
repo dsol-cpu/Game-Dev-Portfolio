@@ -24,6 +24,11 @@ const MobileControls = (props) => {
     checkMobile();
     window.addEventListener("resize", checkMobile);
 
+    // Handle passive event listener setting for the entire document's touch events
+    // This is a global approach that affects all touch events
+    document.addEventListener("touchstart", function () {}, { passive: false });
+    document.addEventListener("touchmove", function () {}, { passive: false });
+
     onCleanup(() => {
       window.removeEventListener("resize", checkMobile);
     });
@@ -31,7 +36,9 @@ const MobileControls = (props) => {
 
   // Joystick controls
   const handleJoystickStart = (e) => {
-    e.preventDefault();
+    // Don't call preventDefault unconditionally - only when needed
+    if (e.cancelable) e.preventDefault();
+
     const touch = e.touches[0];
     const rect = e.currentTarget.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2;
@@ -65,7 +72,7 @@ const MobileControls = (props) => {
   };
 
   const handleJoystickMove = (e) => {
-    e.preventDefault();
+    if (e.cancelable) e.preventDefault();
     if (!joystickActive()) return;
 
     const touch = e.touches[0];
@@ -101,7 +108,7 @@ const MobileControls = (props) => {
   };
 
   const handleJoystickEnd = (e) => {
-    e.preventDefault();
+    if (e.cancelable) e.preventDefault();
     setJoystickActive(false);
     setJoystickPosition({ x: 0, y: 0 });
 
@@ -113,21 +120,21 @@ const MobileControls = (props) => {
 
   // Altitude button handlers
   const handleAltitudeUpStart = (e) => {
-    e.preventDefault();
+    if (e.cancelable) e.preventDefault();
     if (props.onAltitudeUp) {
       props.onAltitudeUp();
     }
   };
 
   const handleAltitudeDownStart = (e) => {
-    e.preventDefault();
+    if (e.cancelable) e.preventDefault();
     if (props.onAltitudeDown) {
       props.onAltitudeDown();
     }
   };
 
   const handleAltitudeEnd = (e) => {
-    e.preventDefault();
+    if (e.cancelable) e.preventDefault();
     if (props.onAltitudeStop) {
       props.onAltitudeStop();
     }
@@ -138,7 +145,7 @@ const MobileControls = (props) => {
       <div class="fixed bottom-0 left-0 right-0 p-4 flex justify-between z-50 pointer-events-none">
         {/* Left side - Joystick */}
         <div
-          class="w-32 h-32 bg-black bg-opacity-30 rounded-full flex items-center justify-center pointer-events-auto"
+          class="w-32 h-32 bg-black bg-opacity-30 rounded-full flex items-center justify-center pointer-events-auto touch-manipulation"
           onTouchStart={handleJoystickStart}
           onTouchMove={handleJoystickMove}
           onTouchEnd={handleJoystickEnd}
@@ -158,7 +165,7 @@ const MobileControls = (props) => {
         {/* Right side - Altitude buttons */}
         <div class="flex flex-col gap-4 pointer-events-auto">
           <button
-            class="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center text-white shadow-lg"
+            class="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center text-white shadow-lg touch-manipulation"
             onTouchStart={handleAltitudeUpStart}
             onTouchEnd={handleAltitudeEnd}
             onTouchCancel={handleAltitudeEnd}
@@ -166,7 +173,7 @@ const MobileControls = (props) => {
             UP
           </button>
           <button
-            class="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center text-white shadow-lg"
+            class="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center text-white shadow-lg touch-manipulation"
             onTouchStart={handleAltitudeDownStart}
             onTouchEnd={handleAltitudeEnd}
             onTouchCancel={handleAltitudeEnd}

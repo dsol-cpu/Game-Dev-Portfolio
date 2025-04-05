@@ -14,7 +14,7 @@ export default function SpeedControls() {
   };
 
   return (
-    <div class="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/30 backdrop-blur-sm rounded-lg border border-cyan-500/30 shadow-lg text-white z-10 px-4 py-2">
+    <div class="absolute bottom-4 right-4 transform  bg-black/30 backdrop-blur-sm rounded-lg border border-cyan-500/30 shadow-lg text-white z-10 px-4 py-2">
       <div class="flex items-center gap-3">
         <svg
           class="h-4 w-4 text-cyan-400"
