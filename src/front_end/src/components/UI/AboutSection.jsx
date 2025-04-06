@@ -1,7 +1,7 @@
 import { createSignal, Show } from "solid-js";
 import ResumeModal from "./ResumeModal";
 import { createThemeManager } from "../../stores/theme";
-
+import me from "../../assets/me.png";
 // Icon components defined inline to remove dependency on separate Icons.jsx file
 const DocumentIcon = (props) => (
   <svg
@@ -77,11 +77,14 @@ const AboutSection = () => {
         <div class="relative group">
           <div class="w-48 h-48 rounded-full overflow-hidden border-4 transition-all duration-300 group-hover:border-blue-400 border-blue-200 flex-shrink-0 shadow-lg">
             <img
-              src="src/assets/images/me.png"
-              alt="David Solinsky - Game Developer"
+              src={me}
+              alt="Game Developer"
               class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
               onError={(e) => {
-                e.target.src = "/assets/images/fallback-profile.svg";
+                // Use a simple colored background instead of an image fallback
+                e.target.onerror = null; // Prevent infinite error loop
+                e.target.style.backgroundColor = "#3b82f6"; // Blue background
+                e.target.style.border = "4px solid #93c5fd"; // Light blue border
               }}
               loading="lazy"
             />
