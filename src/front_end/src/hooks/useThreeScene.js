@@ -20,9 +20,11 @@ export function useThreeScene(containerRef) {
 
   // Initialize scene
   const initScene = () => {
-    if (!containerRef) return;
+    // Get container DOM element properly
+    const container = containerRef();
+    if (!container) return;
 
-    const sceneData = setupScene(containerRef);
+    const sceneData = setupScene(container);
     setScene(sceneData.scene);
     setCamera(sceneData.camera);
     setRenderer(sceneData.renderer);
@@ -58,51 +60,61 @@ export function useThreeScene(containerRef) {
 
     // Handle window resize
     const handleResize = () => {
-      if (!containerRef || !sceneData.camera || !sceneData.renderer) return;
-      sceneData.camera.aspect =
-        containerRef.clientWidth / containerRef.clientHeight;
+      if (!container || !sceneData.camera || !sceneData.renderer) return;
+
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+
+      sceneData.camera.aspect = width / height;
       sceneData.camera.updateProjectionMatrix();
-      sceneData.renderer.setSize(
-        containerRef.clientWidth,
-        containerRef.clientHeight
-      );
+      sceneData.renderer.setSize(width, height);
     };
 
     window.addEventListener("resize", handleResize);
 
-    return () => {
+    // Animation cleanup function
+    const cleanup = () => {
       window.removeEventListener("resize", handleResize);
+
       if (animationId()) {
         cancelAnimationFrame(animationId());
+        setAnimationId(null);
       }
+
       if (sceneData.renderer) {
         sceneData.renderer.dispose();
-        if (containerRef.contains(sceneData.renderer.domElement)) {
-          containerRef.removeChild(sceneData.renderer.domElement);
+        if (container.contains(sceneData.renderer.domElement)) {
+          container.removeChild(sceneData.renderer.domElement);
         }
       }
     };
+
+    return cleanup;
   };
 
   // Animation frame function (customizable with passed functions)
-  const startAnimation = (updateCallbacks) => {
+  const startAnimation = (updateCallbacks = []) => {
     const animate = () => {
       const currentId = requestAnimationFrame(animate);
       setAnimationId(currentId);
 
       // Execute all update callbacks
-      if (updateCallbacks && Array.isArray(updateCallbacks)) {
-        for (const update of updateCallbacks) {
+      if (Array.isArray(updateCallbacks)) {
+        updateCallbacks.forEach((update) => {
           if (typeof update === "function") {
             update();
           }
-        }
+        });
       }
 
       // Update scene animations and render
-      if (scene() && camera() && renderer()) {
+      const currentScene = scene();
+      const currentCamera = camera();
+      const currentRenderer = renderer();
+
+      if (currentScene && currentCamera && currentRenderer) {
         animateScene(clouds(), islands(), ship());
-        renderer().render(scene(), camera());
+        currentRenderer.render(currentScene, currentCamera);
       }
     };
 
@@ -110,13 +122,13 @@ export function useThreeScene(containerRef) {
   };
 
   return {
-    scene,
-    camera,
-    renderer,
-    clouds,
-    islands,
-    ship,
-    shipHeight,
+    scene: () => scene(),
+    camera: () => camera(),
+    renderer: () => renderer(),
+    clouds: () => clouds(),
+    islands: () => islands(),
+    ship: () => ship(),
+    shipHeight: () => shipHeight(),
     setShipHeight,
     initScene,
     startAnimation,

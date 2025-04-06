@@ -45,7 +45,10 @@ const ControlsInfo = () => {
   // Helper to render control items
   const ControlItem = (props) => (
     <div class="flex items-center mb-2 text-sm">
-      <div class="flex items-center justify-center bg-blue-600 rounded-lg p-1 mr-2 w-8 h-8">
+      <div
+        class="flex items-center justify-center bg-blue-600 rounded-lg p-1 mr-2 w-8 h-8"
+        aria-hidden="true"
+      >
         {props.icon}
       </div>
       <span>{props.text}</span>
@@ -59,10 +62,18 @@ const ControlsInfo = () => {
   // Toggle collapsed state
   const toggleCollapsed = () => setIsCollapsed(!isCollapsed());
 
+  // Handle keyboard interactions for the toggle button
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      toggleCollapsed();
+    }
+  };
+
   return (
     <Show when={isVisible()}>
       <div
-        class="absolute top-4 left-4 text-white p-3 rounded-lg z-10 animate-fadeIn"
+        class="absolute left-4 top-1/2 transform -translate-y-1/2 text-white p-3 rounded-lg z-10 animate-fadeIn"
         style={{
           "background-color": "rgba(0, 0, 0, 0.65)",
           "backdrop-filter": "blur(10px)",
@@ -81,14 +92,17 @@ const ControlsInfo = () => {
           <h3 class="text-lg font-bold">Game Controls</h3>
           <button
             onClick={toggleCollapsed}
-            class="text-gray-300 hover:text-white"
+            onKeyDown={handleKeyDown}
+            class="text-gray-300 hover:text-white p-2 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
             aria-label={isCollapsed() ? "Expand controls" : "Collapse controls"}
+            aria-expanded={!isCollapsed()}
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
               class="h-4 w-4"
               viewBox="0 0 20 20"
               fill="currentColor"
+              aria-hidden="true"
             >
               <path
                 fill-rule="evenodd"

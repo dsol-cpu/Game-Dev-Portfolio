@@ -1,5 +1,5 @@
 import { createEffect, onMount, createSignal, onCleanup } from "solid-js";
-import { navigationStore } from "../stores/navigationStore";
+import { navigationStore } from "../stores/navigation";
 import { useThreeScene } from "../hooks/useThreeScene";
 import { useShipControls } from "../hooks/useShipControls";
 import { useNavigation } from "../hooks/useNavigation";
@@ -7,31 +7,62 @@ import AltitudePanel from "./UI/AltitudePanel";
 import SpeedControls from "./UI/SpeedControls";
 import MobileControls from "./UI/MobileControls";
 import ControlsInfo from "./UI/ControlsInfo";
+import Compass from "./UI/Compass";
 
-const ThreeScene = () => {
+const ThreeScene = (props) => {
   let containerRef;
-  // Add resolution state to track screen size changes
   const [resolution, setResolution] = createSignal({ width: 0, height: 0 });
-  // Add state for tracking if game is active
   const [isGameActive, setIsGameActive] = createSignal(false);
   const [isFullscreen, setIsFullscreen] = createSignal(
     document.fullscreenElement !== null
   );
+  const [shipRotation, setShipRotation] = createSignal(0);
+  // Create a separate signal for ship height to ensure it's always a number
+  const [shipHeight, setShipHeight] = createSignal(0);
+
   const checkFullscreen = () => setIsFullscreen(!!document.fullscreenElement);
 
-  // Initialize hooks
   const threeScene = useThreeScene(() => containerRef);
+
+  // Update our local shipHeight signal whenever threeScene's shipHeight changes
+  createEffect(() => {
+    if (threeScene.shipHeight !== undefined && threeScene.shipHeight !== null) {
+      // Ensure it's a number
+      const height =
+        typeof threeScene.shipHeight === "function"
+          ? threeScene.shipHeight()
+          : Number(threeScene.shipHeight) || 0;
+      setShipHeight(height);
+    }
+  });
+
   const shipControls = useShipControls(
-    threeScene.ship,
-    threeScene.setShipHeight
+    () => threeScene.ship(),
+    (height) => {
+      // When shipHeight is updated through shipControls, update our local signal too
+      if (typeof height === "number") {
+        setShipHeight(height);
+      }
+      if (threeScene.setShipHeight) {
+        threeScene.setShipHeight(height);
+      }
+    }
   );
+
   const navigation = useNavigation(
-    threeScene.ship,
-    threeScene.setShipHeight,
+    () => threeScene.ship(),
+    (height) => {
+      // When shipHeight is updated through navigation, update our local signal too
+      if (typeof height === "number") {
+        setShipHeight(height);
+      }
+      if (threeScene.setShipHeight) {
+        threeScene.setShipHeight(height);
+      }
+    },
     shipControls
   );
 
-  // Connect with the navigation store
   const {
     targetIsland,
     setTargetIsland,
@@ -40,7 +71,6 @@ const ThreeScene = () => {
     destinationSection,
   } = navigationStore;
 
-  // Add fullscreen toggle function
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
       document.documentElement.requestFullscreen().catch((err) => {
@@ -51,25 +81,18 @@ const ThreeScene = () => {
     }
   };
 
-  // Additional browser shortcut prevention
   const setupBrowserShortcutPrevention = () => {
-    // This function adds additional protections to prevent browser shortcuts
-
-    // Add a beforeunload handler to prevent accidental tab closure
     const beforeUnloadHandler = (e) => {
       if (isGameActive()) {
-        // Only prevent when game is active
         e.preventDefault();
         e.returnValue = "";
         return "";
       }
     };
 
-    // More aggressive key handler that runs at the document level
     const aggressiveKeyHandler = (e) => {
       if (!isGameActive()) return;
 
-      // Detect Ctrl+W, Ctrl+S combinations
       if (
         (e.ctrlKey || e.metaKey) &&
         ["KeyW", "KeyS", "KeyA", "KeyD"].includes(e.code)
@@ -92,43 +115,38 @@ const ThreeScene = () => {
     };
   };
 
-  // Effect to handle navigation requests
   createEffect(() => {
-    const target = targetIsland();
     if (
-      target !== null &&
+      targetIsland() !== null &&
       threeScene.ship() &&
+      threeScene.islands() &&
       threeScene.islands().length > 0
     ) {
-      navigation.startNavigation(target);
+      navigation.startNavigation(targetIsland());
     }
   });
 
-  // Effect to handle resize events
   createEffect(() => {
     const handleResize = () => {
-      if (threeScene.renderer() && threeScene.camera()) {
-        // Update renderer size
+      const renderer = threeScene.renderer();
+      const camera = threeScene.camera();
+
+      if (renderer && camera) {
         const container = containerRef;
+        if (!container) return;
+
         const width = container.clientWidth;
         const height = container.clientHeight;
-
-        // Update resolution state to trigger rerender
         setResolution({ width, height });
-
-        threeScene.renderer().setSize(width, height);
-
-        // Update camera aspect ratio
-        threeScene.camera().aspect = width / height;
-        threeScene.camera().updateProjectionMatrix();
+        renderer.setSize(width, height);
+        camera.aspect = width / height;
+        camera.updateProjectionMatrix();
       }
     };
 
     window.addEventListener("resize", handleResize);
-    // Also listen for sidebar toggle events which might change available space
     window.addEventListener("sidebarToggle", handleResize);
 
-    // Initial resize
     handleResize();
 
     return () => {
@@ -137,7 +155,6 @@ const ThreeScene = () => {
     };
   });
 
-  // Mobile controls handlers
   const handleMobileMove = (x, y) => {
     if (shipControls && !navigation.isNavigating()) {
       shipControls.setMobileMovement(x, y);
@@ -168,80 +185,92 @@ const ThreeScene = () => {
     }
   };
 
-  // Update function for animation loop
   const update = () => {
-    // Check if we're currently navigating
-    if (navigation.isNavigating()) {
+    if (!isGameActive()) return;
+
+    if (
+      navigation.isNavigating &&
+      typeof navigation.isNavigating === "function" &&
+      navigation.isNavigating()
+    ) {
       navigation.updateNavigation();
-    }
-    // Check if we're resetting orientation
-    else if (shipControls.resetOrientationInProgress()) {
+    } else if (
+      shipControls.resetOrientationInProgress &&
+      typeof shipControls.resetOrientationInProgress === "function" &&
+      shipControls.resetOrientationInProgress()
+    ) {
       shipControls.updateOrientationReset();
-    }
-    // Otherwise process normal controls
-    else {
+    } else {
       shipControls.updateShipControls();
     }
 
-    // Update camera to follow ship
-    if (threeScene.camera() && threeScene.ship()) {
-      shipControls.updateCamera(threeScene.camera());
+    const camera = threeScene.camera();
+    const ship = threeScene.ship();
+
+    if (camera && ship) {
+      shipControls.updateCamera(camera);
+      setShipRotation(ship.rotation.y);
     }
   };
 
   onMount(() => {
-    // Initialize scene and set up controls
+    // First initialize the scene
     const cleanup = threeScene.initScene();
-    shipControls.setupControls();
 
-    // Set up additional browser shortcut prevention
+    // After scene initialization, setup controls
+    setTimeout(() => {
+      if (shipControls && shipControls.setupControls) {
+        shipControls.setupControls();
+      }
+
+      // Start game and animation after controls are setup
+      setIsGameActive(true);
+
+      if (threeScene.startAnimation) {
+        threeScene.startAnimation([update]);
+      }
+    }, 100);
+
     const cleanupShortcuts = setupBrowserShortcutPrevention();
 
-    // Mark game as active
-    setIsGameActive(true);
-
-    // Start animation loop with our update function
-    threeScene.startAnimation([update]);
-
-    // Initial sizing
-    if (threeScene.renderer() && containerRef) {
+    const renderer = threeScene.renderer();
+    if (renderer && containerRef) {
       const width = containerRef.clientWidth;
       const height = containerRef.clientHeight;
-
-      // Set initial resolution
       setResolution({ width, height });
 
-      threeScene.renderer().setSize(width, height);
-      if (threeScene.camera()) {
-        threeScene.camera().aspect = width / height;
-        threeScene.camera().updateProjectionMatrix();
+      renderer.setSize(width, height);
+      const camera = threeScene.camera();
+      if (camera) {
+        camera.aspect = width / height;
+        camera.updateProjectionMatrix();
       }
     }
 
     document.addEventListener("fullscreenchange", checkFullscreen);
-    onCleanup(() =>
-      document.removeEventListener("fullscreenchange", checkFullscreen)
-    );
 
-    return () => {
-      cleanup();
-      cleanupShortcuts();
+    onCleanup(() => {
+      document.removeEventListener("fullscreenchange", checkFullscreen);
+      if (cleanup && typeof cleanup === "function") cleanup();
+      if (cleanupShortcuts && typeof cleanupShortcuts === "function")
+        cleanupShortcuts();
       setIsGameActive(false);
-    };
+    });
   });
 
   return (
     <div class="relative h-screen overflow-hidden">
-      {/* Use resolution in JSX to make component reactive to resolution changes */}
       <div
         ref={containerRef}
         class="w-full h-full absolute inset-0"
         data-width={resolution().width}
         data-height={resolution().height}
       />
-      <AltitudePanel shipHeight={threeScene.shipHeight()} />
-      <SpeedControls />
-      <ControlsInfo />
+      {/* Pass our shipHeight signal instead of threeScene.shipHeight */}
+      <AltitudePanel shipHeight={shipHeight()} />
+      {!props.isScrollView && <SpeedControls />}
+      {!props.isScrollView && <ControlsInfo />}
+      <Compass rotation={shipRotation()} />
       <MobileControls
         onMove={handleMobileMove}
         onAltitudeUp={handleAltitudeUp}
@@ -274,12 +303,6 @@ const ThreeScene = () => {
           <span>Fullscreen</span>
         </div>
       </button>
-
-      {/* <Show when={!isFullscreen()}>
-        <p class="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-50 text-white bg-black/50 px-6 py-3 rounded-lg text-sm shadow-lg backdrop-blur-md transition-opacity duration-500 cursor-pointer hover:opacity-0">
-          Scroll down for Single Page Portfolio below.
-        </p>
-      </Show> */}
     </div>
   );
 };

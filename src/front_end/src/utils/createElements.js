@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { colors } from "../constants/constants";
-import { navigationStore } from "../stores/navigationStore";
+import { navigationStore } from "../stores/navigation";
 
 export const createElements = (scene) => {
   const clouds = [];
