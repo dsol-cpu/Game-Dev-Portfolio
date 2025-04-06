@@ -1,1 +1,2 @@
-# My game development portfolio
+# My game development portfolio website!
+- Tools: SolidJS, ThreeJS, Actix
