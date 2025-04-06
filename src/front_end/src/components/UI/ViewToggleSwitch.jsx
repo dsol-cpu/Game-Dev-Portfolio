@@ -21,7 +21,7 @@ export default function ViewToggleSwitch({ isScrollView, onToggle }) {
 
   return (
     <div
-      class={`fixed top-4 right-4 z-50 flex items-center justify-center gap-3 rounded-lg p-3 shadow-lg backdrop-blur-sm transition-colors ${
+      class={`fixed bottom-4 right-4 z-50 flex items-center justify-center gap-3 rounded-lg p-3 shadow-lg backdrop-blur-sm transition-colors ${
         getEffectiveTheme() === "light" ? "bg-white/90" : "bg-slate-800/90"
       }`}
     >
