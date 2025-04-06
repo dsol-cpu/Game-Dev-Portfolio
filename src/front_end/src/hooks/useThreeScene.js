@@ -1,4 +1,4 @@
-import { createSignal, onMount, onCleanup } from "solid-js";
+import { createSignal } from "solid-js";
 import * as THREE from "three";
 import { setupScene } from "../utils/setupScene";
 import { createElements } from "../utils/createElements";
@@ -8,7 +8,7 @@ import { ISLAND_DATA } from "../constants/world";
 /**
  * Core hook for managing the Three.js scene
  */
-export function useThreeScene(containerRef) {
+export function useThreeScene(containerRefFn) {
   const [scene, setScene] = createSignal(null);
   const [camera, setCamera] = createSignal(null);
   const [renderer, setRenderer] = createSignal(null);
@@ -20,80 +20,101 @@ export function useThreeScene(containerRef) {
 
   // Initialize scene
   const initScene = () => {
-    // Get container DOM element properly
-    const container = containerRef();
-    if (!container) return;
+    // Cancel any existing animation before reinitializing
+    cancelAnimation();
 
-    const sceneData = setupScene(container);
-    setScene(sceneData.scene);
-    setCamera(sceneData.camera);
-    setRenderer(sceneData.renderer);
-
-    const elements = createElements(sceneData.scene);
-    setClouds(elements.clouds);
-    setIslands(elements.islands);
-    setShip(elements.ship);
-
-    // Position and label islands
-    if (elements.islands.length >= ISLAND_DATA.length) {
-      elements.islands.forEach((island, i) => {
-        if (i < ISLAND_DATA.length) {
-          island.position.copy(ISLAND_DATA[i].position);
-
-          // Add visual marker for island
-          const markerGeometry = new THREE.ConeGeometry(0.5, 2, 8);
-          const markerMaterial = new THREE.MeshStandardMaterial({
-            color: 0xffff00,
-            emissive: 0x444400,
-          });
-          const marker = new THREE.Mesh(markerGeometry, markerMaterial);
-          marker.position.y = 3;
-          island.add(marker);
-        }
-      });
+    // Get container DOM element
+    const container = containerRefFn();
+    if (!container) {
+      console.warn("Container reference is not available for Three.js scene");
+      return () => {};
     }
 
-    // Set initial height
-    if (elements.ship) {
-      setShipHeight(elements.ship.position.y);
+    try {
+      const sceneData = setupScene(container);
+
+      // Store scene components
+      setScene(sceneData.scene);
+      setCamera(sceneData.camera);
+      setRenderer(sceneData.renderer);
+
+      // Create scene elements
+      const elements = createElements(sceneData.scene);
+      setClouds(elements.clouds || []);
+      setIslands(elements.islands || []);
+      setShip(elements.ship || null);
+
+      // Position and label islands
+      const islandObjects = elements.islands || [];
+      if (islandObjects.length >= ISLAND_DATA.length) {
+        islandObjects.forEach((island, i) => {
+          if (i < ISLAND_DATA.length && island) {
+            island.position.copy(ISLAND_DATA[i].position);
+
+            // Add visual marker for island
+            const markerGeometry = new THREE.ConeGeometry(0.5, 2, 8);
+            const markerMaterial = new THREE.MeshStandardMaterial({
+              color: 0xffff00,
+              emissive: 0x444400,
+            });
+            const marker = new THREE.Mesh(markerGeometry, markerMaterial);
+            marker.position.y = 3;
+            island.add(marker);
+          }
+        });
+      }
+
+      // Set initial height
+      if (elements.ship) {
+        setShipHeight(elements.ship.position.y);
+      }
+
+      return cleanup;
+    } catch (error) {
+      console.error("Error initializing Three.js scene:", error);
+      return cleanup;
+    }
+  };
+
+  // Cleanup function for scene resources
+  const cleanup = () => {
+    cancelAnimation();
+
+    // Dispose renderer and remove from DOM if exists
+    const currentRenderer = renderer();
+    const container = containerRefFn();
+
+    if (currentRenderer) {
+      currentRenderer.dispose();
+
+      if (container && container.contains(currentRenderer.domElement)) {
+        container.removeChild(currentRenderer.domElement);
+      }
     }
 
-    // Handle window resize
-    const handleResize = () => {
-      if (!container || !sceneData.camera || !sceneData.renderer) return;
+    // Clear all signals
+    setScene(null);
+    setCamera(null);
+    setRenderer(null);
+    setClouds([]);
+    setIslands([]);
+    setShip(null);
+  };
 
-      const width = container.clientWidth;
-      const height = container.clientHeight;
-
-      sceneData.camera.aspect = width / height;
-      sceneData.camera.updateProjectionMatrix();
-      sceneData.renderer.setSize(width, height);
-    };
-
-    window.addEventListener("resize", handleResize);
-
-    // Animation cleanup function
-    const cleanup = () => {
-      window.removeEventListener("resize", handleResize);
-
-      if (animationId()) {
-        cancelAnimationFrame(animationId());
-        setAnimationId(null);
-      }
-
-      if (sceneData.renderer) {
-        sceneData.renderer.dispose();
-        if (container.contains(sceneData.renderer.domElement)) {
-          container.removeChild(sceneData.renderer.domElement);
-        }
-      }
-    };
-
-    return cleanup;
+  // Cancel any ongoing animation
+  const cancelAnimation = () => {
+    const currentAnimationId = animationId();
+    if (currentAnimationId !== null) {
+      cancelAnimationFrame(currentAnimationId);
+      setAnimationId(null);
+    }
   };
 
   // Animation frame function (customizable with passed functions)
   const startAnimation = (updateCallbacks = []) => {
+    // Cancel any existing animation before starting a new one
+    cancelAnimation();
+
     const animate = () => {
       const currentId = requestAnimationFrame(animate);
       setAnimationId(currentId);
@@ -102,7 +123,11 @@ export function useThreeScene(containerRef) {
       if (Array.isArray(updateCallbacks)) {
         updateCallbacks.forEach((update) => {
           if (typeof update === "function") {
-            update();
+            try {
+              update();
+            } catch (error) {
+              console.error("Error in animation update callback:", error);
+            }
           }
         });
       }
@@ -113,8 +138,12 @@ export function useThreeScene(containerRef) {
       const currentRenderer = renderer();
 
       if (currentScene && currentCamera && currentRenderer) {
-        animateScene(clouds(), islands(), ship());
-        currentRenderer.render(currentScene, currentCamera);
+        try {
+          animateScene(clouds(), islands(), ship());
+          currentRenderer.render(currentScene, currentCamera);
+        } catch (error) {
+          console.error("Error in scene animation/rendering:", error);
+        }
       }
     };
 
@@ -122,15 +151,17 @@ export function useThreeScene(containerRef) {
   };
 
   return {
-    scene: () => scene(),
-    camera: () => camera(),
-    renderer: () => renderer(),
-    clouds: () => clouds(),
-    islands: () => islands(),
-    ship: () => ship(),
-    shipHeight: () => shipHeight(),
+    scene,
+    camera,
+    renderer,
+    clouds,
+    islands,
+    ship,
+    shipHeight,
     setShipHeight,
     initScene,
     startAnimation,
+    cancelAnimation,
+    cleanup,
   };
 }

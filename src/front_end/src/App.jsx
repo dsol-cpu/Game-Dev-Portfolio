@@ -7,6 +7,7 @@ import { createThemeManager } from "./stores/theme";
 import { navigationStore } from "./stores/navigation";
 import { resumeStore } from "./stores/resume";
 import ResumeModal from "./components/UI/ResumeModal";
+import ViewToggleSwitch from "./components/UI/ViewToggleSwitch";
 
 const App = () => {
   createThemeManager();
@@ -17,11 +18,11 @@ const App = () => {
     window.innerWidth >= 768
   );
   const [isMobile, setIsMobile] = createSignal(window.innerWidth < 768);
-  const [isScrollView, setIsScrollView] = createSignal(false);
+  const [isScrollView, setIsScrollView] = createSignal(true);
   const [activeSection, setActiveSection] = createSignal("home");
   // Keep ThreeScene mounted always, just hide it when not active
   const [isThreeSceneInitialized, setIsThreeSceneInitialized] =
-    createSignal(true);
+    createSignal(false);
 
   // Create an effect to listen for sidebar toggle events and window resizes
   createEffect(() => {
@@ -119,12 +120,7 @@ const App = () => {
         </div>
 
         {/* Scroll/3D View Toggle Button - Skies of Arcadia themed */}
-        <button
-          onClick={toggleView}
-          class="fixed bottom-4 right-4 z-50 rounded-lg bg-blue-600 px-4 py-2 text-white shadow-lg hover:bg-blue-700 dark:bg-cyan-600 dark:hover:bg-cyan-700"
-        >
-          {isScrollView() ? "Switch to 3D View" : "View Traditional Portfolio"}
-        </button>
+        <ViewToggleSwitch isScrollView={isScrollView} onToggle={toggleView} />
 
         {/* Traditional Portfolio Page - Only shown when scrollView is active */}
         {isScrollView() && <PagePortfolio activeSection={activeSection()} />}
