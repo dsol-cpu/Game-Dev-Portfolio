@@ -1,13 +1,13 @@
-import { createSignal } from "solid-js";
+import { createSignal, createEffect, onMount, onCleanup } from "solid-js";
 import * as THREE from "three";
 import { NAVIGATION, ISLAND_DATA } from "../constants/world";
 import { createNavigationPath } from "../utils/math";
-import { navigationStore } from "../stores/navigationStore"; // Import from the correct path
+import { navigationStore } from "../stores/navigation";
 
 /**
  * Hook for managing ship navigation between islands
  */
-export function useNavigation(ship, setShipHeight, shipControlsHook) {
+export function useNavigation(shipFn, setShipHeight, shipControlsHook) {
   // Use the shared navigation store
   const {
     targetIsland,
@@ -29,14 +29,15 @@ export function useNavigation(ship, setShipHeight, shipControlsHook) {
 
   // Start navigation to an island
   const startNavigation = (islandIndex) => {
-    if (!ship() || islandIndex >= ISLAND_DATA.length) return;
+    const ship = shipFn(); // Get the actual ship object
+    if (!ship || islandIndex >= ISLAND_DATA.length) return;
 
     const targetPosition = ISLAND_DATA[islandIndex].position.clone();
     targetPosition.y += 5; // Hover above the island
 
     // Create navigation path
     const path = createNavigationPath(
-      ship().position.clone(),
+      ship.position.clone(),
       targetPosition,
       NAVIGATION.HEIGHT
     );
@@ -51,12 +52,40 @@ export function useNavigation(ship, setShipHeight, shipControlsHook) {
     setNavigatingSection(ISLAND_DATA[islandIndex].section);
 
     // Reset controls state to prevent continued movement
-    shipControlsHook.setKeysPressed({});
+    // Access setKeysPressed safely, checking its existence first
+    if (
+      shipControlsHook &&
+      typeof shipControlsHook.setKeysPressed === "function"
+    ) {
+      shipControlsHook.setKeysPressed({});
+    }
   };
+
+  // Create an effect to start navigation when targetIsland changes
+  createEffect(() => {
+    const islandIndex = targetIsland();
+    if (islandIndex !== null && islandIndex !== undefined) {
+      startNavigation(islandIndex);
+    }
+  });
+
+  // Expose navigation instance to window for direct access
+  onMount(() => {
+    // Create a global reference to this navigation instance
+    window.shipNavigationInstance = {
+      startNavigation,
+    };
+
+    // Cleanup when component unmounts
+    onCleanup(() => {
+      window.shipNavigationInstance = null;
+    });
+  });
 
   // Update ship position along navigation path
   const updateNavigation = () => {
-    if (!isNavigating() || !currentPath() || !ship()) return false;
+    const ship = shipFn(); // Get the actual ship object
+    if (!isNavigating() || !currentPath() || !ship) return false;
 
     const path = currentPath();
     let progress = pathProgress() + shipSpeed() / 100;
@@ -64,15 +93,31 @@ export function useNavigation(ship, setShipHeight, shipControlsHook) {
     if (progress >= 1) {
       // Navigation complete
       progress = 1;
+
+      // Keep a reference to the destination section
+      const section = destinationSection();
+
+      // Set navigation progress to 100% before marking navigation as complete
+      setPathProgress(progress);
+      setNavigationProgress(100);
+
+      // Mark navigation as complete
       setIsNavigating(false);
       setTargetIsland(null);
-      setNavigatingSection(null); // Reset the navigating section when complete
+
+      // We'll keep the navigating section set until the effect in the sidebar
+      // can see both the navigation completed and the destination section
+      // This allows the sidebar to properly update the active section
 
       // Smoothly reset ship orientation
-      shipControlsHook.startOrientationReset();
+      if (
+        shipControlsHook &&
+        typeof shipControlsHook.startOrientationReset === "function"
+      ) {
+        shipControlsHook.startOrientationReset();
+      }
 
-      // Update DOM content
-      const section = destinationSection();
+      // Update DOM content if needed
       if (section) {
         const element = document.getElementById(section);
         if (element) {
@@ -81,14 +126,12 @@ export function useNavigation(ship, setShipHeight, shipControlsHook) {
       }
 
       setCurrentPath(null);
-      setPathProgress(progress);
-      setNavigationProgress(progress * 100);
       return true;
     }
 
     // Update ship position and orientation along path
     const newPosition = path.getPoint(progress);
-    ship().position.copy(newPosition);
+    ship.position.copy(newPosition);
 
     const tangent = path.getTangent(progress);
     if (tangent.length() > 0) {
@@ -102,13 +145,23 @@ export function useNavigation(ship, setShipHeight, shipControlsHook) {
       const targetRotation = new THREE.Quaternion().setFromRotationMatrix(
         lookAt
       );
-      ship().quaternion.slerp(targetRotation, 0.1);
-      shipControlsHook.shipYawRotation().slerp(targetRotation, 0.1);
+      ship.quaternion.slerp(targetRotation, 0.1);
+
+      // Access shipYawRotation safely
+      if (
+        shipControlsHook &&
+        typeof shipControlsHook.shipYawRotation === "function"
+      ) {
+        shipControlsHook.shipYawRotation().slerp(targetRotation, 0.1);
+      } else if (shipControlsHook && shipControlsHook.shipYawRotation) {
+        // It might be a signal/value instead of a function
+        shipControlsHook.shipYawRotation.slerp(targetRotation, 0.1);
+      }
     }
 
     setPathProgress(progress);
     setNavigationProgress(progress * 100);
-    setShipHeight(ship().position.y);
+    setShipHeight(ship.position.y);
 
     return true; // Navigation was processed
   };

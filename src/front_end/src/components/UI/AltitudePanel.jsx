@@ -1,8 +1,10 @@
+import { createMemo } from "solid-js";
 import { HEIGHT, getHeightColor, getHeightStatus } from "../../constants/world";
 
 const AltitudePanel = (props) => {
   // Helper for UI height bar - ensure proper calculation of fill height
-  const getHeightBarStyle = (height) => {
+  const getHeightBarStyle = createMemo(() => {
+    const height = props.shipHeight;
     // Calculate percentage based on min/max range
     const normalizedHeight = Math.max(
       0,
@@ -16,10 +18,10 @@ const AltitudePanel = (props) => {
       "background-color": getHeightColor(height),
       "z-index": 1,
     };
-  };
+  });
 
   return (
-    <div class="absolute top-4 right-4 text-white font-mono pointer-events-none w-24">
+    <div class="absolute top-1/2 right-4 -translate-y-1/2 text-white font-mono pointer-events-none w-24">
       {/* Title with drop shadow for visibility */}
       <div class="text-center text-xs mb-1 font-bold text-shadow">ALTITUDE</div>
 
@@ -29,7 +31,7 @@ const AltitudePanel = (props) => {
           {/* Colored fluid inside thermometer - removed transition for immediate fill */}
           <div
             class="absolute bottom-0 left-0 right-0 rounded-b-full"
-            style={getHeightBarStyle(props.shipHeight)}
+            style={getHeightBarStyle()}
           ></div>
 
           {/* Glass reflection effect */}
@@ -66,17 +68,6 @@ const AltitudePanel = (props) => {
         }}
       >
         {props.shipHeight.toFixed(1)}m
-      </div>
-
-      {/* Status text with fixed width background for visibility */}
-      <div
-        class="text-center text-xs px-2 py-0.5 rounded-full bg-black/30 backdrop-blur-sm border border-white/10 mx-auto"
-        style={{ width: "100%" }}
-      >
-        <span class={getHeightStatus(props.shipHeight).color}>
-          {getHeightStatus(props.shipHeight).icon}{" "}
-          {getHeightStatus(props.shipHeight).text}
-        </span>
       </div>
     </div>
   );

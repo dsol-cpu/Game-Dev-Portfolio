@@ -1,6 +1,6 @@
 import { createSignal, createEffect } from "solid-js";
 import { createThemeManager } from "../../stores/theme";
-import { navigationStore } from "../../stores/navigationStore";
+import { navigationStore } from "../../stores/navigation";
 
 export default function MobileNav(props) {
   const { isDark } = createThemeManager();
