@@ -11,7 +11,7 @@ const PROJECTS = [
     title: "Portfolio Website",
     description: "A 3D game built with SolidJS and Three.js ",
     technologies: ["SolidJS", "Three.js", "JavaScript"],
-    imageUrl: "/assets/images/projects/space-explorer.jpg",
+    // imageUrl: "/assets/images/projects/space-explorer.jpg",
     githubUrl: "https://github.com/dsol-cpu/Game-Dev-Portfolio",
     demoUrl: "https://dsol-cpu.github.io/Game-Dev-Portfolio/",
   },
