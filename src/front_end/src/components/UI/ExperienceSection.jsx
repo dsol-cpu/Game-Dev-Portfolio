@@ -43,7 +43,7 @@ const TechBadge = (props) => (
 const ProjectCardHeader = (props) => (
   <div class="relative h-48 overflow-hidden">
     <img
-      src={props.imageUrl || "/api/placeholder/400/320"}
+      src={props.imageUrl || "assets/favicon.ico"}
       alt={props.title}
       class="w-full h-full object-cover"
     />
