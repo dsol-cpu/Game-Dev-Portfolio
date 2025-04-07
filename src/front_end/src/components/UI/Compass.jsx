@@ -11,18 +11,27 @@ const Compass = (props) => {
       ((radians % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
 
     // Convert to degrees (0-360)
-    const degrees = (normalized * 180) / Math.PI;
+    let degrees = (normalized * 180) / Math.PI;
+
+    // Map degrees to compass directions based on Three.js coordinate system
+    // In Three.js:
+    // 0 degrees = negative Z axis = South
+    // 90 degrees = negative X axis = East
+    // 180 degrees = positive Z axis = North
+    // 270 degrees = positive X axis = West
 
     // Determine direction based on degrees
-    if (degrees >= 337.5 || degrees < 22.5) return "N";
-    if (degrees >= 22.5 && degrees < 67.5) return "NE";
-    if (degrees >= 67.5 && degrees < 112.5) return "E";
-    if (degrees >= 112.5 && degrees < 157.5) return "SE";
-    if (degrees >= 157.5 && degrees < 202.5) return "S";
-    if (degrees >= 202.5 && degrees < 247.5) return "SW";
-    if (degrees >= 247.5 && degrees < 292.5) return "W";
-    if (degrees >= 292.5 && degrees < 337.5) return "NW";
-    return "N";
+    if (degrees >= 0 && degrees < 22.5) return "S";
+    if (degrees >= 22.5 && degrees < 67.5) return "SW";
+    if (degrees >= 67.5 && degrees < 112.5) return "W";
+    if (degrees >= 112.5 && degrees < 157.5) return "NW";
+    if (degrees >= 157.5 && degrees < 202.5) return "N";
+    if (degrees >= 202.5 && degrees < 247.5) return "NE";
+    if (degrees >= 247.5 && degrees < 292.5) return "E";
+    if (degrees >= 292.5 && degrees < 337.5) return "SE";
+    if (degrees >= 337.5 && degrees <= 360) return "S";
+
+    return "S"; // Default fallback
   };
 
   createEffect(() => {
@@ -33,12 +42,12 @@ const Compass = (props) => {
   });
 
   return (
-    <div class="absolute top-4 left-4 flex flex-col items-center">
+    <div class="absolute top-1/2 left-4 -translate-y-1/2 flex flex-col items-center">
       <div class="relative w-16 h-16 bg-gradient-to-b from-blue-800 to-blue-950 rounded-full border-2 border-yellow-600 shadow-lg overflow-hidden">
         {/* Compass face */}
         <div
           class="absolute inset-0 flex items-center justify-center"
-          style={{ transform: `rotate(${-rotation()}rad)` }}
+          // style={{ transform: `rotate(${-rotation()}rad)` }}
         >
           {/* Cardinal directions */}
           <div class="absolute inset-0 flex items-center justify-center">

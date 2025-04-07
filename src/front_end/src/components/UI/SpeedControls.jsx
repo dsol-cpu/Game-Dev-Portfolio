@@ -1,21 +1,18 @@
-import { navigationStore } from "../../stores/navigation"; // Adjust the path as needed
+import { navigationStore } from "../../stores/navigation";
 
 export default function SpeedControls() {
   const { shipSpeed, setShipSpeed } = navigationStore;
 
-  // Handle speed change
   const handleSpeedChange = (e) => {
     setShipSpeed(parseFloat(e.target.value));
   };
 
-  // Get formatted speed text
   const getSpeedText = () => {
-    // This is correct - shipSpeed is a signal function in Solid.js
     return `${shipSpeed().toFixed(1)}x`;
   };
 
   return (
-    <div class="absolute bottom-4 left-4 transform bg-black/30 backdrop-blur-sm rounded-lg border border-cyan-500/30 shadow-lg text-white z-10 px-4 py-2">
+    <div class="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/30 backdrop-blur-sm rounded-lg border border-cyan-500/30 shadow-lg text-white z-10 px-4 py-2">
       <div class="flex items-center gap-3">
         <svg
           class="h-4 w-4 text-cyan-400"

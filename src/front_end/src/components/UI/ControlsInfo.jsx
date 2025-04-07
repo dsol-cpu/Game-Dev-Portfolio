@@ -73,7 +73,10 @@ const ControlsInfo = () => {
   return (
     <Show when={isVisible()}>
       <div
-        class="absolute left-4 top-1/2 transform -translate-y-1/2 text-white p-3 rounded-lg z-10 animate-fadeIn"
+        role="region"
+        tabIndex="0"
+        aria-label="Information panel"
+        class="absolute left-4 top-4 transform text-white p-3 rounded-lg z-10 animate-fadeIn"
         style={{
           "background-color": "rgba(0, 0, 0, 0.65)",
           "backdrop-filter": "blur(10px)",
@@ -87,6 +90,14 @@ const ControlsInfo = () => {
         }}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
+        onFocus={handleMouseEnter}
+        onBlur={handleMouseLeave}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            // If you want any keyboard action when the element is focused
+            // For example, to toggle the collapsed state
+          }
+        }}
       >
         <div class="flex justify-between items-center mb-3">
           <h3 class="text-lg font-bold">Game Controls</h3>
@@ -224,23 +235,6 @@ const ControlsInfo = () => {
                   </svg>
                 }
                 text="Red Button - Decrease altitude"
-              />
-              <ControlItem
-                icon={
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    class="h-4 w-4"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                  >
-                    <path
-                      fill-rule="evenodd"
-                      d="M10 18a8 8 0 100-16 8 8 0 000 16z"
-                      clip-rule="evenodd"
-                    />
-                  </svg>
-                }
-                text="Double tap - Reset orientation"
               />
             </div>
           </Show>

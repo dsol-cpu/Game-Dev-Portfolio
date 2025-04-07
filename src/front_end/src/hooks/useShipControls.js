@@ -28,6 +28,7 @@ export function useShipControls(ship, setShipHeight) {
     new THREE.Quaternion()
   );
   const [isFullscreen, setIsFullscreen] = createSignal(false);
+  const [cardinalDirection, setCardinalDirection] = createSignal("N");
 
   // Mobile controls state
   const [mobileMovementX, setMobileMovementX] = createSignal(0);
@@ -90,6 +91,29 @@ export function useShipControls(ship, setShipHeight) {
         document.mozFullScreenElement ||
         document.msFullscreenElement
     );
+  };
+
+  // Helper function to calculate cardinal direction from rotation
+  const calculateCardinalDirection = (rotation) => {
+    // Normalize rotation to 0-2π range
+    const normalized =
+      ((rotation % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+
+    // Convert to degrees (0-360)
+    let degrees = (normalized * 180) / Math.PI;
+
+    // Map degrees to compass directions based on Three.js coordinate system
+    if (degrees >= 0 && degrees < 22.5) return "S";
+    if (degrees >= 22.5 && degrees < 67.5) return "SW";
+    if (degrees >= 67.5 && degrees < 112.5) return "W";
+    if (degrees >= 112.5 && degrees < 157.5) return "NW";
+    if (degrees >= 157.5 && degrees < 202.5) return "N";
+    if (degrees >= 202.5 && degrees < 247.5) return "NE";
+    if (degrees >= 247.5 && degrees < 292.5) return "E";
+    if (degrees >= 292.5 && degrees < 337.5) return "SE";
+    if (degrees >= 337.5 && degrees <= 360) return "S";
+
+    return "S"; // Default fallback
   };
 
   // Set up all event listeners immediately
@@ -160,6 +184,9 @@ export function useShipControls(ship, setShipHeight) {
     }
 
     updateShipTilt(shipObj, speedMultiplier);
+
+    // Update cardinal direction
+    setCardinalDirection(calculateCardinalDirection(shipObj.rotation.y));
 
     return true;
   };
@@ -330,6 +357,9 @@ export function useShipControls(ship, setShipHeight) {
       );
       shipObj.quaternion.premultiply(rotationY);
       setShipYawRotation(shipYawRotation().clone().premultiply(rotationY));
+
+      // Update cardinal direction when rotation changes
+      setCardinalDirection(calculateCardinalDirection(shipObj.rotation.y));
     }
   };
 
@@ -396,6 +426,9 @@ export function useShipControls(ship, setShipHeight) {
       setShipYawRotation(levelOrientation.clone());
       setCurrentPitch(0);
       setTargetPitch(0);
+
+      // Update cardinal direction after reset
+      setCardinalDirection(calculateCardinalDirection(shipObj.rotation.y));
     }
 
     return true;
@@ -407,6 +440,7 @@ export function useShipControls(ship, setShipHeight) {
     shipYawRotation,
     resetOrientationInProgress,
     isFullscreen,
+    cardinalDirection,
     updateShipControls,
     updateOrientationReset,
     updateCamera,

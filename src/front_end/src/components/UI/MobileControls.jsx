@@ -142,7 +142,7 @@ const MobileControls = (props) => {
 
   return (
     <Show when={isMobile()}>
-      <div class="fixed bottom-0 left-0 right-0 p-4 flex justify-between z-50 pointer-events-none">
+      <div class="absolute inset-x-0 bottom-0 p-4 flex justify-between z-50 pointer-events-none w-full">
         {/* Left side - Joystick */}
         <div
           class="w-32 h-32 bg-black bg-opacity-30 rounded-full flex items-center justify-center pointer-events-auto touch-manipulation"

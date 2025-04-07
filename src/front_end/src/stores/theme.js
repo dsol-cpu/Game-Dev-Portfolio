@@ -1,79 +1,55 @@
 import { createSignal, createEffect, createRoot } from "solid-js";
 
-// Create a singleton instance of the theme manager
 let themeManager;
 
 export function createThemeManager() {
-  // Return the existing instance if it already exists
   if (themeManager) return themeManager;
 
-  // Create a root for our reactive system
   themeManager = createRoot((dispose) => {
-    // Function to detect system theme preference
-    const getSystemTheme = () => {
-      return window.matchMedia("(prefers-color-scheme: dark)").matches
-        ? "dark"
-        : "light";
-    };
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
-    // Initialize theme signal from localStorage or system preference
-    const [theme, setTheme] = createSignal(
-      localStorage.getItem("theme") || "system"
-    );
+    const getSystemTheme = () => (mediaQuery.matches ? "dark" : "light");
 
-    // Function to get the effective theme (resolves 'system' to actual theme)
-    const getEffectiveTheme = () => {
-      return theme() === "system" ? getSystemTheme() : theme();
-    };
+    const storedTheme = localStorage.getItem("theme");
+    const [theme, setTheme] = createSignal(storedTheme || "system");
 
-    // Function to apply the theme immediately to the DOM
+    // Memoized effective theme (resolves 'system' to actual theme)
+    const getEffectiveTheme = () =>
+      theme() === "system" ? getSystemTheme() : theme();
+
+    // Apply theme to DOM
     const applyTheme = () => {
       const effectiveTheme = getEffectiveTheme();
+      const isDark = effectiveTheme === "dark";
+
       document.documentElement.setAttribute("data-theme", effectiveTheme);
-      document.documentElement.classList.toggle(
-        "dark",
-        effectiveTheme === "dark"
-      );
-      localStorage.setItem("theme", theme()); // Store the actual setting (system/dark/light)
-      console.log("Applying theme:", effectiveTheme, "(setting:", theme(), ")");
+      document.documentElement.classList.toggle("dark", isDark);
+      localStorage.setItem("theme", theme());
     };
 
-    // Apply theme immediately
+    // Handle system theme changes
+    const handleSystemThemeChange = () => {
+      if (theme() === "system") applyTheme();
+    };
+
+    // Set up event listener
+    mediaQuery.addEventListener("change", handleSystemThemeChange);
+
+    // Apply theme when it changes
+    const unwatchTheme = createEffect(applyTheme);
+
+    // Apply initial theme
     applyTheme();
 
-    // Set up theme change listener
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const handleChange = () => {
-      if (theme() === "system") {
-        applyTheme();
-      }
-    };
-
-    mediaQuery.addEventListener("change", handleChange);
-
-    // Set up theme signal watcher
-    const unwatchTheme = createEffect(() => {
-      applyTheme();
-    });
-
-    // Return the manager object with access to the dispose function
     return {
-      theme, // Expose the theme signal
-      getEffectiveTheme, // Get the resolved theme
-      setTheme, // Set theme directly
-      toggleTheme: () => {
-        // Simple toggle between light and dark only (no system)
-        const currentTheme = theme();
-        if (currentTheme === "dark") {
-          setTheme("light");
-        } else {
-          setTheme("dark");
-        }
-      },
-      isDark: () => getEffectiveTheme() === "dark", // Check if dark mode is active
+      theme,
+      getEffectiveTheme,
+      setTheme,
+      toggleTheme: () =>
+        setTheme(getEffectiveTheme() === "dark" ? "light" : "dark"),
+      isDark: () => getEffectiveTheme() === "dark",
       dispose: () => {
-        // Clean up resources
-        mediaQuery.removeEventListener("change", handleChange);
+        mediaQuery.removeEventListener("change", handleSystemThemeChange);
         unwatchTheme();
         dispose();
       },
