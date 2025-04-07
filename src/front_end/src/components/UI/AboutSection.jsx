@@ -2,7 +2,7 @@ import { createSignal, Show, createMemo } from "solid-js";
 import ResumeModal from "./ResumeModal";
 import { createThemeManager } from "../../stores/theme";
 import me from "../../assets/me.png";
-
+import resume from "../../assets/resume.pdf";
 const DocumentIcon = (props) => (
   <svg
     {...props}
@@ -161,7 +161,7 @@ const AboutSection = () => {
           </button>
 
           <a
-            href="/assets/resume.pdf"
+            href={resume}
             class="inline-flex items-center bg-gray-700 hover:bg-gray-800 text-white px-5 py-2.5 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 font-medium"
             target="_blank"
             download
