@@ -26,19 +26,22 @@ export function useNavigation(shipFn, setShipHeight, shipControlsHook) {
 
   const [currentPath, setCurrentPath] = createSignal(null);
   const [pathProgress, setPathProgress] = createSignal(0);
+  const [targetPosition, setTargetPosition] = createSignal(null);
 
   // Start navigation to an island
   const startNavigation = (islandIndex) => {
     const ship = shipFn(); // Get the actual ship object
     if (!ship || islandIndex >= ISLAND_DATA.length) return;
 
-    const targetPosition = ISLAND_DATA[islandIndex].position.clone();
-    targetPosition.y += 5; // Hover above the island
+    // Store exact target position from island data
+    const exactPosition = ISLAND_DATA[islandIndex].position.clone();
+    exactPosition.y += 5;
+    setTargetPosition(exactPosition);
 
-    // Create navigation path
+    // Create navigation path from current position to target
     const path = createNavigationPath(
       ship.position.clone(),
-      targetPosition,
+      exactPosition,
       NAVIGATION.HEIGHT
     );
 
@@ -47,12 +50,9 @@ export function useNavigation(shipFn, setShipHeight, shipControlsHook) {
     setIsNavigating(true);
     setNavigationProgress(0);
     setDestinationSection(ISLAND_DATA[islandIndex].section);
-
-    // Set the section that's being navigated to
     setNavigatingSection(ISLAND_DATA[islandIndex].section);
 
     // Reset controls state to prevent continued movement
-    // Access setKeysPressed safely, checking its existence first
     if (
       shipControlsHook &&
       typeof shipControlsHook.setKeysPressed === "function"
@@ -71,12 +71,7 @@ export function useNavigation(shipFn, setShipHeight, shipControlsHook) {
 
   // Expose navigation instance to window for direct access
   onMount(() => {
-    // Create a global reference to this navigation instance
-    window.shipNavigationInstance = {
-      startNavigation,
-    };
-
-    // Cleanup when component unmounts
+    window.shipNavigationInstance = { startNavigation };
     onCleanup(() => {
       window.shipNavigationInstance = null;
     });
@@ -91,23 +86,25 @@ export function useNavigation(shipFn, setShipHeight, shipControlsHook) {
     let progress = pathProgress() + shipSpeed() / 100;
 
     if (progress >= 1) {
-      // Navigation complete
-      progress = 1;
+      // Navigation complete - set ship to exact target position
+      const exactTarget = targetPosition();
+      if (exactTarget) {
+        // Place the ship exactly at the target island's position
+        ship.position.copy(exactTarget);
+        setShipHeight(exactTarget.y);
+      }
 
       // Keep a reference to the destination section
       const section = destinationSection();
 
       // Set navigation progress to 100% before marking navigation as complete
-      setPathProgress(progress);
+      setPathProgress(1);
       setNavigationProgress(100);
 
       // Mark navigation as complete
       setIsNavigating(false);
       setTargetIsland(null);
-
-      // We'll keep the navigating section set until the effect in the sidebar
-      // can see both the navigation completed and the destination section
-      // This allows the sidebar to properly update the active section
+      setTargetPosition(null);
 
       // Smoothly reset ship orientation
       if (
@@ -129,10 +126,11 @@ export function useNavigation(shipFn, setShipHeight, shipControlsHook) {
       return true;
     }
 
-    // Update ship position and orientation along path
+    // Update ship position along path
     const newPosition = path.getPoint(progress);
     ship.position.copy(newPosition);
 
+    // Get path tangent to determine direction
     const tangent = path.getTangent(progress);
     if (tangent.length() > 0) {
       const up = new THREE.Vector3(0, 1, 0);
@@ -147,14 +145,13 @@ export function useNavigation(shipFn, setShipHeight, shipControlsHook) {
       );
       ship.quaternion.slerp(targetRotation, 0.1);
 
-      // Access shipYawRotation safely
+      // Update yaw rotation if available
       if (
         shipControlsHook &&
         typeof shipControlsHook.shipYawRotation === "function"
       ) {
         shipControlsHook.shipYawRotation().slerp(targetRotation, 0.1);
       } else if (shipControlsHook && shipControlsHook.shipYawRotation) {
-        // It might be a signal/value instead of a function
         shipControlsHook.shipYawRotation.slerp(targetRotation, 0.1);
       }
     }

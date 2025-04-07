@@ -31,7 +31,7 @@ export default defineConfig(({ mode }) => {
 
     build: {
       target: "esnext",
-      outDir: "build", // Match the path in your GitHub Actions workflow
+      outDir: "build",
       emptyOutDir: true,
       minify: isProduction ? "terser" : false,
       sourcemap: !isProduction,
@@ -59,13 +59,11 @@ export default defineConfig(({ mode }) => {
 
     css: {
       devSourcemap: true,
-      // Add postcss options if you're using it
       postcss: {
         plugins: [],
       },
     },
 
-    // Optimize preview mode (for testing production builds locally)
     preview: {
       port: 5174,
       host: true,

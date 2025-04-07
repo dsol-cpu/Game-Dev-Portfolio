@@ -1,8 +1,8 @@
-import { createSignal, Show } from "solid-js";
+import { createSignal, Show, createMemo } from "solid-js";
 import ResumeModal from "./ResumeModal";
 import { createThemeManager } from "../../stores/theme";
 import me from "../../assets/me.png";
-// Icon components defined inline to remove dependency on separate Icons.jsx file
+
 const DocumentIcon = (props) => (
   <svg
     {...props}
@@ -70,6 +70,23 @@ const AboutSection = () => {
   const [showResumeModal, setShowResumeModal] = createSignal(false);
   const { isDark } = createThemeManager();
 
+  const styles = createMemo(() => ({
+    heading: `text-3xl font-bold ${isDark() ? "text-blue-300" : "text-blue-800"} mb-2 transition-colors duration-300`,
+    jobTitle: `inline-flex items-center gap-2 ${isDark() ? "text-gray-300" : "text-gray-600"} mb-4`,
+    statusDot: `h-2 w-2 rounded-full ${isDark() ? "bg-blue-400" : "bg-blue-600"} animate-pulse`,
+    paragraph: `${isDark() ? "text-gray-300" : "text-gray-700"} leading-relaxed`,
+    expandButton: `${isDark() ? "text-blue-300 hover:text-blue-200" : "text-blue-600 hover:text-blue-800"} font-medium flex items-center transition-colors duration-200 group focus:outline-none focus:ring-2 focus:ring-blue-300 focus:ring-offset-2 rounded px-2 py-1 -ml-2`,
+    expandedContent: `overflow-hidden transition-all duration-300 ${expanded() ? "max-h-96 opacity-100" : "max-h-0 opacity-0"}`,
+    divider: `mt-8 pt-6 border-t ${isDark() ? "border-gray-700" : "border-gray-200"}`,
+  }));
+
+  // Handle image error once, not on every render
+  const handleImageError = (e) => {
+    e.target.onerror = null; // Prevent infinite error loop
+    e.target.style.backgroundColor = "#3b82f6";
+    e.target.style.border = "4px solid #93c5fd";
+  };
+
   return (
     <section class="py-12 w-full max-w-4xl mx-auto" data-testid="about-section">
       {/* Profile section with image and intro */}
@@ -80,12 +97,7 @@ const AboutSection = () => {
               src={me}
               alt="Game Developer"
               class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-              onError={(e) => {
-                // Use a simple colored background instead of an image fallback
-                e.target.onerror = null; // Prevent infinite error loop
-                e.target.style.backgroundColor = "#3b82f6"; // Blue background
-                e.target.style.border = "4px solid #93c5fd"; // Light blue border
-              }}
+              onError={handleImageError}
               loading="lazy"
             />
           </div>
@@ -93,25 +105,13 @@ const AboutSection = () => {
         </div>
 
         <div class="flex-grow text-center md:text-left">
-          <h2
-            class={`text-3xl font-bold ${
-              isDark() ? "text-blue-300" : "text-blue-800"
-            } mb-2 transition-colors duration-300`}
-          >
-            David Solinsky
-          </h2>
-          <div
-            class={`inline-flex items-center gap-2 ${isDark() ? "text-gray-300" : "text-gray-600"} mb-4`}
-          >
+          <h2 class={styles().heading}>David Solinsky</h2>
+          <div class={styles().jobTitle}>
             <span class="font-medium text-lg">Game Developer & 3D Artist</span>
-            <span
-              class={`h-2 w-2 rounded-full ${isDark() ? "bg-blue-400" : "bg-blue-600"} animate-pulse`}
-            ></span>
+            <span class={styles().statusDot}></span>
           </div>
 
-          <p
-            class={`${isDark() ? "text-gray-300" : "text-gray-700"} leading-relaxed`}
-          >
+          <p class={styles().paragraph}>
             I'm a passionate game developer with 3 years of experience in
             software engineering and gameplay programming. My expertise spans
             game development in engines like Unity and Godot, as well as C/C++
@@ -122,34 +122,22 @@ const AboutSection = () => {
 
       {/* Bio section with expandable content */}
       <div class="mt-8 space-y-4">
-        <p
-          class={`${isDark() ? "text-gray-300" : "text-gray-700"} leading-relaxed`}
-        >
+        <p class={styles().paragraph}>
           With a background in computer science and a lifelong love for gaming,
           I blend technical expertise with creative vision to develop unique
           gaming experiences that engage and inspire players.
         </p>
 
-        {/* Expandable content without Motion animation library */}
-        <div
-          class={`overflow-hidden transition-all duration-300 ${expanded() ? "max-h-96 opacity-100" : "max-h-0 opacity-0"}`}
-        >
+        {/* Expandable content */}
+        <div class={styles().expandedContent}>
           <div class="space-y-4 pt-4" id="expanded-bio">
-            <p
-              class={`${isDark() ? "text-gray-300" : "text-gray-700"} leading-relaxed`}
-            >
-              I'm losing it
-            </p>
+            <p class={styles().paragraph}>I'm losing it</p>
           </div>
         </div>
 
         <button
           onClick={() => setExpanded(!expanded())}
-          class={`${
-            isDark()
-              ? "text-blue-300 hover:text-blue-200"
-              : "text-blue-600 hover:text-blue-800"
-          } font-medium flex items-center transition-colors duration-200 group focus:outline-none focus:ring-2 focus:ring-blue-300 focus:ring-offset-2 rounded px-2 py-1 -ml-2`}
+          class={styles().expandButton}
           aria-expanded={expanded()}
           aria-controls="expanded-bio"
         >
@@ -161,11 +149,7 @@ const AboutSection = () => {
       </div>
 
       {/* Action buttons section */}
-      <div
-        class={`mt-8 pt-6 border-t ${
-          isDark() ? "border-gray-700" : "border-gray-200"
-        }`}
-      >
+      <div class={styles().divider}>
         <div class="flex flex-wrap gap-4">
           <button
             onClick={() => setShowResumeModal(true)}
@@ -200,7 +184,7 @@ const AboutSection = () => {
         </div>
       </div>
 
-      {/* Resume Modal using Show component for conditional rendering */}
+      {/* Resume Modal */}
       <Show when={showResumeModal()}>
         <ResumeModal onClose={() => setShowResumeModal(false)} />
       </Show>

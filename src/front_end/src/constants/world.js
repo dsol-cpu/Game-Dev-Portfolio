@@ -7,7 +7,7 @@ export const HEIGHT = {
 
 export const NAVIGATION = {
   ARRIVAL_DISTANCE: 5,
-  HEIGHT: 20,
+  HEIGHT: 0,
   LANDING_SPEED: 0.1,
 };
 
@@ -15,7 +15,7 @@ export const NAVIGATION = {
 export const ISLAND_DATA = [
   {
     name: "Home Island",
-    position: new THREE.Vector3(10, -5, 0),
+    position: new THREE.Vector3(0, 0, 0),
     section: "home",
   },
   {
@@ -35,7 +35,7 @@ export const ISLAND_DATA = [
   },
 ];
 
-// UI helper functions moved from component
+// UI helper functions
 export const getHeightColor = (height) => {
   if (height > 30) return "#ff3300";
   if (height > 15) return "#ff9900";
