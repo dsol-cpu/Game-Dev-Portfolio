@@ -8,11 +8,13 @@ import { navigationStore } from "./stores/navigation";
 import { resumeStore } from "./stores/resume";
 import { viewStore } from "./stores/view";
 import ResumeModal from "./components/UI/ResumeModal";
-import { SvgSprite } from "./components/icons/SvgSprite";
+import { SvgSprite } from "./components/icons/SvgSpriteSheet";
+
+const SvgSpriteSheet = () => <SvgSprite />;
 
 const App = () => {
+  SvgSpriteSheet();
   createThemeManager();
-  <SvgSprite />;
   const { setTargetIsland, setIsNavigating, setDestinationSection } =
     navigationStore;
 

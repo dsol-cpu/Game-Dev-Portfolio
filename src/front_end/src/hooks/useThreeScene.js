@@ -44,26 +44,6 @@ export function useThreeScene(containerRefFn) {
       setIslands(elements.islands || []);
       setShip(elements.ship || null);
 
-      // Position and label islands
-      const islandObjects = elements.islands || [];
-      if (islandObjects.length >= ISLAND_DATA.length) {
-        islandObjects.forEach((island, i) => {
-          if (i < ISLAND_DATA.length && island) {
-            island.position.copy(ISLAND_DATA[i].position);
-
-            // Add visual marker for island
-            const markerGeometry = new THREE.ConeGeometry(0.5, 2, 8);
-            const markerMaterial = new THREE.MeshStandardMaterial({
-              color: 0xffff00,
-              emissive: 0x444400,
-            });
-            const marker = new THREE.Mesh(markerGeometry, markerMaterial);
-            marker.position.y = 3;
-            island.add(marker);
-          }
-        });
-      }
-
       // Set initial height
       if (elements.ship) {
         setShipHeight(elements.ship.position.y);

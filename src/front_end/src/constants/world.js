@@ -52,7 +52,8 @@ export const getHeightStatus = (height) => {
   } else if (height > 30) {
     return { text: "HIGH ALTITUDE", color: "text-red-400", icon: "▲" };
   } else if (height > 0) {
-    return { text: "NORMAL FLIGHT", color: "text-green-400", icon: "●" };
+    // Use a simple dot character instead of the problematic one
+    return { text: "NORMAL FLIGHT", color: "text-green-400", icon: "•" };
   } else {
     return { text: "DEEP", color: "text-blue-400", icon: "▼" };
   }

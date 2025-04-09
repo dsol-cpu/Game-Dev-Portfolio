@@ -13,6 +13,8 @@ export function useNavigation(shipFn, setShipHeight, shipControlsHook) {
     targetIsland,
     setTargetIsland,
     setIsNavigating,
+    isArrived,
+    setIsArrived,
     destinationSection,
     setDestinationSection,
     isNavigating,
@@ -27,16 +29,31 @@ export function useNavigation(shipFn, setShipHeight, shipControlsHook) {
   const [currentPath, setCurrentPath] = createSignal(null);
   const [pathProgress, setPathProgress] = createSignal(0);
   const [targetPosition, setTargetPosition] = createSignal(null);
+  const [currentPosition, setCurrentPosition] = createSignal(null);
 
   // Start navigation to an island
   const startNavigation = (islandIndex) => {
     const ship = shipFn(); // Get the actual ship object
     if (!ship || islandIndex >= ISLAND_DATA.length) return;
 
+    // If ship is already at the destination, don't start navigation
+    if (
+      isArrived() &&
+      destinationSection() === ISLAND_DATA[islandIndex].section
+    ) {
+      return;
+    }
+
     // Store exact target position from island data
     const exactPosition = ISLAND_DATA[islandIndex].position.clone();
     exactPosition.y += 5;
     setTargetPosition(exactPosition);
+
+    // Store current position for movement tracking
+    setCurrentPosition(ship.position.clone());
+
+    // Reset arrived state when starting navigation
+    setIsArrived(false);
 
     // Create navigation path from current position to target
     const path = createNavigationPath(
@@ -87,6 +104,8 @@ export function useNavigation(shipFn, setShipHeight, shipControlsHook) {
 
     if (progress >= 1) {
       // Navigation complete - set ship to exact target position
+      setIsArrived(true);
+
       const exactTarget = targetPosition();
       if (exactTarget) {
         // Place the ship exactly at the target island's position
@@ -167,9 +186,11 @@ export function useNavigation(shipFn, setShipHeight, shipControlsHook) {
     isNavigating,
     targetIsland,
     destinationSection,
+    isArrived,
     navigationProgress: navigationStore.navigationProgress,
     setTargetIsland,
     setIsNavigating,
+    setIsArrived,
     startNavigation,
     updateNavigation,
   };

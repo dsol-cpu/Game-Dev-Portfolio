@@ -30,7 +30,6 @@ export const Icon = (props) => {
     const iconId = `icon-${local.name}`;
     const symbolExists = document.getElementById(iconId);
     setIconExists(!!symbolExists);
-
     if (!symbolExists) {
       console.warn(`Icon "${local.name}" not found in sprite`);
     }
@@ -38,43 +37,41 @@ export const Icon = (props) => {
 
   onMount(() => {
     checkIconExists();
-
-    // Also check after a small delay to ensure the sprite has been mounted
-    setTimeout(checkIconExists, 50);
+    setTimeout(checkIconExists, 100); // Increased timeout for better chance of sprite being loaded
   });
 
-  // Check when the name changes
   createEffect(() => {
-    // Access name to create dependency
-    const iconName = local.name;
-    if (iconExists() !== null) {
-      // Only recheck if we've done the initial check
-      checkIconExists();
+    const iconId = `icon-${local.name}`;
+
+    const symbolExists = document.getElementById(iconId);
+    setIconExists(!!symbolExists);
+
+    if (!symbolExists) {
+      console.warn(`Icon "${local.name}" not found in sprite`);
     }
   });
 
   return (
-    <svg
-      width={local.size}
-      height={local.size}
-      class={className}
-      aria-hidden="true"
-      {...others}
+    <Show
+      when={iconExists()}
+      fallback={
+        <div
+          class="icon-placeholder"
+          style={{ width: local.size, height: local.size }}
+          title={`Icon ${local.name} not found`}
+        ></div>
+      }
     >
-      <Show
-        when={iconExists() !== false}
-        fallback={
-          <rect
-            width={local.size}
-            height={local.size}
-            fill="currentColor"
-            opacity="0.2"
-          />
-        }
+      <svg
+        class={className}
+        width={local.size}
+        height={local.size}
+        aria-hidden="true"
+        {...others}
       >
         <use href={`#icon-${local.name}`} />
-      </Show>
-    </svg>
+      </svg>
+    </Show>
   );
 };
 

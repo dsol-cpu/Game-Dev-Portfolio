@@ -29,9 +29,9 @@ export function createThemeManager() {
         theme() === "system" ? getSystemTheme() : theme();
       setEffectiveTheme(newEffectiveTheme);
       setIsDarkMode(newEffectiveTheme === "dark");
-      console.log(
-        `Theme updated: ${theme()} -> Effective: ${newEffectiveTheme}, isDark: ${newEffectiveTheme === "dark"}`
-      );
+      // console.log(
+      //   `Theme updated: ${theme()} -> Effective: ${newEffectiveTheme}, isDark: ${newEffectiveTheme === "dark"}`
+      // );
     });
 
     // Apply theme to DOM
@@ -76,7 +76,7 @@ export function createThemeManager() {
     // Apply theme when it changes
     createEffect(() => {
       const currentTheme = effectiveTheme();
-      console.log(`Applying theme effect: ${currentTheme}`);
+      // console.log(`Applying theme effect: ${currentTheme}`);
       applyTheme();
     });
 

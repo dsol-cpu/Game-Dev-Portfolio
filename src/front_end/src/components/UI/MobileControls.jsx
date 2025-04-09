@@ -1,4 +1,5 @@
 import { createSignal, Show, onMount, onCleanup } from "solid-js";
+import { Icon } from "../icons/Icon";
 
 const MobileControls = (props) => {
   const [touchStartPosition, setTouchStartPosition] = createSignal({
@@ -10,6 +11,9 @@ const MobileControls = (props) => {
   const [doubleTapTimer, setDoubleTapTimer] = createSignal(null);
   const [lastTapTime, setLastTapTime] = createSignal(0);
   const [isMobile, setIsMobile] = createSignal(false);
+  // Add state variables to track button press status
+  const [upButtonPressed, setUpButtonPressed] = createSignal(false);
+  const [downButtonPressed, setDownButtonPressed] = createSignal(false);
 
   // Check if device is mobile
   onMount(() => {
@@ -25,7 +29,6 @@ const MobileControls = (props) => {
     window.addEventListener("resize", checkMobile);
 
     // Handle passive event listener setting for the entire document's touch events
-    // This is a global approach that affects all touch events
     document.addEventListener("touchstart", function () {}, { passive: false });
     document.addEventListener("touchmove", function () {}, { passive: false });
 
@@ -36,7 +39,6 @@ const MobileControls = (props) => {
 
   // Joystick controls
   const handleJoystickStart = (e) => {
-    // Don't call preventDefault unconditionally - only when needed
     if (e.cancelable) e.preventDefault();
 
     const touch = e.touches[0];
@@ -118,9 +120,10 @@ const MobileControls = (props) => {
     }
   };
 
-  // Altitude button handlers
+  // Altitude button handlers with color change
   const handleAltitudeUpStart = (e) => {
     if (e.cancelable) e.preventDefault();
+    setUpButtonPressed(true); // Set button state to pressed
     if (props.onAltitudeUp) {
       props.onAltitudeUp();
     }
@@ -128,6 +131,7 @@ const MobileControls = (props) => {
 
   const handleAltitudeDownStart = (e) => {
     if (e.cancelable) e.preventDefault();
+    setDownButtonPressed(true); // Set button state to pressed
     if (props.onAltitudeDown) {
       props.onAltitudeDown();
     }
@@ -135,6 +139,9 @@ const MobileControls = (props) => {
 
   const handleAltitudeEnd = (e) => {
     if (e.cancelable) e.preventDefault();
+    // Reset both button states
+    setUpButtonPressed(false);
+    setDownButtonPressed(false);
     if (props.onAltitudeStop) {
       props.onAltitudeStop();
     }
@@ -143,42 +150,90 @@ const MobileControls = (props) => {
   return (
     <Show when={isMobile()}>
       <div class="absolute inset-x-0 bottom-0 p-4 flex justify-between z-50 pointer-events-none w-full">
-        {/* Left side - Joystick */}
+        {/* Left side - Joystick as SVG */}
         <div
-          class="w-32 h-32 bg-black bg-opacity-30 rounded-full flex items-center justify-center pointer-events-auto touch-manipulation"
+          class="w-32 h-32 pointer-events-auto touch-manipulation"
           onTouchStart={handleJoystickStart}
           onTouchMove={handleJoystickMove}
           onTouchEnd={handleJoystickEnd}
           onTouchCancel={handleJoystickEnd}
+          style={{ overflow: "visible" }} // Allow the SVG to overflow the parent div
         >
-          <div
-            class="w-16 h-16 bg-white bg-opacity-80 rounded-full flex items-center justify-center"
-            style={{
-              transform: `translate(${joystickPosition().x}px, ${joystickPosition().y}px)`,
-              transition: joystickActive() ? "none" : "transform 0.2s ease-out",
-            }}
+          <svg
+            viewBox="0 0 128 128"
+            width="100%"
+            height="100%"
+            class="w-full h-full"
+            style={{ overflow: "visible" }} // Ensure SVG elements are not clipped
           >
-            <span class="text-xs font-bold text-gray-800">MOVE</span>
-          </div>
+            {/* Base circle */}
+            <circle cx="64" cy="64" r="64" fill="rgba(0, 0, 0, 0.3)" />
+
+            {/* Joystick knob */}
+            <g
+              transform={`translate(${64 + joystickPosition().x}, ${64 + joystickPosition().y})`}
+              style={{
+                transition: joystickActive()
+                  ? "none"
+                  : "transform 0.2s ease-out",
+              }}
+            >
+              <circle
+                cx="0"
+                cy="0"
+                r="32"
+                fill="rgba(255, 255, 255, 0.8)"
+                stroke="#555"
+                stroke-width="1"
+              />
+            </g>
+          </svg>
         </div>
 
-        {/* Right side - Altitude buttons */}
+        {/* Right side - Altitude buttons as SVG */}
         <div class="flex flex-col gap-4 pointer-events-auto">
+          {/* UP button */}
           <button
-            class="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center text-white shadow-lg touch-manipulation"
+            class="w-16 h-16 touch-manipulation focus:outline-none"
             onTouchStart={handleAltitudeUpStart}
             onTouchEnd={handleAltitudeEnd}
             onTouchCancel={handleAltitudeEnd}
+            aria-label="Up"
+            onMouseDown={handleAltitudeUpStart}
+            onMouseUp={handleAltitudeEnd}
+            onMouseOut={handleAltitudeEnd}
+            style={{
+              transition: "transform 0.2s ease, background-color 0.2s ease",
+              transform: upButtonPressed() ? "scale(0.95)" : "scale(1)",
+            }}
           >
-            UP
+            <Icon
+              name="up_button"
+              size="64"
+              color={upButtonPressed() ? "#4CAF50" : "#FFFFFF"}
+            />
           </button>
+
+          {/* DOWN button */}
           <button
-            class="w-16 h-16 bg-red-600 rounded-full flex items-center justify-center text-white shadow-lg touch-manipulation"
+            class="w-16 h-16 touch-manipulation focus:outline-none"
             onTouchStart={handleAltitudeDownStart}
             onTouchEnd={handleAltitudeEnd}
             onTouchCancel={handleAltitudeEnd}
+            aria-label="Down"
+            onMouseDown={handleAltitudeDownStart}
+            onMouseUp={handleAltitudeEnd}
+            onMouseOut={handleAltitudeEnd}
+            style={{
+              transition: "transform 0.2s ease, background-color 0.2s ease",
+              transform: downButtonPressed() ? "scale(0.95)" : "scale(1)",
+            }}
           >
-            DOWN
+            <Icon
+              name="down_button"
+              size="64"
+              color={downButtonPressed() ? "#FF5722" : "#FFFFFF"}
+            />
           </button>
         </div>
       </div>

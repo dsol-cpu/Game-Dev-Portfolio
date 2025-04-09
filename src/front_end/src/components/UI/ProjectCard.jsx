@@ -1,5 +1,6 @@
 import { Show, createMemo } from "solid-js";
 import { createThemeManager } from "../../stores/theme";
+import { Icon } from "../icons/Icon";
 
 const ProjectCard = (props) => {
   const themeManager = createThemeManager();
@@ -13,10 +14,10 @@ const ProjectCard = (props) => {
     title: `text-xl font-bold mb-2 ${isDark() ? "text-blue-100" : "text-blue-900"}`,
     description: `mb-4 ${isDark() ? "text-gray-300" : "text-gray-700"}`,
     techBadge: `text-xs px-2 py-1 rounded ${isDark() ? "bg-blue-800 text-blue-200" : "bg-blue-100 text-blue-800"}`,
-    githubLink: `font-medium ${isDark() ? "text-blue-300 hover:text-blue-200" : "text-blue-700 hover:text-blue-900"}`,
+    iconLink: `flex items-center justify-center p-2 rounded-full transition-colors ${isDark() ? "text-blue-300 hover:text-blue-200 hover:bg-blue-800" : "text-blue-700 hover:text-blue-900 hover:bg-blue-100"}`,
     demoLink: `bg-yellow-500 hover:bg-yellow-600 px-3 py-1 rounded text-sm font-medium text-blue-900`,
   }));
-
+  const GithubIcon = <Icon name="github" size="24px" />;
   return (
     <div class={styles().card}>
       <div class={styles().header}>
@@ -51,15 +52,16 @@ const ProjectCard = (props) => {
           </div>
         </div>
 
-        <div class="flex justify-between">
+        <div class="flex justify-between items-center">
           <a
+            name="github"
             href={props.project.githubUrl}
             target="_blank"
             rel="noopener noreferrer"
-            class={styles().githubLink}
+            class={styles().iconLink}
             aria-label={`GitHub repository for ${props.project.title}`}
           >
-            GitHub
+            <GithubIcon />
           </a>
           <a
             href={props.project.demoUrl}

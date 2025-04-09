@@ -10,7 +10,8 @@ import { navigationStore } from "../stores/navigation";
  * Hook for managing ship controls and movement with smooth turning
  */
 export function useShipControls(ship, setShipHeight) {
-  const { shipSpeed } = navigationStore;
+  const { shipSpeed, isArrived, setIsArrived, destinationSection } =
+    navigationStore;
 
   // Core state signals
   const [keysPressed, setKeysPressed] = createSignal({});
@@ -29,6 +30,8 @@ export function useShipControls(ship, setShipHeight) {
   );
   const [isFullscreen, setIsFullscreen] = createSignal(false);
   const [cardinalDirection, setCardinalDirection] = createSignal("N");
+  const [lastPosition, setLastPosition] = createSignal(null);
+  const [movementDetected, setMovementDetected] = createSignal(false);
 
   // Mobile controls state
   const [mobileMovementX, setMobileMovementX] = createSignal(0);
@@ -149,7 +152,32 @@ export function useShipControls(ship, setShipHeight) {
     setMobileMovementY(y);
   };
 
-  const controlAltitude = (change) => setMobileAltitudeChange(change);
+  const controlAltitude = (change) => {
+    setMobileAltitudeChange(change);
+    // Reset arrival state if changing altitude while at destination
+    if (change !== 0 && isArrived()) {
+      setIsArrived(false);
+    }
+  };
+  // Check if ship has moved significantly from the last position
+  const checkMovement = (shipObj) => {
+    const current = shipObj.position.clone();
+    const last = lastPosition();
+
+    if (last) {
+      // Calculate distance moved
+      const distance = current.distanceTo(last);
+
+      // If moved more than threshold and at a destination, reset arrived state
+      if (distance > 5 && isArrived()) {
+        setIsArrived(false);
+        setMovementDetected(true);
+      }
+    }
+
+    // Update last position
+    setLastPosition(current);
+  };
 
   // Ship update functions
   const updateShipControls = () => {
@@ -158,6 +186,9 @@ export function useShipControls(ship, setShipHeight) {
 
     const keys = keysPressed();
     const speedMultiplier = shipSpeed();
+
+    // Check if ship has moved from its last position
+    checkMovement(shipObj);
 
     // Get directional vectors
     const yawOnlyRotation = shipYawRotation();
@@ -181,6 +212,11 @@ export function useShipControls(ship, setShipHeight) {
     if (!moveVector.equals(new THREE.Vector3(0, 0, 0))) {
       shipObj.position.add(moveVector);
       setShipHeight(shipObj.position.y);
+
+      // Ship has moved, update arrival state
+      if (isArrived()) {
+        setIsArrived(false);
+      }
     }
 
     updateShipTilt(shipObj, speedMultiplier);
@@ -351,6 +387,11 @@ export function useShipControls(ship, setShipHeight) {
     setCurrentTurnRate(turnRate);
 
     if (turnRate !== 0) {
+      // If we're turning, we're no longer at the destination
+      if (isArrived()) {
+        setIsArrived(false);
+      }
+
       const rotationY = new THREE.Quaternion().setFromAxisAngle(
         new THREE.Vector3(0, 1, 0),
         turnRate
@@ -437,6 +478,7 @@ export function useShipControls(ship, setShipHeight) {
   // Return public API
   return {
     keysPressed,
+    setKeysPressed,
     shipYawRotation,
     resetOrientationInProgress,
     isFullscreen,
@@ -449,5 +491,7 @@ export function useShipControls(ship, setShipHeight) {
     increaseAltitude: () => controlAltitude(1),
     decreaseAltitude: () => controlAltitude(-1),
     stopAltitudeChange: () => controlAltitude(0),
+    isArrived,
+    setIsArrived,
   };
 }

@@ -1,72 +1,53 @@
-import { createSignal, createEffect, createMemo } from "solid-js";
+import { createMemo } from "solid-js";
 import { createThemeManager } from "../../stores/theme";
+import { viewStore } from "../../stores/view";
 import { Icon } from "../icons/Icon";
 
-export default function ViewToggleSwitch({ isScrollView, onToggle }) {
+export default function ViewToggleSwitch() {
   const themeManager = createThemeManager();
-  const { effectiveTheme } = themeManager;
-
-  // Flip the checked state meaning: checked now means "3D View" is active
-  const [isChecked, setIsChecked] = createSignal(!isScrollView());
-
-  // Update checkbox state when view mode changes
-  createEffect(() => {
-    setIsChecked(!isScrollView());
-  });
-
-  // Memoize theme-dependent values
-  const isLightTheme = createMemo(() => effectiveTheme() === "light");
-
-  // Memoize style classes
-  const containerClass = createMemo(
-    () =>
-      `fixed bottom-4 right-4 z-50 flex items-center justify-center gap-3 rounded-lg p-3 shadow-lg backdrop-blur-sm transition-colors ${
-        isLightTheme() ? "bg-white/90" : "bg-slate-800/90"
-      }`
-  );
+  const { isDark } = themeManager;
+  const { state: viewState, toggleView } = viewStore;
 
   const toggleClass = createMemo(
     () =>
       `w-11 h-6 rounded-full peer after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full transition-colors ${
-        isLightTheme()
-          ? "bg-gray-200 after:bg-white after:border-gray-300 peer-checked:bg-blue-600 peer-checked:after:border-white peer-focus:ring-blue-300"
-          : "bg-gray-700 after:bg-white after:border-gray-600 peer-checked:bg-cyan-600 peer-checked:after:border-white peer-focus:ring-blue-800"
+        isDark()
+          ? "bg-gray-700 after:bg-white after:border-gray-600 peer-checked:bg-cyan-600 peer-checked:after:border-white peer-focus:ring-blue-800"
+          : "bg-gray-200 after:bg-white after:border-gray-300 peer-checked:bg-blue-600 peer-checked:after:border-white peer-focus:ring-blue-300"
       } peer-focus:ring-4`
   );
 
-  // Extracted view option component for reusability
+  // View option button with label
   const ViewOption = ({ label, icon, active, onClick }) => (
-    <div class="flex flex-col items-center">
-      <button
-        onClick={onClick}
-        class="flex flex-col items-center gap-1 focus:outline-none"
-        aria-label={`Switch to ${label}`}
-      >
-        {icon}
-        <span class={`text-xs font-medium transition-colors`}>{label}</span>
-      </button>
-    </div>
+    <button
+      onClick={onClick}
+      class="flex flex-col items-center gap-1 focus:outline-none"
+      aria-label={`Switch to ${label}`}
+    >
+      {icon}
+      <span class="text-xs font-medium">{label}</span>
+    </button>
   );
 
   const scrollIcon = <Icon name="scroll" />;
   const threeDIcon = <Icon name="wheel" />;
 
   return (
-    <div class={containerClass()}>
+    <div class="flex items-center justify-center gap-2 py-3 border-b border-cyan-500/30">
       {/* Scroll View Option */}
       <ViewOption
         label="Scroll View"
         icon={scrollIcon}
-        active={!isChecked()}
-        onClick={() => isChecked() && onToggle()}
+        active={viewState.isScrollView}
+        onClick={() => !viewState.isScrollView && toggleView()}
       />
 
       {/* The toggle switch */}
       <label class="relative inline-flex cursor-pointer items-center">
         <input
           type="checkbox"
-          checked={isChecked()}
-          onChange={onToggle}
+          checked={!viewState.isScrollView}
+          onChange={toggleView}
           class="peer sr-only"
         />
         <div class={toggleClass()}></div>
@@ -76,8 +57,8 @@ export default function ViewToggleSwitch({ isScrollView, onToggle }) {
       <ViewOption
         label="3D View"
         icon={threeDIcon}
-        active={isChecked()}
-        onClick={() => !isChecked() && onToggle()}
+        active={!viewState.isScrollView}
+        onClick={() => viewState.isScrollView && toggleView()}
       />
     </div>
   );

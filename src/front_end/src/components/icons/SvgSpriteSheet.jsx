@@ -16,7 +16,6 @@ export const SvgSprite = () => {
   const createSvgSprite = () => {
     const isDarkMode = isDark(); // Get current theme state
     const currentTheme = isDarkMode ? "dark" : "light";
-    console.log(`Creating SVG sprite for theme: ${currentTheme}`);
 
     // Create sprite container if it doesn't exist
     let spriteContainer = document.getElementById("svg-sprite-container");
@@ -204,9 +203,9 @@ export const SvgSprite = () => {
 
     // Add to DOM
     spriteContainer.appendChild(svgElement);
-    console.log(
-      `SVG spritesheet created with ${successCount} icons for theme: ${currentTheme}`
-    );
+    // console.log(
+    //   `SVG spritesheet created with ${successCount} icons for theme: ${currentTheme}`
+    // );
   };
 
   // Handle theme change events
@@ -232,7 +231,7 @@ export const SvgSprite = () => {
   createEffect(() => {
     // Explicitly track the isDark signal to create dependency
     const isDarkMode = isDark();
-    console.log(`Theme reactivity triggered: isDark = ${isDarkMode}`);
+    // console.log(`Theme reactivity triggered: isDark = ${isDarkMode}`);
     createSvgSprite();
   });
 
