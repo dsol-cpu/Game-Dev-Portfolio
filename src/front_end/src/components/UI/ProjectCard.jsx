@@ -1,6 +1,6 @@
 import { Show, createMemo } from "solid-js";
 import { createThemeManager } from "../../stores/theme";
-import { Icon } from "../icons/Icon";
+import Icon from "../icons/Icon";
 
 const ProjectCard = (props) => {
   const themeManager = createThemeManager();

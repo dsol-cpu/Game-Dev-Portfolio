@@ -20,7 +20,6 @@ export const Icon = (props) => {
     ["name", "size", "class", "variant"]
   );
 
-  // Create a signal to track if the icon exists in the sprite
   const [iconExists, setIconExists] = createSignal(null); // Start with null instead of false
 
   // Build class name with variant
