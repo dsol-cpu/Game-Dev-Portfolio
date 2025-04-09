@@ -1,5 +1,6 @@
 import { createSignal, Show, onMount, onCleanup } from "solid-js";
 import { Icon } from "../icons/Icon";
+
 const MobileControls = (props) => {
   const [touchStartPosition, setTouchStartPosition] = createSignal({
     x: 0,
@@ -10,6 +11,9 @@ const MobileControls = (props) => {
   const [doubleTapTimer, setDoubleTapTimer] = createSignal(null);
   const [lastTapTime, setLastTapTime] = createSignal(0);
   const [isMobile, setIsMobile] = createSignal(false);
+  // Add state variables to track button press status
+  const [upButtonPressed, setUpButtonPressed] = createSignal(false);
+  const [downButtonPressed, setDownButtonPressed] = createSignal(false);
 
   // Check if device is mobile
   onMount(() => {
@@ -116,9 +120,10 @@ const MobileControls = (props) => {
     }
   };
 
-  // Altitude button handlers
+  // Altitude button handlers with color change
   const handleAltitudeUpStart = (e) => {
     if (e.cancelable) e.preventDefault();
+    setUpButtonPressed(true); // Set button state to pressed
     if (props.onAltitudeUp) {
       props.onAltitudeUp();
     }
@@ -126,6 +131,7 @@ const MobileControls = (props) => {
 
   const handleAltitudeDownStart = (e) => {
     if (e.cancelable) e.preventDefault();
+    setDownButtonPressed(true); // Set button state to pressed
     if (props.onAltitudeDown) {
       props.onAltitudeDown();
     }
@@ -133,6 +139,9 @@ const MobileControls = (props) => {
 
   const handleAltitudeEnd = (e) => {
     if (e.cancelable) e.preventDefault();
+    // Reset both button states
+    setUpButtonPressed(false);
+    setDownButtonPressed(false);
     if (props.onAltitudeStop) {
       props.onAltitudeStop();
     }
@@ -148,12 +157,14 @@ const MobileControls = (props) => {
           onTouchMove={handleJoystickMove}
           onTouchEnd={handleJoystickEnd}
           onTouchCancel={handleJoystickEnd}
+          style={{ overflow: "visible" }} // Allow the SVG to overflow the parent div
         >
           <svg
             viewBox="0 0 128 128"
             width="100%"
             height="100%"
             class="w-full h-full"
+            style={{ overflow: "visible" }} // Ensure SVG elements are not clipped
           >
             {/* Base circle */}
             <circle cx="64" cy="64" r="64" fill="rgba(0, 0, 0, 0.3)" />
@@ -175,23 +186,6 @@ const MobileControls = (props) => {
                 stroke="#555"
                 stroke-width="1"
               />
-              <text
-                x="0"
-                y="0"
-                text-anchor="middle"
-                dominant-baseline="middle"
-                fill="#333"
-                font-size="12"
-                font-weight="bold"
-              >
-                MOVE
-              </text>
-
-              {/* Directional arrows */}
-              <path
-                d="M0,-16 L-8,-8 L-2,-8 L-2,8 L-8,8 L0,16 L8,8 L2,8 L2,-8 L8,-8 Z"
-                fill="#555"
-              />
             </g>
           </svg>
         </div>
@@ -205,8 +199,19 @@ const MobileControls = (props) => {
             onTouchEnd={handleAltitudeEnd}
             onTouchCancel={handleAltitudeEnd}
             aria-label="Up"
+            onMouseDown={handleAltitudeUpStart}
+            onMouseUp={handleAltitudeEnd}
+            onMouseOut={handleAltitudeEnd}
+            style={{
+              transition: "transform 0.2s ease, background-color 0.2s ease",
+              transform: upButtonPressed() ? "scale(0.95)" : "scale(1)",
+            }}
           >
-            <Icon name="up_button" size="64" />
+            <Icon
+              name="up_button"
+              size="64"
+              color={upButtonPressed() ? "#4CAF50" : "#FFFFFF"}
+            />
           </button>
 
           {/* DOWN button */}
@@ -216,8 +221,19 @@ const MobileControls = (props) => {
             onTouchEnd={handleAltitudeEnd}
             onTouchCancel={handleAltitudeEnd}
             aria-label="Down"
+            onMouseDown={handleAltitudeDownStart}
+            onMouseUp={handleAltitudeEnd}
+            onMouseOut={handleAltitudeEnd}
+            style={{
+              transition: "transform 0.2s ease, background-color 0.2s ease",
+              transform: downButtonPressed() ? "scale(0.95)" : "scale(1)",
+            }}
           >
-            <Icon name="down_button" size="64" />
+            <Icon
+              name="down_button"
+              size="64"
+              color={downButtonPressed() ? "#FF5722" : "#FFFFFF"}
+            />
           </button>
         </div>
       </div>

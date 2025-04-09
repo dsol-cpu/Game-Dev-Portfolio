@@ -18,19 +18,20 @@ const AltitudePanel = (props) => {
     };
   });
 
+  // Create a memo for the status object
+  const heightStatus = createMemo(() => getHeightStatus(props.shipHeight));
+
   return (
     <div class="absolute top-1/2 right-4 -translate-y-1/2 text-white font-mono pointer-events-none w-28">
-      {/* Clean, bold title */}
-      <div class="text-center text-xs mb-1 font-bold tracking-widest drop-shadow-md">
+      {/* <div class="text-center text-xs mb-1 font-bold tracking-widest drop-shadow-md">
         ALTITUDE
-      </div>
-
+      </div> */}
       <div class="flex justify-center">
         {/* Thermometer with clean design and stronger border */}
-        <div class="relative w-5 h-44 bg-black/50 border-2 border-white/70 rounded-full overflow-hidden mb-1 shadow-md">
+        <div class="relative w-5 h-44 bg-black/50   overflow-hidden mb-1 shadow-md">
           {/* Colored fluid inside thermometer */}
           <div
-            class="absolute bottom-0 left-0 right-0 rounded-b-full"
+            class="absolute bottom-0 left-0 right-0 "
             style={getHeightBarStyle()}
           ></div>
           {/* Simple glass reflection */}
@@ -39,7 +40,7 @@ const AltitudePanel = (props) => {
             style={{ "z-index": 2 }}
           ></div>
           {/* Clear tick marks */}
-          <div
+          {/* <div
             class="absolute w-full h-full flex flex-col justify-between pointer-events-none"
             style={{ "z-index": 3 }}
           >
@@ -52,7 +53,7 @@ const AltitudePanel = (props) => {
             <div class="flex items-center justify-end pr-1">
               <div class="h-0.5 w-2 bg-white/90"></div>
             </div>
-          </div>
+          </div> */}
           {/* Height labels with better contrast */}
           <div class="absolute right-full top-0 h-full flex flex-col justify-between pr-2 text-xs font-bold">
             <div class="bg-black/30 px-1 rounded">{HEIGHT.MAX}m</div>
@@ -61,7 +62,6 @@ const AltitudePanel = (props) => {
           </div>
         </div>
       </div>
-
       {/* Current height display with improved contrast */}
       <div
         class="text-base font-bold text-center px-2 py-1 rounded-md bg-black/60 backdrop-blur-sm border border-white/20 mb-1 mx-auto"
@@ -71,10 +71,11 @@ const AltitudePanel = (props) => {
       >
         {props.shipHeight.toFixed(1)}m
       </div>
-
-      {/* Simple status indicator */}
-      <div class="text-center text-xs font-medium bg-black/40 rounded px-2 py-0.5">
-        {getHeightStatus(props.shipHeight)}
+      {/* Simple status indicator with fixed height and overflow handling */}
+      <div class="text-center text-xs font-medium bg-black/40 rounded px-2 py-0.5 h-5 flex items-center justify-center">
+        <span class={heightStatus().color + " whitespace-nowrap"}>
+          {heightStatus().icon} {heightStatus().text}
+        </span>
       </div>
     </div>
   );

@@ -42,13 +42,6 @@ export const Icon = (props) => {
 
   createEffect(() => {
     const iconId = `icon-${local.name}`;
-    console.log(`Checking for icon: ${iconId}`);
-    console.log(
-      `Available icons:`,
-      Array.from(document.querySelectorAll("symbol"))
-        .map((s) => s.id)
-        .join(", ")
-    );
 
     const symbolExists = document.getElementById(iconId);
     setIconExists(!!symbolExists);

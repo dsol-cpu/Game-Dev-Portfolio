@@ -102,20 +102,12 @@ const ControlsInfo = () => {
         text="Left Joystick - Move ship and turn"
       />
       <ControlItem
-        icon={
-          <svg class="h-4 w-4" viewBox="0 0 20 20" fill="blue">
-            <circle cx="10" cy="10" r="8" />
-          </svg>
-        }
-        text="Blue Button - Increase altitude"
+        icon={<Icon name="up_button" />}
+        text="Up - Increase altitude"
       />
       <ControlItem
-        icon={
-          <svg class="h-4 w-4" viewBox="0 0 20 20" fill="red">
-            <circle cx="10" cy="10" r="8" />
-          </svg>
-        }
-        text="Red Button - Decrease altitude"
+        icon={<Icon name="down_button" />}
+        text="Down Button - Decrease altitude"
       />
     </div>
   );
