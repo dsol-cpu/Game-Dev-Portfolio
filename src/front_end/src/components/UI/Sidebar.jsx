@@ -10,7 +10,7 @@ export default function Sidebar(props) {
   const { isDark } = createThemeManager();
   const [isOpen, setIsOpen] = createSignal(!props.isMobile);
   const [activeSection, setActiveSection] = createSignal("home");
-  const { state: viewState, toggleView } = viewStore; // Use the view store
+  const { state: viewState, toggleView } = viewStore;
 
   const {
     setTargetIsland,
@@ -217,12 +217,6 @@ export default function Sidebar(props) {
         {/* Theme Toggle */}
         <ThemeToggle />
 
-        {/* View Toggle Switch - Now using the view store */}
-        <ViewToggleSwitch
-          isScrollView={() => viewState.isScrollView}
-          onToggle={toggleView}
-        />
-
         <nav class="flex-1 overflow-y-auto px-4">
           <ul class="space-y-2 py-4">
             {portfolioSections.map((section) => {
@@ -254,9 +248,13 @@ export default function Sidebar(props) {
             })}
           </ul>
         </nav>
+        <ViewToggleSwitch
+          isScrollView={() => viewState.isScrollView}
+          onToggle={toggleView}
+        />
 
         <div class="border-t border-cyan-500/30 p-4 text-center text-xs opacity-70">
-          <span>David Solinsky ©{new Date().getFullYear()}</span>
+          <span>David Solinsky © {new Date().getFullYear()}</span>
         </div>
       </div>
     </aside>
