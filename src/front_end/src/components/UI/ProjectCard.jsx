@@ -17,7 +17,13 @@ const ProjectCard = (props) => {
     iconLink: `flex items-center justify-center p-2 rounded-full transition-colors ${isDark() ? "text-blue-300 hover:text-blue-200 hover:bg-blue-800" : "text-blue-700 hover:text-blue-900 hover:bg-blue-100"}`,
     demoLink: `bg-yellow-500 hover:bg-yellow-600 px-3 py-1 rounded text-sm font-medium text-blue-900`,
   }));
-  const GithubIcon = <Icon name="github" size="24px" />;
+  const GithubIcon = (
+    <Icon
+      name="github"
+      size="24px"
+      class={isDark() ? "text-white" : "text-black"}
+    />
+  );
   return (
     <div class={styles().card}>
       <div class={styles().header}>
