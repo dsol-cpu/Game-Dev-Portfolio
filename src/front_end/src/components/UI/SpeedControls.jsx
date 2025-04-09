@@ -17,10 +17,10 @@ export default function SpeedControls() {
         <Icon name="speedometer" />
 
         <div class="flex flex-col w-48">
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 focus:outline-none">
             <button
               onClick={() => setShipSpeed(0.5)}
-              class="focus:outline-none text-xs px-2 py-1 rounded bg-white/10 hover:bg-white/20"
+              class="focus:outline-none select-none text-xs px-2 py-1 rounded bg-white/10 hover:bg-white/20"
             >
               0.5x
             </button>
@@ -37,13 +37,13 @@ export default function SpeedControls() {
 
             <button
               onClick={() => setShipSpeed(2.0)}
-              class="text-xs px-2 py-1 rounded bg-white/10 hover:bg-white/20"
+              class="select-none text-xs px-2 py-1 rounded bg-white/10 hover:bg-white/20"
             >
               2.0x
             </button>
           </div>
           <div class="flex self-center justify-between mb-1">
-            <span class="text-xs">{getSpeedText()}</span>
+            <span class="select-none text-xs">{getSpeedText()}</span>
           </div>
         </div>
       </div>

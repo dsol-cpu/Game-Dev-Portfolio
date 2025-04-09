@@ -83,16 +83,16 @@ const ControlsInfo = () => {
 
   // Helper to render control items - moved outside component to avoid recreation
   const ControlItem = (props) => (
-    <div class="flex items-center mb-2 text-sm">
-      <div class="mr-2 flex-shrink-0 w-6 h-6 flex items-center justify-center">
+    <div class="flex items-center mb-2 text-sm select-none">
+      <div class="mr-2 flex-shrink-0 w-6 h-6 flex items-center justify-center select-none">
         {props.icon}
       </div>
-      <span>{props.text}</span>
+      <span class="select-none">{props.text}</span>
     </div>
   );
 
   const MobileControls = () => (
-    <div>
+    <div class="select-none">
       <ControlItem
         icon={
           <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
@@ -113,7 +113,7 @@ const ControlsInfo = () => {
   );
 
   const DesktopControls = () => (
-    <div>
+    <div class="select-none">
       <ControlItem
         icon={<Icon name="wasd" />}
         text="[ WASD/Arrow Keys ] - Move"
@@ -137,7 +137,7 @@ const ControlsInfo = () => {
         onBlur={handleMouseLeave}
       >
         <div class="flex justify-between items-center mb-3">
-          <h3 class="text-lg font-bold">Game Controls</h3>
+          <h3 class="text-lg font-bold select-none">Game Controls</h3>
           <button
             onClick={toggleCollapsed}
             onKeyDown={handleKeyboardToggle}
@@ -168,7 +168,7 @@ const ControlsInfo = () => {
         </Show>
 
         <Show when={!isMobile()} class="border-gray-600 text-gray-400">
-          <div class="text-xs mt-2 text-gray-400">
+          <div class=" select-none text-xs mt-2 text-gray-400">
             Press H to {isCollapsed() ? "expand" : "collapse"} controls
           </div>
         </Show>

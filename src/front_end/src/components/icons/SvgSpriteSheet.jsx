@@ -136,61 +136,66 @@ export const SvgSprite = () => {
         const themeClass = isSunOrMoon ? `theme-icon-${baseIconName}` : "";
         symbol.setAttribute("class", `themed-icon ${themeClass}`);
 
-        // Process the SVG elements
-        const childNodes = Array.from(originalSvg.childNodes);
-        childNodes.forEach((node) => {
-          if (node.nodeType === 1) {
-            // Element node
-            // Clone the node to avoid modifying the original
-            const clone = node.cloneNode(true);
-
-            // Get the stroke and fill attributes (if they exist)
-            const hasStroke =
-              clone.hasAttribute("stroke") &&
-              clone.getAttribute("stroke") !== "none";
-            const hasFill = clone.hasAttribute("fill");
-            const explicitNoneFill =
-              hasFill && clone.getAttribute("fill") === "none";
-
-            // IMPROVED COLOR HANDLING:
-            // 1. Always handle strokes consistently
-            if (hasStroke) {
-              clone.setAttribute("stroke", "currentColor");
-            } else if (
-              !clone.hasAttribute("stroke") &&
-              (clone.tagName === "path" ||
-                clone.tagName === "circle" ||
-                clone.tagName === "rect" ||
-                clone.tagName === "polygon")
-            ) {
-              // For common SVG elements, ensure stroke is explicitly set to none if not present
-              clone.setAttribute("stroke", "none");
-            }
-
-            // 2. Handle fills consistently
-            if (hasFill && !explicitNoneFill) {
-              // If fill was explicitly set to something other than "none"
-              clone.setAttribute("fill", "currentColor");
-            } else if (
-              !hasFill &&
-              (clone.tagName === "path" ||
-                clone.tagName === "circle" ||
-                clone.tagName === "rect" ||
-                clone.tagName === "polygon")
-            ) {
-              // If no fill was specified for shape elements, add currentColor
-              // This ensures consistent behavior for icons that rely on default fills
-              clone.setAttribute("fill", "currentColor");
-            } else if (explicitNoneFill) {
-              // Preserve explicit "none" fills
-              clone.setAttribute("fill", "none");
-            }
-
-            symbol.appendChild(clone);
-          } else {
-            // For non-element nodes (like text nodes), just clone and append
-            symbol.appendChild(node.cloneNode(true));
+        // Process the SVG elements - FIXED COLOR HANDLING
+        const processNode = (node) => {
+          if (node.nodeType !== 1) {
+            // For non-element nodes, just clone and append
+            return node.cloneNode(true);
           }
+
+          // Clone the node
+          const clone = node.cloneNode(false); // Don't clone children yet
+
+          // Check attributes
+          const hasStrokeAttr = node.hasAttribute("stroke");
+          const hasFillAttr = node.hasAttribute("fill");
+          const strokeValue = hasStrokeAttr
+            ? node.getAttribute("stroke")
+            : null;
+          const fillValue = hasFillAttr ? node.getAttribute("fill") : null;
+
+          // Handle stroke attribute
+          if (hasStrokeAttr && strokeValue !== "none") {
+            clone.setAttribute("stroke", "currentColor");
+          } else if (hasStrokeAttr && strokeValue === "none") {
+            clone.setAttribute("stroke", "none");
+          } else if (
+            !hasStrokeAttr &&
+            (node.tagName === "path" ||
+              node.tagName === "circle" ||
+              node.tagName === "rect" ||
+              node.tagName === "polygon" ||
+              node.tagName === "line" ||
+              node.tagName === "polyline")
+          ) {
+            // For shape elements without stroke, set it to none explicitly
+            clone.setAttribute("stroke", "none");
+          }
+
+          // Handle fill attribute
+          if (hasFillAttr) {
+            // Preserve the original fill value if it's "none"
+            if (fillValue === "none") {
+              clone.setAttribute("fill", "none");
+            } else {
+              clone.setAttribute("fill", "currentColor");
+            }
+          } else if (!hasFillAttr) {
+            // For elements without fill, add make fill none
+            clone.setAttribute("fill", "none");
+          }
+
+          // Process child nodes recursively
+          Array.from(node.childNodes).forEach((child) => {
+            clone.appendChild(processNode(child));
+          });
+
+          return clone;
+        };
+
+        // Process the root SVG children
+        Array.from(originalSvg.childNodes).forEach((node) => {
+          symbol.appendChild(processNode(node));
         });
 
         // Add the symbol to the main SVG
@@ -210,7 +215,7 @@ export const SvgSprite = () => {
 
   // Handle theme change events
   const handleThemeChange = (event) => {
-    console.log(`Theme change event received:`, event.detail);
+    // console.log(`Theme change event received:`, event.detail);
     createSvgSprite();
   };
 

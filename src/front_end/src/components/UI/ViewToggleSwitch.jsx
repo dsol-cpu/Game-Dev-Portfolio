@@ -25,7 +25,7 @@ export default function ViewToggleSwitch() {
       aria-label={`Switch to ${label}`}
     >
       {icon}
-      <span class="text-xs font-medium">{label}</span>
+      <span class="select-none text-xs font-medium">{label}</span>
     </button>
   );
 

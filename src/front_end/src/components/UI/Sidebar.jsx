@@ -121,7 +121,7 @@ export default function Sidebar(props) {
       destinationSection() === sectionId &&
       activeSection() === sectionId
     ) {
-      console.log("Already at destination:", sectionId);
+      // console.log("Already at destination:", sectionId);
 
       // Close sidebar on mobile even if we're not navigating
       if (props.isMobile) {
@@ -142,12 +142,12 @@ export default function Sidebar(props) {
 
     // Direct trigger of ship navigation
     if (window.shipNavigationInstance?.startNavigation) {
-      console.log(
-        "Starting navigation to island:",
-        islandIndex,
-        "section:",
-        sectionId
-      );
+      // console.log(
+      //   "Starting navigation to island:",
+      //   islandIndex,
+      //   "section:",
+      //   sectionId
+      // );
       window.shipNavigationInstance.startNavigation(islandIndex);
     } else {
       console.error("Ship navigation instance not found!");
@@ -288,7 +288,7 @@ export default function Sidebar(props) {
           onToggle={toggleView}
         />
 
-        <div class="border-t border-cyan-500/30 p-4 text-center text-xs opacity-70">
+        <div class="select-none border-t border-cyan-500/30 p-4 text-center text-xs opacity-70">
           <span>David Solinsky © {new Date().getFullYear()}</span>
         </div>
       </div>
