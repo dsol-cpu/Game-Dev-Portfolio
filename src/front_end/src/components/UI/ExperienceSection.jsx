@@ -121,7 +121,6 @@ const ExperienceSection = () => {
   const [expandedProject, setExpandedProject] = createSignal(null);
   const { isDark } = createThemeManager();
 
-  // Create memoized theme classes to prevent recalculation on every render
   const theme = createMemo(() => {
     const dark = isDark();
     return {
@@ -157,7 +156,6 @@ const ExperienceSection = () => {
     };
   });
 
-  // Memoize filtered experiences to avoid recomputation when theme changes
   const filteredExperiences = createMemo(() =>
     selectedCategory() === "all"
       ? EXPERIENCES

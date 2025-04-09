@@ -26,7 +26,6 @@ export default function Sidebar(props) {
     destinationSection,
   } = navigationStore;
 
-  // Memoize theme classes for better performance
   const sidebarClass = createMemo(() =>
     isDark()
       ? "bg-slate-900 text-green-300 border-cyan-700 bg-gradient-to-b from-slate-900 to-blue-900/40"

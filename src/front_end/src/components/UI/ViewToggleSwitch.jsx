@@ -8,7 +8,6 @@ export default function ViewToggleSwitch() {
   const { isDark } = themeManager;
   const { state: viewState, toggleView } = viewStore;
 
-  // Memoize theme-dependent styles
   const toggleClass = createMemo(
     () =>
       `w-11 h-6 rounded-full peer after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:after:translate-x-full transition-colors ${

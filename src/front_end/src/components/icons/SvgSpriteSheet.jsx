@@ -16,7 +16,7 @@ export const SvgSprite = () => {
   const createSvgSprite = () => {
     const isDarkMode = isDark(); // Get current theme state
     const currentTheme = isDarkMode ? "dark" : "light";
-    console.log(`Creating SVG sprite for theme: ${currentTheme}`);
+    console.log(`Creating SVG sprite manager for theme: ${currentTheme}`);
 
     // Create sprite container if it doesn't exist
     let spriteContainer = document.getElementById("svg-sprite-container");

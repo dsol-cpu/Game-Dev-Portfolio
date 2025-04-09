@@ -34,12 +34,10 @@ const ThreeScene = (props) => {
   const [loadingProgress, setLoadingProgress] = createSignal(0);
   const [assetsLoaded, setAssetsLoaded] = createSignal(false);
 
-  // Stable references to avoid recreating on render
   const getContainerRef = () => containerRef;
   const threeScene = useThreeScene(getContainerRef);
-  const getShip = () => threeScene.ship(); // Keep original implementation
+  const getShip = () => threeScene.ship();
 
-  // Memoized update function for better performance
   const updateShipHeight = (height) => {
     if (typeof height === "number" && threeScene.setShipHeight) {
       batch(() => {
@@ -115,7 +113,6 @@ const ThreeScene = (props) => {
     return isInViewport;
   };
 
-  // Optimized preload assets with caching
   const preloadAssets = async () => {
     try {
       // Check for cached assets first
@@ -244,7 +241,6 @@ const ThreeScene = (props) => {
     }
   };
 
-  // Optimized scene size update with debouncing
   let resizeTimeout;
   const updateSceneSize = () => {
     if (!containerRef) return;

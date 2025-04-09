@@ -13,10 +13,8 @@ const ControlsInfo = () => {
   const [isCollapsed, setIsCollapsed] = createSignal(false);
   const [isHovering, setIsHovering] = createSignal(false);
 
-  // Create a memo for panel opacity instead of using a signal and effect
   const panelOpacity = createMemo(() => (isHovering() ? "1" : "0.4"));
 
-  // Memoize panel style to reduce re-renders
   const panelStyle = createMemo(() => ({
     "background-color": "rgba(0, 0, 0, 0.65)",
     "backdrop-filter": "blur(10px)",
@@ -28,7 +26,6 @@ const ControlsInfo = () => {
     width: isCollapsed() ? "auto" : "16rem",
   }));
 
-  // Memoize SVG path for toggle button
   const toggleButtonPath = createMemo(() =>
     isCollapsed()
       ? "M4 8a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1zm0 4a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1z"
@@ -72,10 +69,8 @@ const ControlsInfo = () => {
     };
   });
 
-  // Memoize the toggle action to avoid recreating the function on each render
   const toggleCollapsed = () => setIsCollapsed((prev) => !prev);
 
-  // Optimize the keyboard handler to only run when appropriate keys are pressed
   const handleKeyboardToggle = (e) => {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
@@ -83,7 +78,6 @@ const ControlsInfo = () => {
     }
   };
 
-  // Optimize hover handlers
   const handleMouseEnter = () => setIsHovering(true);
   const handleMouseLeave = () => setIsHovering(false);
 
@@ -97,7 +91,6 @@ const ControlsInfo = () => {
     </div>
   );
 
-  // Memoize mobile control items to prevent recreation on each render
   const MobileControls = () => (
     <div>
       <ControlItem
@@ -127,21 +120,14 @@ const ControlsInfo = () => {
     </div>
   );
 
-  // Memoize desktop control items to prevent recreation on each render
   const DesktopControls = () => (
     <div>
       <ControlItem
         icon={<Icon name="wasd" />}
-        text="WASD/Arrow Keys - Move ship and turn"
+        text="[ WASD/Arrow Keys ] - Move"
       />
-      <ControlItem
-        icon={<Icon name="space" />}
-        text="Space - Increase altitude"
-      />
-      <ControlItem
-        icon={<Icon name="shift" />}
-        text="Shift - Decrease altitude"
-      />
+      <ControlItem icon={<Icon name="space" />} text="[ Space ] - Ascend" />
+      <ControlItem icon={<Icon name="shift" />} text="[ Shift ] - Descend" />
     </div>
   );
 
