@@ -5,7 +5,7 @@ import { navigationStore } from "../../stores/navigation";
 import { viewStore } from "../../stores/view"; // Import the view store
 import ViewToggleSwitch from "../UI/ViewToggleSwitch"; // Import the separated component
 import Icon from "../icons/Icon";
-
+import { ISLANDS } from "../../constants/islands";
 export default function Sidebar(props) {
   const { isDark } = createThemeManager();
   const [isOpen, setIsOpen] = createSignal(!props.isMobile);
@@ -17,6 +17,8 @@ export default function Sidebar(props) {
     setIsNavigating,
     setDestinationSection,
     isNavigating,
+    isArrived,
+    setIsArrived,
     navigationProgress,
     setNavigationProgress,
     navigatingSection,
@@ -42,13 +44,6 @@ export default function Sidebar(props) {
       ? "bg-blue-900/60 text-green-400 border-l-4 border-green-500"
       : "bg-teal-200/70 text-blue-900 border-l-4 border-blue-600"
   );
-
-  const sectionMap = {
-    home: 0,
-    experience: 1,
-    projects: 2,
-    resume: 3,
-  };
 
   const portfolioSections = ["home", "experience", "projects", "resume"];
 
@@ -120,16 +115,44 @@ export default function Sidebar(props) {
       return;
     }
 
-    // 3D view navigation
+    // Check if we're already at the destination and not currently navigating
+    if (
+      isArrived() &&
+      !isNavigating() &&
+      destinationSection() === sectionId &&
+      activeSection() === sectionId
+    ) {
+      console.log("Already at destination:", sectionId);
+
+      // Close sidebar on mobile even if we're not navigating
+      if (props.isMobile) {
+        setIsOpen(false);
+        notifySidebarChange(false);
+      }
+      return; // Skip navigation if already arrived at destination
+    }
+
+    // Set up navigation state
     setActiveSection(sectionId);
     setDestinationSection(sectionId);
     setNavigatingSection(sectionId);
     setTargetIsland(islandIndex);
+    setIsArrived(false);
     setIsNavigating(true);
     setNavigationProgress(0);
 
     // Direct trigger of ship navigation
-    triggerShipNavigation(islandIndex);
+    if (window.shipNavigationInstance?.startNavigation) {
+      console.log(
+        "Starting navigation to island:",
+        islandIndex,
+        "section:",
+        sectionId
+      );
+      window.shipNavigationInstance.startNavigation(islandIndex);
+    } else {
+      console.error("Ship navigation instance not found!");
+    }
 
     // Close sidebar on mobile after starting navigation
     if (props.isMobile) {
@@ -137,7 +160,6 @@ export default function Sidebar(props) {
       notifySidebarChange(false);
     }
   };
-
   // Reset active section when navigation completes
   createEffect(() => {
     if (!isNavigating() && navigatingSection()) {
@@ -225,15 +247,26 @@ export default function Sidebar(props) {
                 isNavigating() && navigatingSection() === section;
               const isDisabled =
                 isNavigating() && navigatingSection() !== section;
+
+              // Check if this section is the current destination and we've arrived
+              const isArrivedAtCurrentSection =
+                isArrived() &&
+                destinationSection() === section &&
+                !isNavigating();
+
               return (
                 <li>
                   <button
                     class={`flex w-full items-center rounded-lg px-4 py-3 font-medium transition-all duration-200
                       ${isActive || isNavigatingTo ? activeClass() : itemClass()}
                       ${isDisabled ? "opacity-50 pointer-events-none" : ""}`}
-                    onClick={(e) =>
-                      navigateToSection(section, sectionMap[section], e)
-                    }
+                    onClick={(e) => {
+                      // Don't allow clicking if we're currently navigating to any section
+                      if (isNavigating()) {
+                        return;
+                      }
+                      navigateToSection(section, ISLANDS[section], e);
+                    }}
                     disabled={isDisabled}
                   >
                     <span class="mr-3">{sectionIcons[section]}</span>
@@ -241,6 +274,9 @@ export default function Sidebar(props) {
                       {section}
                       {!viewState.isScrollView &&
                         getNavigationStatus()(section)}
+                      {!viewState.isScrollView &&
+                        isArrivedAtCurrentSection &&
+                        " (Arrived)"}
                     </span>
                   </button>
                 </li>

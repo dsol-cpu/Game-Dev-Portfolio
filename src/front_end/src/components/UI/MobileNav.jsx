@@ -1,7 +1,7 @@
 import { createSignal, createEffect } from "solid-js";
 import { createThemeManager } from "../../stores/theme";
 import { navigationStore } from "../../stores/navigation";
-
+import { ISLANDS } from "../../constants/islands";
 export default function MobileNav(props) {
   const { isDark } = createThemeManager();
   const [isMenuOpen, setIsMenuOpen] = createSignal(false);
@@ -17,14 +17,6 @@ export default function MobileNav(props) {
     navigatingSection,
     setNavigatingSection,
   } = navigationStore;
-
-  // Map sections to island indices
-  const sectionToIslandMap = {
-    home: 0,
-    experience: 1,
-    projects: 2,
-    resume: 3,
-  };
 
   // Navigate to island and section
   const navigateToIsland = (sectionId, islandIndex, event) => {
@@ -162,11 +154,7 @@ export default function MobileNav(props) {
                             : "hover:bg-emerald-200/60 hover:text-blue-800"
                       } ${isNavigating() ? "opacity-50 pointer-events-none" : ""}`}
                       onClick={(e) =>
-                        navigateToIsland(
-                          section,
-                          sectionToIslandMap[section],
-                          e
-                        )
+                        navigateToIsland(section, ISLANDS[section], e)
                       }
                       disabled={isNavigating()}
                     >

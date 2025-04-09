@@ -88,7 +88,7 @@ const AboutSection = () => {
         >
           <span>{expanded() ? "Show Less" : "Read More"}</span>
           <ChevronDownIcon
-            class={`ml-1 w-4 h-4 transition-transform duration-300 ${expanded() ? "rotate-180" : ""} group-hover:translate-y-0.5`}
+            class={`ml-1 w-4 h-4  ${expanded() ? "rotate-180" : ""} group-hover:translate-y-0.5`}
             style={{
               transform: expanded() ? "rotate(180deg)" : "none",
             }}
