@@ -16,47 +16,30 @@ import MobileControls from "./UI/MobileControls";
 import ControlsInfo from "./UI/ControlsInfo";
 import Compass from "./UI/Compass";
 import LoadingScreen from "./UI/LoadingScreen";
+import FullscreenButton from "./FullscreenButton";
 
-// Extracted SVG component for better reusability
-const FullscreenIcon = () => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="16"
-    height="16"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    stroke-width="2"
-    stroke-linecap="round"
-    stroke-linejoin="round"
-    class="text-yellow-400"
-  >
-    <polyline points="15 3 21 3 21 9"></polyline>
-    <polyline points="9 21 3 21 3 15"></polyline>
-    <line x1="21" y1="3" x2="14" y2="10"></line>
-    <line x1="3" y1="21" x2="10" y2="14"></line>
-  </svg>
-);
+// Asset caching implementation
+const CACHE_KEY = "three-scene-assets-cache";
+const CACHE_VERSION = "v1"; // Increment this when assets change
 
 const ThreeScene = (props) => {
   let containerRef;
   const [resolution, setResolution] = createSignal({ width: 0, height: 0 });
   const [isGameActive, setIsGameActive] = createSignal(false);
-  const [isFullscreen, setIsFullscreen] = createSignal(false);
   const [shipRotation, setShipRotation] = createSignal(0);
   const [shipHeight, setShipHeight] = createSignal(0);
   const [isVisible, setIsVisible] = createSignal(true);
   const [sceneInitialized, setSceneInitialized] = createSignal(false);
   const [isLoading, setIsLoading] = createSignal(true);
   const [loadingProgress, setLoadingProgress] = createSignal(0);
+  const [assetsLoaded, setAssetsLoaded] = createSignal(false);
 
-  // Memoized functions to ensure stable references
+  // Stable references to avoid recreating on render
   const getContainerRef = () => containerRef;
   const threeScene = useThreeScene(getContainerRef);
+  const getShip = () => threeScene.ship(); // Keep original implementation
 
-  const getShip = () => threeScene.ship();
-
-  // Memoize this function to avoid recreating it on every render
+  // Memoized update function for better performance
   const updateShipHeight = (height) => {
     if (typeof height === "number" && threeScene.setShipHeight) {
       batch(() => {
@@ -80,6 +63,43 @@ const ThreeScene = (props) => {
   // Derived value for whether controls should be shown
   const showControls = createMemo(() => props.isScrollView !== true);
 
+  // Derived value for showing scene
+  const showScene = createMemo(() => !isLoading() && sceneInitialized());
+
+  // Check asset cache status
+  const checkCachedAssets = () => {
+    try {
+      const cachedData = localStorage.getItem(CACHE_KEY);
+      if (!cachedData) return null;
+
+      const data = JSON.parse(cachedData);
+      if (data.version !== CACHE_VERSION) {
+        // Clear outdated cache
+        localStorage.removeItem(CACHE_KEY);
+        return null;
+      }
+
+      return data;
+    } catch (error) {
+      console.warn("Error reading asset cache:", error);
+      return null;
+    }
+  };
+
+  // Save asset load status to cache
+  const updateAssetCache = (assets) => {
+    try {
+      const cacheData = {
+        version: CACHE_VERSION,
+        timestamp: Date.now(),
+        assets,
+      };
+      localStorage.setItem(CACHE_KEY, JSON.stringify(cacheData));
+    } catch (error) {
+      console.warn("Error saving asset cache:", error);
+    }
+  };
+
   // Check if component is visible in viewport
   const checkVisibility = () => {
     if (!containerRef) return false;
@@ -95,9 +115,21 @@ const ThreeScene = (props) => {
     return isInViewport;
   };
 
-  // Preload assets with progress tracking
+  // Optimized preload assets with caching
   const preloadAssets = async () => {
     try {
+      // Check for cached assets first
+      const cachedAssets = checkCachedAssets();
+      if (cachedAssets) {
+        // Simulate faster loading when assets are cached
+        setLoadingProgress(30);
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        setLoadingProgress(60);
+        setAssetsLoaded(true);
+        return true;
+      }
+
+      // No cache available, load normally
       setLoadingProgress(0);
 
       // Start with asset preloading phase - 0% to 60%
@@ -105,9 +137,12 @@ const ThreeScene = (props) => {
         // Check if the preloadAssets method supports progress callbacks
         if (threeScene.preloadAssets.length > 0) {
           // If it supports progress callbacks
-          await threeScene.preloadAssets((progress) => {
+          const loadedAssets = await threeScene.preloadAssets((progress) => {
             setLoadingProgress(progress * 60); // Scale to 0-60%
           });
+
+          // Store asset load status in cache
+          updateAssetCache(loadedAssets || true);
         } else {
           // Simulate progress if no callback support
           const steps = 8;
@@ -116,6 +151,7 @@ const ThreeScene = (props) => {
             setLoadingProgress((i / steps) * 60);
           }
           await threeScene.preloadAssets();
+          updateAssetCache(true);
         }
       } else {
         // Simulate progress if no preloadAssets method
@@ -123,8 +159,10 @@ const ThreeScene = (props) => {
           await new Promise((resolve) => setTimeout(resolve, 150));
           setLoadingProgress(i * 6);
         }
+        updateAssetCache(true);
       }
 
+      setAssetsLoaded(true);
       return true;
     } catch (error) {
       console.error("Error preloading assets:", error);
@@ -139,34 +177,45 @@ const ThreeScene = (props) => {
     setIsLoading(true);
     setLoadingProgress(0);
 
-    // Preload assets first (0-60%)
-    await preloadAssets();
+    // Step 1: Preload assets (0-60%)
+    if (!assetsLoaded()) {
+      await preloadAssets();
+    }
 
-    // Scene initialization phase (60-90%)
+    // Step 2: Scene initialization phase (60-90%)
     setLoadingProgress(60);
     await new Promise((resolve) => setTimeout(resolve, 300));
 
     // Initialize the scene
-    const cleanupScene = threeScene.initScene?.() || (() => {});
+    let cleanupScene;
+    try {
+      cleanupScene = threeScene.initScene?.() || (() => {});
+    } catch (error) {
+      console.error("Scene initialization error:", error);
+      cleanupScene = () => {};
+    }
+
     setLoadingProgress(75);
     await new Promise((resolve) => setTimeout(resolve, 300));
 
-    // Set up controls (90-100%)
+    // Step 3: Set up controls (90-100%)
     setLoadingProgress(90);
 
     // Setup controls and finalize loading
     return new Promise((resolve) => {
       // Use requestAnimationFrame to ensure smooth transition
       requestAnimationFrame(async () => {
-        shipControls.setupControls?.();
-        setLoadingProgress(95);
+        try {
+          shipControls.setupControls?.();
+        } catch (error) {
+          console.error("Controls setup error:", error);
+        }
 
+        setLoadingProgress(95);
         await new Promise((resolve) => setTimeout(resolve, 300));
 
         // Complete loading
         setLoadingProgress(100);
-
-        // Wait for a brief moment at 100% before removing loading screen
         await new Promise((resolve) => setTimeout(resolve, 500));
 
         // Ready to activate scene
@@ -195,6 +244,8 @@ const ThreeScene = (props) => {
     }
   };
 
+  // Optimized scene size update with debouncing
+  let resizeTimeout;
   const updateSceneSize = () => {
     if (!containerRef) return;
 
@@ -216,7 +267,7 @@ const ThreeScene = (props) => {
     }
   };
 
-  // Update function for animation loop
+  // Update function for animation loop - kept similar to original for navigation compatibility
   const update = () => {
     if (!isGameActive() || !isVisible()) return;
 
@@ -237,7 +288,7 @@ const ThreeScene = (props) => {
     }
   };
 
-  // Setup visibility observer - extracted from onMount for clarity
+  // Setup visibility observer with IntersectionObserver
   const setupVisibilityObserver = () => {
     if (!containerRef) return () => {};
 
@@ -261,19 +312,6 @@ const ThreeScene = (props) => {
 
     observer.observe(containerRef);
     return () => observer.disconnect();
-  };
-
-  // Event handlers for UI interactions
-  const checkFullscreen = () => setIsFullscreen(!!document.fullscreenElement);
-
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch((err) => {
-        console.error(`Error attempting to enable fullscreen: ${err.message}`);
-      });
-    } else {
-      document.exitFullscreen();
-    }
   };
 
   // Mobile control handlers - grouped together for clarity
@@ -343,7 +381,7 @@ const ThreeScene = (props) => {
     };
   };
 
-  // Effects
+  // Effects - keeping original structure for navigation compatibility
   createEffect(() => {
     if (!sceneInitialized()) return;
 
@@ -372,7 +410,7 @@ const ThreeScene = (props) => {
     }
   });
 
-  // Handle window events in a single effect
+  // Handle window events with passive listeners and debouncing
   createEffect(() => {
     const handleResize = () => {
       checkVisibility();
@@ -381,24 +419,27 @@ const ThreeScene = (props) => {
       }
     };
 
-    // Use passive: true for better scroll performance
-    window.addEventListener("resize", handleResize, { passive: true });
+    // Debounced resize handler
+    const debouncedResize = () => {
+      if (resizeTimeout) clearTimeout(resizeTimeout);
+      resizeTimeout = setTimeout(handleResize, 100);
+    };
+
+    // Use passive listeners for better scroll performance
+    window.addEventListener("resize", debouncedResize, { passive: true });
     window.addEventListener("scroll", checkVisibility, { passive: true });
-    window.addEventListener("sidebarToggle", handleResize);
+    window.addEventListener("sidebarToggle", debouncedResize);
 
     return () => {
-      window.removeEventListener("resize", handleResize);
+      clearTimeout(resizeTimeout);
+      window.removeEventListener("resize", debouncedResize);
       window.removeEventListener("scroll", checkVisibility);
-      window.removeEventListener("sidebarToggle", handleResize);
+      window.removeEventListener("sidebarToggle", debouncedResize);
     };
   });
 
   // Component initialization
   onMount(() => {
-    // Add fullscreen event listener
-    document.addEventListener("fullscreenchange", checkFullscreen);
-    checkFullscreen();
-
     // Setup browser shortcuts prevention
     const cleanupShortcuts = setupBrowserShortcutPrevention();
 
@@ -425,8 +466,8 @@ const ThreeScene = (props) => {
     // Register all cleanups properly with SolidJS
     onCleanup(() => {
       cleanupObserver();
-      document.removeEventListener("fullscreenchange", checkFullscreen);
       cleanupShortcuts();
+      clearTimeout(resizeTimeout);
 
       // Clean up scene if it was initialized
       if (sceneInitialized()) {
@@ -435,9 +476,6 @@ const ThreeScene = (props) => {
       }
     });
   });
-
-  // Check if we should show the scene (only when loading is complete)
-  const showScene = createMemo(() => !isLoading() && sceneInitialized());
 
   return (
     <div class="relative h-screen overflow-hidden">
@@ -454,11 +492,15 @@ const ThreeScene = (props) => {
       {isLoading() && (
         <LoadingScreen
           message={
-            loadingProgress() < 60
+            loadingProgress() < 30
               ? "Loading assets..."
-              : loadingProgress() < 90
-                ? "Initializing world..."
-                : "Preparing controls..."
+              : loadingProgress() < 60
+                ? checkCachedAssets()
+                  ? "Loading cached assets..."
+                  : "Loading assets..."
+                : loadingProgress() < 90
+                  ? "Initializing world..."
+                  : "Preparing controls..."
           }
           progress={loadingProgress()}
         />
@@ -483,15 +525,7 @@ const ThreeScene = (props) => {
             onOrientationReset={mobileHandlers.handleOrientationReset}
           />
 
-          <button
-            onClick={toggleFullscreen}
-            class="absolute top-4 right-4 px-4 py-2 font-bold text-amber-100 transition-transform duration-300 border-2 border-yellow-600 rounded shadow-lg hover:scale-105 bg-gradient-to-b from-blue-800 to-blue-950"
-          >
-            <div class="flex items-center justify-center space-x-2">
-              <FullscreenIcon />
-              <span>Fullscreen</span>
-            </div>
-          </button>
+          <FullscreenButton />
         </>
       )}
     </div>

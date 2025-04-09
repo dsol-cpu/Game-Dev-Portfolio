@@ -2,7 +2,7 @@ import { createSignal, Show, createMemo } from "solid-js";
 import ResumeModal from "./ResumeModal";
 import { createThemeManager } from "../../stores/theme";
 import me from "../../assets/me.png";
-import resume from "../../assets/resume.pdf";
+import resume from "../../assets/David_Solinsky_resume.pdf";
 const DocumentIcon = (props) => (
   <svg
     {...props}

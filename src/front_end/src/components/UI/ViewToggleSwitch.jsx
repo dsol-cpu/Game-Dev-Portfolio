@@ -4,7 +4,7 @@ import { Icon } from "../icons/Icon";
 
 export default function ViewToggleSwitch({ isScrollView, onToggle }) {
   const themeManager = createThemeManager();
-  const { getEffectiveTheme } = themeManager;
+  const { effectiveTheme } = themeManager;
 
   // Flip the checked state meaning: checked now means "3D View" is active
   const [isChecked, setIsChecked] = createSignal(!isScrollView());
@@ -15,7 +15,7 @@ export default function ViewToggleSwitch({ isScrollView, onToggle }) {
   });
 
   // Memoize theme-dependent values
-  const isLightTheme = createMemo(() => getEffectiveTheme() === "light");
+  const isLightTheme = createMemo(() => effectiveTheme() === "light");
 
   // Memoize style classes
   const containerClass = createMemo(
@@ -34,14 +34,6 @@ export default function ViewToggleSwitch({ isScrollView, onToggle }) {
       } peer-focus:ring-4`
   );
 
-  // Function to get active/inactive text color
-  const getTextColorClass = (active) => {
-    if (active) {
-      return isLightTheme() ? "text-blue-600" : "text-cyan-500";
-    }
-    return "text-gray-400";
-  };
-
   // Extracted view option component for reusability
   const ViewOption = ({ label, icon, active, onClick }) => (
     <div class="flex flex-col items-center">
@@ -51,24 +43,20 @@ export default function ViewToggleSwitch({ isScrollView, onToggle }) {
         aria-label={`Switch to ${label}`}
       >
         {icon}
-        <span
-          class={`text-xs font-medium transition-colors ${getTextColorClass(active)}`}
-        >
-          {label}
-        </span>
+        <span class={`text-xs font-medium transition-colors`}>{label}</span>
       </button>
     </div>
   );
 
-  const scrollIcon = (active) => <Icon name="scroll" />;
-  const threeDIcon = (active) => <Icon name="wheel" />;
+  const scrollIcon = <Icon name="scroll" />;
+  const threeDIcon = <Icon name="wheel" />;
 
   return (
     <div class={containerClass()}>
       {/* Scroll View Option */}
       <ViewOption
         label="Scroll View"
-        icon={scrollIcon(!isChecked())}
+        icon={scrollIcon}
         active={!isChecked()}
         onClick={() => isChecked() && onToggle()}
       />
@@ -87,7 +75,7 @@ export default function ViewToggleSwitch({ isScrollView, onToggle }) {
       {/* 3D View Option */}
       <ViewOption
         label="3D View"
-        icon={threeDIcon(isChecked())}
+        icon={threeDIcon}
         active={isChecked()}
         onClick={() => !isChecked() && onToggle()}
       />

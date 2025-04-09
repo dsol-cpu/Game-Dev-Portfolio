@@ -1,27 +1,17 @@
 import { createMemo, onMount } from "solid-js";
 import { createThemeManager } from "../stores/theme";
 import { Icon } from "./icons/Icon";
-const SunIcon = (props) => <Icon name="sun" {...props} />;
-const MoonIcon = (props) => <Icon name="moon" {...props} />;
+const SunIcon = (active) => <Icon name="sun" />;
+const MoonIcon = (active) => <Icon name="moon" />;
 
 export default function ThemeToggle() {
   const themeManager = createThemeManager();
-  const { theme, isDark, toggleTheme, getEffectiveTheme, setTheme } =
-    themeManager;
-
-  // Memoize icon classes to avoid recalculation on each render
-  const iconClasses = createMemo(() => {
-    const effectiveTheme = getEffectiveTheme();
-    return {
-      sun: effectiveTheme === "light" ? "text-amber-500" : "text-gray-400",
-      moon: effectiveTheme === "dark" ? "text-indigo-300" : "text-gray-400",
-    };
-  });
+  const { theme, isDark, toggleTheme, effectiveTheme, setTheme } = themeManager;
 
   // Apply the user's theme choice or system default on initial load
   onMount(() => {
     if (theme() === "system") {
-      console.log("Starting with system default:", getEffectiveTheme());
+      console.log("Starting with system default:", effectiveTheme());
     }
   });
 
@@ -33,7 +23,7 @@ export default function ThemeToggle() {
         class="focus:outline-none"
         aria-label="Switch to light mode"
       >
-        <SunIcon class={iconClasses().sun} />
+        <SunIcon />
       </button>
 
       {/* The toggle switch */}
@@ -53,7 +43,7 @@ export default function ThemeToggle() {
         class="focus:outline-none"
         aria-label="Switch to dark mode"
       >
-        <MoonIcon class={iconClasses().moon} />
+        <MoonIcon />
       </button>
     </div>
   );
