@@ -2,11 +2,15 @@ import { createSignal, createEffect, createMemo } from "solid-js";
 import { createThemeManager } from "../../stores/theme";
 import ThemeToggle from "../ThemeToggle";
 import { navigationStore } from "../../stores/navigation";
+import { viewStore } from "../../stores/view"; // Import the view store
+import ViewToggleSwitch from "../UI/ViewToggleSwitch"; // Import the separated component
+import Icon from "../icons/Icon";
 
 export default function Sidebar(props) {
   const { isDark } = createThemeManager();
   const [isOpen, setIsOpen] = createSignal(!props.isMobile);
   const [activeSection, setActiveSection] = createSignal("home");
+  const { state: viewState, toggleView } = viewStore; // Use the view store
 
   const {
     setTargetIsland,
@@ -49,26 +53,10 @@ export default function Sidebar(props) {
   const portfolioSections = ["home", "experience", "projects", "resume"];
 
   const sectionIcons = {
-    home: (
-      <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-        <path d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"></path>
-      </svg>
-    ),
-    experience: (
-      <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-        <path d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3zM6 8a2 2 0 11-4 0 2 2 0 014 0zM16 18v-3a5.972 5.972 0 00-.75-2.906A3.005 3.005 0 0119 15v3h-3zM4.75 12.094A5.973 5.973 0 004 15v3H1v-3a3 3 0 013.75-2.906z"></path>
-      </svg>
-    ),
-    projects: (
-      <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-        <path d="M7 3a1 1 0 000 2h6a1 1 0 100-2H7zM4 7a1 1 0 011-1h10a1 1 0 110 2H5a1 1 0 01-1-1zM2 11a2 2 0 012-2h12a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4z"></path>
-      </svg>
-    ),
-    resume: (
-      <svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-        <path d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z"></path>
-      </svg>
-    ),
+    home: <Icon name="home" />,
+    experience: <Icon name="experience" />,
+    projects: <Icon name="projects" />,
+    resume: <Icon name="resume" />,
   };
 
   const getNavigationStatus = createMemo(() => {
@@ -121,7 +109,7 @@ export default function Sidebar(props) {
     event.preventDefault();
 
     // Handle scroll view navigation
-    if (props.isScrollView) {
+    if (viewState.isScrollView) {
       scrollToSection(sectionId);
       setActiveSection(sectionId);
       // Close sidebar on mobile after navigation
@@ -167,7 +155,7 @@ export default function Sidebar(props) {
 
   // Set up intersection observer for scroll view
   createEffect(() => {
-    if (!props.isScrollView) return;
+    if (!viewState.isScrollView) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -190,7 +178,7 @@ export default function Sidebar(props) {
   // Listen for portfolio section changes
   createEffect(() => {
     const handleSectionChange = (event) => {
-      if (props.isScrollView) {
+      if (viewState.isScrollView) {
         setActiveSection(event.detail.section);
       }
     };
@@ -225,7 +213,16 @@ export default function Sidebar(props) {
           </h2>
           <p class="mt-1 text-sm opacity-80">Game Developer & Designer</p>
         </div>
+
+        {/* Theme Toggle */}
         <ThemeToggle />
+
+        {/* View Toggle Switch - Now using the view store */}
+        <ViewToggleSwitch
+          isScrollView={() => viewState.isScrollView}
+          onToggle={toggleView}
+        />
+
         <nav class="flex-1 overflow-y-auto px-4">
           <ul class="space-y-2 py-4">
             {portfolioSections.map((section) => {
@@ -248,7 +245,8 @@ export default function Sidebar(props) {
                     <span class="mr-3">{sectionIcons[section]}</span>
                     <span class="capitalize">
                       {section}
-                      {!props.isScrollView && getNavigationStatus()(section)}
+                      {!viewState.isScrollView &&
+                        getNavigationStatus()(section)}
                     </span>
                   </button>
                 </li>

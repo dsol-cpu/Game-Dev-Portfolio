@@ -1,4 +1,4 @@
-import { createSignal, createEffect, createRoot } from "solid-js";
+import { createSignal, createEffect, createRoot, createMemo } from "solid-js";
 
 let themeManager;
 
@@ -13,44 +13,91 @@ export function createThemeManager() {
     const storedTheme = localStorage.getItem("theme");
     const [theme, setTheme] = createSignal(storedTheme || "system");
 
-    // Memoized effective theme (resolves 'system' to actual theme)
-    const getEffectiveTheme = () =>
-      theme() === "system" ? getSystemTheme() : theme();
+    // Create a reactive signal for the effective theme
+    const [effectiveTheme, setEffectiveTheme] = createSignal(
+      theme() === "system" ? getSystemTheme() : theme()
+    );
+
+    // Create a reactive signal for isDark
+    const [isDarkMode, setIsDarkMode] = createSignal(
+      effectiveTheme() === "dark"
+    );
+
+    // Update effective theme when base theme changes
+    createEffect(() => {
+      const newEffectiveTheme =
+        theme() === "system" ? getSystemTheme() : theme();
+      setEffectiveTheme(newEffectiveTheme);
+      setIsDarkMode(newEffectiveTheme === "dark");
+      console.log(
+        `Theme updated: ${theme()} -> Effective: ${newEffectiveTheme}, isDark: ${newEffectiveTheme === "dark"}`
+      );
+    });
 
     // Apply theme to DOM
     const applyTheme = () => {
-      const effectiveTheme = getEffectiveTheme();
-      const isDark = effectiveTheme === "dark";
+      const currentEffectiveTheme = effectiveTheme();
+      const isDark = currentEffectiveTheme === "dark";
 
-      document.documentElement.setAttribute("data-theme", effectiveTheme);
+      document.documentElement.setAttribute(
+        "data-theme",
+        currentEffectiveTheme
+      );
       document.documentElement.classList.toggle("dark", isDark);
       localStorage.setItem("theme", theme());
+
+      // Dispatch a custom event for theme changes
+      document.dispatchEvent(
+        new CustomEvent("themeChange", {
+          detail: {
+            theme: currentEffectiveTheme,
+            isDark,
+          },
+        })
+      );
     };
 
     // Handle system theme changes
     const handleSystemThemeChange = () => {
-      if (theme() === "system") applyTheme();
+      if (theme() === "system") {
+        const newSystemTheme = getSystemTheme();
+        setEffectiveTheme(newSystemTheme);
+        setIsDarkMode(newSystemTheme === "dark");
+        applyTheme();
+        console.log(
+          `System theme changed to: ${newSystemTheme}, isDark: ${newSystemTheme === "dark"}`
+        );
+      }
     };
 
     // Set up event listener
     mediaQuery.addEventListener("change", handleSystemThemeChange);
 
     // Apply theme when it changes
-    const unwatchTheme = createEffect(applyTheme);
+    createEffect(() => {
+      const currentTheme = effectiveTheme();
+      console.log(`Applying theme effect: ${currentTheme}`);
+      applyTheme();
+    });
 
     // Apply initial theme
     applyTheme();
 
     return {
       theme,
-      getEffectiveTheme,
-      setTheme,
-      toggleTheme: () =>
-        setTheme(getEffectiveTheme() === "dark" ? "light" : "dark"),
-      isDark: () => getEffectiveTheme() === "dark",
+      effectiveTheme,
+      isDark: isDarkMode,
+      setTheme: (newTheme) => {
+        console.log(`Setting theme to: ${newTheme}`);
+        setTheme(newTheme);
+      },
+      toggleTheme: () => {
+        const newTheme = effectiveTheme() === "dark" ? "light" : "dark";
+        console.log(`Toggling theme to: ${newTheme}`);
+        setTheme(newTheme);
+      },
       dispose: () => {
         mediaQuery.removeEventListener("change", handleSystemThemeChange);
-        unwatchTheme();
         dispose();
       },
     };

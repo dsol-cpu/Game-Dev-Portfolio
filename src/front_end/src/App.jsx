@@ -6,11 +6,13 @@ import PagePortfolio from "./components/PagePortfolio";
 import { createThemeManager } from "./stores/theme";
 import { navigationStore } from "./stores/navigation";
 import { resumeStore } from "./stores/resume";
+import { viewStore } from "./stores/view";
 import ResumeModal from "./components/UI/ResumeModal";
-import ViewToggleSwitch from "./components/UI/ViewToggleSwitch";
+import { SvgSprite } from "./components/icons/SvgSprite";
 
 const App = () => {
   createThemeManager();
+  <SvgSprite />;
   const { setTargetIsland, setIsNavigating, setDestinationSection } =
     navigationStore;
 
@@ -18,7 +20,8 @@ const App = () => {
     window.innerWidth >= 768
   );
   const [isMobile, setIsMobile] = createSignal(window.innerWidth < 768);
-  const [isScrollView, setIsScrollView] = createSignal(true);
+  // Use the viewStore instead of local state
+  const { state: viewState, toggleView } = viewStore;
   const [activeSection, setActiveSection] = createSignal("home");
   // Keep ThreeScene mounted always, just hide it when not active
   const [isThreeSceneInitialized, setIsThreeSceneInitialized] =
@@ -65,33 +68,12 @@ const App = () => {
     };
   });
 
-  const toggleView = () => {
-    const newViewState = !isScrollView();
-
-    // When switching to 3D view, ensure ThreeScene is initialized first
-    if (!newViewState && !isThreeSceneInitialized()) {
+  // Effect to initialize ThreeScene when switching to 3D view
+  createEffect(() => {
+    if (!viewState.isScrollView && !isThreeSceneInitialized()) {
       setIsThreeSceneInitialized(true);
-
-      // Small delay to ensure ThreeScene is rendered before showing it
-      setTimeout(() => {
-        setIsScrollView(newViewState);
-      }, 50);
-    } else {
-      setIsScrollView(newViewState);
     }
-
-    // Notify components about view change
-    const event = new CustomEvent("viewModeChanged", {
-      detail: { isScrollView: newViewState, activeSection: activeSection() },
-    });
-    window.dispatchEvent(event);
-
-    // Reset navigation state when switching to scroll view
-    if (newViewState) {
-      setIsNavigating(false);
-      setDestinationSection(activeSection());
-    }
-  };
+  });
 
   return (
     <div class="flex min-h-screen bg-slate-50 dark:bg-slate-900">
@@ -99,11 +81,10 @@ const App = () => {
       <Sidebar
         onToggle={(isOpen) => setIsSidebarOpen(isOpen)}
         isMobile={isMobile()}
-        isScrollView={isScrollView()}
       />
 
       {/* Mobile Navigation */}
-      <MobileNav isScrollView={isScrollView()} />
+      <MobileNav />
 
       {/* Main Content Area - Full width on mobile, adjusted on desktop */}
       <main
@@ -111,19 +92,21 @@ const App = () => {
       >
         {/* Keep ThreeScene mounted but hidden when not active */}
         <div
-          style={{ display: isScrollView() ? "none" : "block", height: "100%" }}
+          style={{
+            display: viewState.isScrollView ? "none" : "block",
+            height: "100%",
+          }}
         >
           <ThreeScene
             activeSection={activeSection()}
-            isScrollView={isScrollView()}
+            isScrollView={viewState.isScrollView}
           />
         </div>
 
-        {/* Scroll/3D View Toggle Button - Skies of Arcadia themed */}
-        <ViewToggleSwitch isScrollView={isScrollView} onToggle={toggleView} />
-
         {/* Traditional Portfolio Page - Only shown when scrollView is active */}
-        {isScrollView() && <PagePortfolio activeSection={activeSection()} />}
+        {viewState.isScrollView && (
+          <PagePortfolio activeSection={activeSection()} />
+        )}
       </main>
 
       <ResumeModal
