@@ -1,10 +1,9 @@
 import { Show, createMemo } from "solid-js";
 import { createThemeManager } from "../../stores/theme";
-import { Icon } from "../icons/Icon";
+import Icon from "../icons/Icon";
 
 const ProjectCard = (props) => {
-  const themeManager = createThemeManager();
-  const isDark = themeManager.isDark;
+  const { isDark } = createThemeManager();
 
   const styles = createMemo(() => ({
     card: `rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-shadow duration-300 border ${isDark() ? "bg-blue-900 border-blue-800" : "bg-blue-50 border-blue-100"}`,
@@ -17,7 +16,7 @@ const ProjectCard = (props) => {
     iconLink: `flex items-center justify-center p-2 rounded-full transition-colors ${isDark() ? "text-blue-300 hover:text-blue-200 hover:bg-blue-800" : "text-blue-700 hover:text-blue-900 hover:bg-blue-100"}`,
     demoLink: `bg-yellow-500 hover:bg-yellow-600 px-3 py-1 rounded text-sm font-medium text-blue-900`,
   }));
-  const GithubIcon = <Icon name="github" size="24px" />;
+
   return (
     <div class={styles().card}>
       <div class={styles().header}>
@@ -54,24 +53,28 @@ const ProjectCard = (props) => {
 
         <div class="flex justify-between items-center">
           <a
-            name="github"
             href={props.project.githubUrl}
             target="_blank"
             rel="noopener noreferrer"
             class={styles().iconLink}
             aria-label={`GitHub repository for ${props.project.title}`}
           >
-            <GithubIcon />
+            <Icon
+              name="github"
+              class={`w-6 h-6 ${isDark() ? "text-white" : "text-black"}`}
+            />
           </a>
-          <a
-            href={props.project.demoUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            class={styles().demoLink}
-            aria-label={`Live demo for ${props.project.title}`}
-          >
-            Live Demo
-          </a>
+          <Show when={props.project.demoUrl}>
+            <a
+              href={props.project.demoUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              class={styles().demoLink}
+              aria-label={`Live demo for ${props.project.title}`}
+            >
+              Live Demo
+            </a>
+          </Show>
         </div>
       </div>
     </div>

@@ -11,7 +11,7 @@ const LoadingScreen = (props) => {
         <div class="relative inline-block w-24 h-24">
           <Icon
             name="wheel"
-            class="w-full h-full animate-pulse text-yellow-300"
+            class="w-full h-full text-yellow-300 animate-spin"
           />
         </div>
         <p class="mt-4 text-xl text-yellow-300 font-bold">

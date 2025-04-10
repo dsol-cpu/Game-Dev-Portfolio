@@ -1,5 +1,6 @@
 import { createSignal, createMemo, For, Show } from "solid-js";
 import { createThemeManager } from "../../stores/theme";
+import Icon from "../icons/Icon";
 
 const CATEGORIES = [
   { id: "all", label: "All Projects" },
@@ -244,19 +245,7 @@ const ExperienceSection = () => {
                     {expandedProject() === exp.id
                       ? "Hide details"
                       : "View details"}
-                    <svg
-                      class={`w-4 h-4 ml-1 transform transition-transform ${expandedProject() === exp.id ? "rotate-180" : ""}`}
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                        stroke-width="2"
-                        d="M19 9l-7 7-7-7"
-                      ></path>
-                    </svg>
+                    <Icon name="chevron-down" />
                   </button>
 
                   <SocialLinks

@@ -88,12 +88,12 @@ export function createThemeManager() {
       effectiveTheme,
       isDark: isDarkMode,
       setTheme: (newTheme) => {
-        console.log(`Setting theme to: ${newTheme}`);
+        // console.log(`Setting theme to: ${newTheme}`);
         setTheme(newTheme);
       },
       toggleTheme: () => {
         const newTheme = effectiveTheme() === "dark" ? "light" : "dark";
-        console.log(`Toggling theme to: ${newTheme}`);
+        // console.log(`Toggling theme to: ${newTheme}`);
         setTheme(newTheme);
       },
       dispose: () => {

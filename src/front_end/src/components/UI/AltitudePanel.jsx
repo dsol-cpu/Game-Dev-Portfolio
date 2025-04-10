@@ -39,21 +39,6 @@ const AltitudePanel = (props) => {
             class="absolute top-0 left-0 w-1/2 h-full bg-white/10 rounded-l-full"
             style={{ "z-index": 2 }}
           ></div>
-          {/* Clear tick marks */}
-          {/* <div
-            class="absolute w-full h-full flex flex-col justify-between pointer-events-none"
-            style={{ "z-index": 3 }}
-          >
-            <div class="flex items-center justify-end pr-1">
-              <div class="h-0.5 w-2 bg-white/90"></div>
-            </div>
-            <div class="flex items-center justify-end pr-1">
-              <div class="h-0.5 w-2 bg-white/70"></div>
-            </div>
-            <div class="flex items-center justify-end pr-1">
-              <div class="h-0.5 w-2 bg-white/90"></div>
-            </div>
-          </div> */}
           {/* Height labels with better contrast */}
           <div class="absolute right-full top-0 h-full flex flex-col justify-between pr-2 text-xs font-bold">
             <div class="bg-black/30 px-1 rounded">{HEIGHT.MAX}m</div>
