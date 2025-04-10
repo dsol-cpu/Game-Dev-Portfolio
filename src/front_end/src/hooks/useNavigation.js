@@ -30,9 +30,14 @@ export function useNavigation(shipFn, setShipHeight, shipControlsHook) {
   const [pathProgress, setPathProgress] = createSignal(0);
   const [targetPosition, setTargetPosition] = createSignal(null);
   const [currentPosition, setCurrentPosition] = createSignal(null);
+  const [isNavigationInProgress, setIsNavigationInProgress] =
+    createSignal(false);
 
   // Start navigation to an island
   const startNavigation = (islandIndex) => {
+    // Prevent multiple navigation attempts
+    if (isNavigationInProgress()) return;
+
     const ship = shipFn(); // Get the actual ship object
     if (!ship || islandIndex >= ISLAND_DATA.length) return;
 
@@ -43,6 +48,8 @@ export function useNavigation(shipFn, setShipHeight, shipControlsHook) {
     ) {
       return;
     }
+
+    setIsNavigationInProgress(true);
 
     // Store exact target position from island data
     const exactPosition = ISLAND_DATA[islandIndex].position.clone();
@@ -124,6 +131,7 @@ export function useNavigation(shipFn, setShipHeight, shipControlsHook) {
       setIsNavigating(false);
       setTargetIsland(null);
       setTargetPosition(null);
+      setIsNavigationInProgress(false);
 
       // Smoothly reset ship orientation
       if (
