@@ -71,8 +71,8 @@ export const setupScene = (() => {
     // Renderer setup with performance options
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
-      powerPreference: "high-performance",
-      precision: "highp",
+      powerPreference: "default",
+      precision: "lowp",
       stencil: false,
     });
 
