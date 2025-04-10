@@ -1,8 +1,8 @@
 import { createMemo, onMount } from "solid-js";
 import { createThemeManager } from "../stores/theme";
 import { Icon } from "./icons/Icon";
-const SunIcon = (active) => <Icon name="sun" />;
-const MoonIcon = (active) => <Icon name="moon" />;
+const SunIcon = <Icon name="sun" />;
+const MoonIcon = <Icon name="moon" />;
 
 export default function ThemeToggle() {
   const themeManager = createThemeManager();

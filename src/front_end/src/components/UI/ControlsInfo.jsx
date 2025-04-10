@@ -99,15 +99,12 @@ const ControlsInfo = () => {
             <circle cx="10" cy="10" r="8" />
           </svg>
         }
-        text="Left Joystick - Move ship and turn"
+        text="[ Left Joystick ] - Move"
       />
-      <ControlItem
-        icon={<Icon name="up_button" />}
-        text="Up - Increase altitude"
-      />
+      <ControlItem icon={<Icon name="up_button" />} text="[ Up ] - Ascend" />
       <ControlItem
         icon={<Icon name="down_button" />}
-        text="Down Button - Decrease altitude"
+        text="[ Down ] - Descend"
       />
     </div>
   );
