@@ -1,5 +1,5 @@
 import { createSignal, createEffect } from "solid-js";
-import Sidebar from "./components/UI/Sidebar";
+import Sidebar from "./components/sidebar/index";
 import MobileNav from "./components/UI/MobileNav";
 import ThreeScene from "./components/ThreeScene";
 import PagePortfolio from "./components/PagePortfolio";

@@ -2,10 +2,11 @@ import { createSignal, createEffect, createMemo } from "solid-js";
 import { createThemeManager } from "../../stores/theme";
 import ThemeToggle from "../ThemeToggle";
 import { navigationStore } from "../../stores/navigation";
-import { viewStore } from "../../stores/view"; // Import the view store
-import ViewToggleSwitch from "../UI/ViewToggleSwitch"; // Import the separated component
+import { viewStore } from "../../stores/view";
+import ViewToggleSwitch from "../UI/ViewToggleSwitch";
 import Icon from "../icons/Icon";
 import { ISLANDS } from "../../constants/islands";
+
 export default function Sidebar(props) {
   const { isDark } = createThemeManager();
   const [isOpen, setIsOpen] = createSignal(!props.isMobile);
@@ -26,25 +27,24 @@ export default function Sidebar(props) {
     destinationSection,
   } = navigationStore;
 
-  const sidebarClass = createMemo(() =>
-    isDark()
-      ? "bg-slate-900 text-green-300 border-cyan-700 bg-gradient-to-b from-slate-900 to-blue-900/40"
-      : "bg-slate-100 text-slate-800 border-emerald-400 bg-gradient-to-b from-slate-100 to-teal-200/50"
-  );
-
-  const itemClass = createMemo(() =>
-    isDark()
+  // Memoized style classes
+  const styles = createMemo(() => ({
+    sidebar: `sidebar fixed top-0 left-0 z-30 h-full border-r shadow-lg ${
+      isDark()
+        ? "bg-slate-900 text-green-300 border-cyan-700 bg-gradient-to-b from-slate-900 to-blue-900/40"
+        : "bg-slate-100 text-slate-800 border-emerald-400 bg-gradient-to-b from-slate-100 to-teal-200/50"
+    } hidden md:block`,
+    item: isDark()
       ? "hover:bg-blue-800/40 hover:text-yellow-300"
-      : "hover:bg-emerald-200/60 hover:text-blue-800"
-  );
-
-  const activeClass = createMemo(() =>
-    isDark()
+      : "hover:bg-emerald-200/60 hover:text-blue-800",
+    active: isDark()
       ? "bg-blue-900/60 text-green-400 border-l-4 border-green-500"
-      : "bg-teal-200/70 text-blue-900 border-l-4 border-blue-600"
-  );
-
-  const portfolioSections = ["home", "experience", "projects", "resume"];
+      : "bg-teal-200/70 text-blue-900 border-l-4 border-blue-600",
+    nameGradient: `bg-gradient-to-r ${
+      isDark() ? "from-green-400 to-cyan-400" : "from-blue-700 to-teal-600"
+    } bg-clip-text text-transparent`,
+    borderColor: "border-cyan-500/30",
+  }));
 
   const sectionIcons = {
     home: <Icon name="home" />,
@@ -53,14 +53,15 @@ export default function Sidebar(props) {
     resume: <Icon name="resume" />,
   };
 
-  const getNavigationStatus = createMemo(() => {
-    return (section) => {
-      if (isNavigating() && navigatingSection() === section) {
-        return ` (Flying ${Math.round(navigationProgress())}%)`;
-      }
-      return "";
-    };
-  });
+  const portfolioSections = ["home", "experience", "projects", "resume"];
+
+  // Navigation status message
+  const getNavigationStatus = (section) => {
+    if (isNavigating() && navigatingSection() === section) {
+      return ` (Flying ${Math.round(navigationProgress())}%)`;
+    }
+    return "";
+  };
 
   // Notify parent of sidebar state changes
   const notifySidebarChange = (open) => {
@@ -89,16 +90,6 @@ export default function Sidebar(props) {
     }
   };
 
-  // Function to directly call the ship's navigation function
-  const triggerShipNavigation = (islandIndex) => {
-    if (
-      window.shipNavigationInstance?.startNavigation &&
-      typeof window.shipNavigationInstance.startNavigation === "function"
-    ) {
-      window.shipNavigationInstance.startNavigation(islandIndex);
-    }
-  };
-
   const navigateToSection = (sectionId, islandIndex, event) => {
     event.preventDefault();
 
@@ -106,6 +97,7 @@ export default function Sidebar(props) {
     if (viewState.isScrollView) {
       scrollToSection(sectionId);
       setActiveSection(sectionId);
+
       // Close sidebar on mobile after navigation
       if (props.isMobile) {
         setIsOpen(false);
@@ -114,21 +106,19 @@ export default function Sidebar(props) {
       return;
     }
 
-    // Check if we're already at the destination and not currently navigating
+    // Skip navigation if already at destination
     if (
       isArrived() &&
       !isNavigating() &&
       destinationSection() === sectionId &&
       activeSection() === sectionId
     ) {
-      // console.log("Already at destination:", sectionId);
-
-      // Close sidebar on mobile even if we're not navigating
+      // Close sidebar on mobile
       if (props.isMobile) {
         setIsOpen(false);
         notifySidebarChange(false);
       }
-      return; // Skip navigation if already arrived at destination
+      return;
     }
 
     // Set up navigation state
@@ -142,12 +132,6 @@ export default function Sidebar(props) {
 
     // Direct trigger of ship navigation
     if (window.shipNavigationInstance?.startNavigation) {
-      // console.log(
-      //   "Starting navigation to island:",
-      //   islandIndex,
-      //   "section:",
-      //   sectionId
-      // );
       window.shipNavigationInstance.startNavigation(islandIndex);
     } else {
       console.error("Ship navigation instance not found!");
@@ -159,6 +143,7 @@ export default function Sidebar(props) {
       notifySidebarChange(false);
     }
   };
+
   // Reset active section when navigation completes
   createEffect(() => {
     if (!isNavigating() && navigatingSection()) {
@@ -216,7 +201,7 @@ export default function Sidebar(props) {
 
   return (
     <aside
-      class={`sidebar fixed top-0 left-0 z-30 h-full border-r shadow-lg ${sidebarClass()} hidden md:block`}
+      class={styles().sidebar}
       style={{
         width: "280px",
         transform: isOpen() ? "translateX(0)" : "translateX(-100%)",
@@ -224,13 +209,9 @@ export default function Sidebar(props) {
       }}
     >
       <div class="flex h-full flex-col pt-16">
-        <div class="border-b border-cyan-500/30 px-6 py-6">
+        <div class={`border-b ${styles().borderColor} px-6 py-6`}>
           <h2 class="text-2xl font-bold">
-            <span
-              class={`bg-gradient-to-r ${isDark() ? "from-green-400 to-cyan-400" : "from-blue-700 to-teal-600"} bg-clip-text text-transparent`}
-            >
-              David Solinsky
-            </span>
+            <span class={styles().nameGradient}>David Solinsky</span>
           </h2>
           <p class="mt-1 text-sm opacity-80">Game Developer & Designer</p>
         </div>
@@ -246,8 +227,6 @@ export default function Sidebar(props) {
                 isNavigating() && navigatingSection() === section;
               const isDisabled =
                 isNavigating() && navigatingSection() !== section;
-
-              // Check if this section is the current destination and we've arrived
               const isArrivedAtCurrentSection =
                 isArrived() &&
                 destinationSection() === section &&
@@ -257,22 +236,19 @@ export default function Sidebar(props) {
                 <li>
                   <button
                     class={`flex w-full items-center rounded-lg px-4 py-3 font-medium transition-all duration-200
-                      ${isActive || isNavigatingTo ? activeClass() : itemClass()}
+                      ${isActive || isNavigatingTo ? styles().active : styles().item}
                       ${isDisabled ? "opacity-50 pointer-events-none" : ""}`}
                     onClick={(e) => {
-                      // Don't allow clicking if we're currently navigating to any section
-                      if (isNavigating()) {
-                        return;
+                      if (!isNavigating()) {
+                        navigateToSection(section, ISLANDS[section], e);
                       }
-                      navigateToSection(section, ISLANDS[section], e);
                     }}
                     disabled={isDisabled}
                   >
                     <span class="mr-3">{sectionIcons[section]}</span>
                     <span class="capitalize">
                       {section}
-                      {!viewState.isScrollView &&
-                        getNavigationStatus()(section)}
+                      {!viewState.isScrollView && getNavigationStatus(section)}
                       {!viewState.isScrollView &&
                         isArrivedAtCurrentSection &&
                         " (Arrived)"}
@@ -283,13 +259,16 @@ export default function Sidebar(props) {
             })}
           </ul>
         </nav>
+
         <ViewToggleSwitch
           isScrollView={() => viewState.isScrollView}
           onToggle={toggleView}
         />
 
-        <div class="select-none border-t border-cyan-500/30 p-4 text-center text-xs opacity-70">
-          <span>David Solinsky © {new Date().getFullYear()}</span>
+        <div
+          class={`select-none border-t ${styles().borderColor} p-4 text-center text-xs opacity-70`}
+        >
+          <span> © {new Date().getFullYear()} David Solinsky</span>
         </div>
       </div>
     </aside>
