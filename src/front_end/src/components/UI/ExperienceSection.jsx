@@ -18,7 +18,7 @@ const EXPERIENCES = [
     description: "WarioWare-like Cooking game.",
     category: "shipped",
     responsibilities: ["Made the art", "Made DDR-like minigame"],
-    technologies: ["SFML", "C++", "Git"],
+    technologies: ["SFML", "C++", "Git", "CMake"],
   },
 ];
 
@@ -240,12 +240,15 @@ const ExperienceSection = () => {
                 <div class="flex items-center justify-between pt-2">
                   <button
                     onClick={() => toggleProject(exp.id)}
-                    class={`text-sm font-medium ${theme().detailsBtn} flex items-center`}
+                    className={`text-sm font-medium ${theme().detailsBtn} flex items-center gap-1`}
                   >
                     {expandedProject() === exp.id
                       ? "Hide details"
                       : "View details"}
-                    <Icon name="chevron-down" />
+                    <Icon
+                      name="chevron-down"
+                      className={`ml-1 transition-transform ${expandedProject() === exp.id ? "scale-y-[-1]" : ""}`}
+                    />
                   </button>
 
                   <SocialLinks

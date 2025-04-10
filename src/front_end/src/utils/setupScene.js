@@ -72,7 +72,7 @@ export const setupScene = (() => {
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
       powerPreference: "high-performance",
-      precision: "mediump",
+      precision: "highp",
       stencil: false,
     });
 
