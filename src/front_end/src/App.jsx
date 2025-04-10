@@ -1,6 +1,5 @@
 import { createSignal, createEffect } from "solid-js";
-import Sidebar from "./components/sidebar/index";
-import MobileNav from "./components/UI/MobileNav";
+import Sidebar from "./components/sidebar/Sidebar";
 import ThreeScene from "./components/ThreeScene";
 import PagePortfolio from "./components/PagePortfolio";
 import { createThemeManager } from "./stores/theme";
@@ -79,14 +78,11 @@ const App = () => {
 
   return (
     <div class="flex min-h-screen bg-slate-50 dark:bg-slate-900">
-      {/* Desktop Sidebar - hidden on mobile */}
+      {/* Sidebar component */}
       <Sidebar
         onToggle={(isOpen) => setIsSidebarOpen(isOpen)}
         isMobile={isMobile()}
       />
-
-      {/* Mobile Navigation */}
-      <MobileNav />
 
       {/* Main Content Area - Full width on mobile, adjusted on desktop */}
       <main
