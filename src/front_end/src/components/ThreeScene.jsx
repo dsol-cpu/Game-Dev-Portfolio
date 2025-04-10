@@ -3,7 +3,7 @@ import { navigationStore } from "../stores/navigation";
 import { useThreeScene } from "../hooks/useThreeScene";
 import { useShipControls } from "../hooks/useShipControls";
 import { useNavigation } from "../hooks/useNavigation";
-import { useIslandArrivalPopup } from "../hooks/useIslandArrivalPopup";
+// import { useIslandArrivalPopup } from "../hooks/useIslandArrivalPopup";
 import { useVisibilityObserver } from "../hooks/useVisibilityObserver";
 import { useAssetCache } from "../hooks/useAssetCache";
 import SceneContainer from "./SceneContainer";
@@ -38,7 +38,7 @@ const ThreeScene = (props) => {
 
   const shipControls = useShipControls(getShip, updateShipHeight);
   const navigation = useNavigation(getShip, updateShipHeight, shipControls);
-  const arrivalPopup = useIslandArrivalPopup(getScene());
+  // const arrivalPopup = useIslandArrivalPopup(getScene());
 
   const { targetIsland, isNavigating } = navigationStore;
 
@@ -84,7 +84,7 @@ const ThreeScene = (props) => {
     if (camera && ship) {
       shipControls.updateCamera?.(camera);
       setShipRotation(ship.rotation.y);
-      arrivalPopup.update(camera);
+      // arrivalPopup.update(camera);
     }
   };
 
@@ -161,7 +161,7 @@ const ThreeScene = (props) => {
       requestAnimationFrame(async () => {
         try {
           shipControls.setupControls?.();
-          arrivalPopup.initPopup();
+          // arrivalPopup.initPopup();
         } catch (error) {
           console.error("Controls setup error:", error);
         }
@@ -341,7 +341,7 @@ const ThreeScene = (props) => {
         islands.length > 0
       ) {
         navigation.startNavigation(currentTargetIsland);
-        arrivalPopup.setupNavigationListener(islands);
+        // arrivalPopup.setupNavigationListener(islands);
       }
     };
 

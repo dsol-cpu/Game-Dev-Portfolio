@@ -3,7 +3,7 @@ import { createSignal } from "solid-js";
 export const createNavigationStore = () => {
   const [targetIsland, setTargetIsland] = createSignal(null);
   const [isNavigating, setIsNavigating] = createSignal(false);
-  const [isArrived, setIsArrived] = createSignal({});
+  const [isArrived, setIsArrived] = createSignal(false);
   const [destinationSection, setDestinationSection] = createSignal("home");
   const [navigationProgress, setNavigationProgress] = createSignal(0);
   const [navigatingSection, setNavigatingSection] = createSignal(null);
