@@ -1,5 +1,11 @@
 import * as THREE from "three";
 import { colors } from "../constants/constants";
+import { deviceStore } from "../stores/device";
+import {
+  resolveContainer,
+  setupShadows,
+  optimizeRenderer,
+} from "../utils/deviceUtils";
 
 export const setupScene = (() => {
   const directionalLightPosition = new THREE.Vector3(10, 10, 10);
@@ -8,39 +14,9 @@ export const setupScene = (() => {
   let containerWidth = 0;
   let containerHeight = 0;
 
-  /**
-   * Resolves various container reference types to a DOM element
-   * @param {*} containerRef - Reference to the container (function, DOM element, ref object, or string ID)
-   * @returns {HTMLElement} The resolved DOM element
-   */
-  const resolveContainer = (containerRef) => {
-    // Skip resolution if already a DOM element
-    if (containerRef && containerRef.nodeType) {
-      return containerRef;
-    }
-
-    // Handle SolidJS ref function
-    if (typeof containerRef === "function") {
-      return containerRef();
-    }
-
-    if (containerRef && typeof containerRef === "object") {
-      return (
-        containerRef.current ||
-        containerRef.element ||
-        containerRef.dom ||
-        containerRef
-      );
-    }
-
-    if (typeof containerRef === "string") {
-      return document.getElementById(containerRef);
-    }
-
-    return containerRef;
-  };
-
   return (containerRef) => {
+    const { isMobile } = deviceStore;
+
     // Resolve container reference
     const container = resolveContainer(containerRef);
 
@@ -68,22 +44,27 @@ export const setupScene = (() => {
     camera.position.set(0, 5, 15);
     camera.lookAt(cameraTarget);
 
-    // Renderer setup with performance options
+    // Renderer setup with device-specific optimizations
     const renderer = new THREE.WebGLRenderer({
-      antialias: true,
-      powerPreference: "default",
-      precision: "lowp",
+      antialias: !isMobile(), // Disable antialiasing on mobile for performance
+      powerPreference: "high-performance",
+      precision: isMobile() ? "lowp" : "mediump",
       stencil: false,
+      alpha: false, // Optimization: disable alpha when using background color
     });
 
+    // Apply device-specific renderer optimizations
+    optimizeRenderer(renderer);
     renderer.setSize(containerWidth, containerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Limit pixel ratio for performance
     container.appendChild(renderer.domElement);
 
     // Lighting
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
     const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
     directionalLight.position.copy(directionalLightPosition);
+
+    // Set up shadows with device-specific optimizations
+    setupShadows(renderer, directionalLight);
 
     // Batch scene additions
     scene.add(ambientLight, directionalLight);

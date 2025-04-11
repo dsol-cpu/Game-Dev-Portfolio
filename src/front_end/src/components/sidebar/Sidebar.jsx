@@ -2,6 +2,7 @@ import { createSignal, createEffect, createMemo } from "solid-js";
 import { createThemeManager } from "../../stores/theme";
 import { navigationStore } from "../../stores/navigation";
 import { viewStore } from "../../stores/view";
+import { deviceStore } from "../../stores/device";
 import SidebarHeader from "./Header";
 import NavigationMenu from "./NavigationMenu";
 import SidebarFooter from "./Footer";
@@ -12,10 +13,14 @@ import MobileMenu from "./MobileMenu";
 
 export default function Sidebar(props) {
   const { isDark } = createThemeManager();
-  const [isOpen, setIsOpen] = createSignal(!props.isMobile);
+  const { isMobile, registerCleanup } = deviceStore;
+  const [isOpen, setIsOpen] = createSignal(!isMobile());
   const [activeSection, setActiveSection] = createSignal("home");
   const { state: viewState, toggleView } = viewStore;
   const navigation = navigationStore;
+
+  // Register cleanup for device store
+  registerCleanup();
 
   const portfolioSections = ["home", "experience", "projects", "resume"];
 
@@ -25,7 +30,7 @@ export default function Sidebar(props) {
         isDark()
           ? "bg-slate-900 text-green-300 border-cyan-700 bg-gradient-to-b from-slate-900 to-blue-900/40"
           : "bg-slate-100 text-slate-800 border-emerald-400 bg-gradient-to-b from-slate-100 to-teal-200/50"
-      } ${props.isMobile ? "hidden" : "hidden md:block"}`
+      } ${isMobile() ? "hidden" : "hidden md:block"}`
   );
 
   // Notify parent of sidebar state changes
@@ -64,7 +69,7 @@ export default function Sidebar(props) {
       setActiveSection(sectionId);
 
       // Close sidebar on mobile after navigation
-      if (props.isMobile) {
+      if (isMobile()) {
         setIsOpen(false);
         notifySidebarChange(false);
       }
@@ -79,7 +84,7 @@ export default function Sidebar(props) {
       activeSection() === sectionId
     ) {
       // Close sidebar on mobile
-      if (props.isMobile) {
+      if (isMobile()) {
         setIsOpen(false);
         notifySidebarChange(false);
       }
@@ -103,7 +108,7 @@ export default function Sidebar(props) {
     }
 
     // Close sidebar on mobile after starting navigation
-    if (props.isMobile) {
+    if (isMobile()) {
       setIsOpen(false);
       notifySidebarChange(false);
     }
@@ -117,9 +122,9 @@ export default function Sidebar(props) {
     }
   });
 
-  // Update isOpen when isMobile prop changes
+  // Update isOpen when isMobile changes (using deviceStore instead of props)
   createEffect(() => {
-    const newState = !props.isMobile;
+    const newState = !isMobile();
     setIsOpen(newState);
     notifySidebarChange(newState);
   });
@@ -163,7 +168,7 @@ export default function Sidebar(props) {
 
   // Handle click outside mobile menu to close it
   createEffect(() => {
-    if (!props.isMobile) return;
+    if (!isMobile()) return;
 
     const handleClickOutside = (event) => {
       if (
@@ -180,10 +185,10 @@ export default function Sidebar(props) {
     return () => document.removeEventListener("click", handleClickOutside);
   });
 
-  // Render mobile or desktop sidebar based on isMobile prop
+  // Render mobile or desktop sidebar based on deviceStore's isMobile
   return (
     <>
-      {props.isMobile ? (
+      {isMobile() ? (
         <>
           <MobileMenuButton
             isOpen={isOpen}

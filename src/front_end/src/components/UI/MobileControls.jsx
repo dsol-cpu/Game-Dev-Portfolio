@@ -1,7 +1,9 @@
 import { createSignal, Show, onMount, onCleanup } from "solid-js";
 import { Icon } from "../icons/Icon";
+import { deviceStore } from "../../stores/device";
 
 const MobileControls = (props) => {
+  const { isMobile, registerCleanup } = deviceStore;
   const [touchStartPosition, setTouchStartPosition] = createSignal({
     x: 0,
     y: 0,
@@ -10,31 +12,18 @@ const MobileControls = (props) => {
   const [joystickActive, setJoystickActive] = createSignal(false);
   const [doubleTapTimer, setDoubleTapTimer] = createSignal(null);
   const [lastTapTime, setLastTapTime] = createSignal(0);
-  const [isMobile, setIsMobile] = createSignal(false);
+
   // Add state variables to track button press status
   const [upButtonPressed, setUpButtonPressed] = createSignal(false);
   const [downButtonPressed, setDownButtonPressed] = createSignal(false);
 
-  // Check if device is mobile
+  // Register cleanup for device store events
+  registerCleanup();
+
   onMount(() => {
-    const checkMobile = () => {
-      const mobile =
-        /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-          navigator.userAgent
-        );
-      setIsMobile(mobile);
-    };
-
-    checkMobile();
-    window.addEventListener("resize", checkMobile);
-
     // Handle passive event listener setting for the entire document's touch events
     document.addEventListener("touchstart", function () {}, { passive: false });
     document.addEventListener("touchmove", function () {}, { passive: false });
-
-    onCleanup(() => {
-      window.removeEventListener("resize", checkMobile);
-    });
   });
 
   // Joystick controls

@@ -6,12 +6,16 @@ import {
   createMemo,
 } from "solid-js";
 import { Icon } from "../icons/Icon";
+import { deviceStore } from "../../stores/device";
 
 const ControlsInfo = () => {
-  const [isMobile, setIsMobile] = createSignal(false);
+  const { isMobile, registerCleanup } = deviceStore;
   const [isVisible, setIsVisible] = createSignal(true);
   const [isCollapsed, setIsCollapsed] = createSignal(false);
   const [isHovering, setIsHovering] = createSignal(false);
+
+  // Register cleanup for device store events
+  registerCleanup();
 
   const panelOpacity = createMemo(() => (isHovering() ? "1" : "0.4"));
 
@@ -32,22 +36,7 @@ const ControlsInfo = () => {
       : "M3 7a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 6a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z"
   );
 
-  // Check if device is mobile only once on mount and on resize
   onMount(() => {
-    // Debounced check for mobile devices
-    let resizeTimer;
-
-    const checkMobile = () => {
-      clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(() => {
-        setIsMobile(
-          /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-            navigator.userAgent
-          )
-        );
-      }, 100);
-    };
-
     // Event handler for keyboard shortcuts with appropriate passive option
     const handleKeyDown = (e) => {
       if (e.key === "h" || e.key === "H") {
@@ -55,16 +44,10 @@ const ControlsInfo = () => {
       }
     };
 
-    // Initial check
-    checkMobile();
-
     // Add event listeners with passive option for better performance
-    window.addEventListener("resize", checkMobile, { passive: true });
     window.addEventListener("keydown", handleKeyDown, { passive: true });
 
     return () => {
-      clearTimeout(resizeTimer);
-      window.removeEventListener("resize", checkMobile);
       window.removeEventListener("keydown", handleKeyDown);
     };
   });
@@ -165,7 +148,7 @@ const ControlsInfo = () => {
         </Show>
 
         <Show when={!isMobile()} class="border-gray-600 text-gray-400">
-          <div class=" select-none text-xs mt-2 text-gray-400">
+          <div class="select-none text-xs mt-2 text-gray-400">
             Press H to {isCollapsed() ? "expand" : "collapse"} controls
           </div>
         </Show>
