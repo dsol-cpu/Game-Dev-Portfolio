@@ -26,6 +26,31 @@ export const isMobileDevice = () => {
 };
 
 /**
+ * Detects if the device is an Android device
+ * @returns {boolean} True if the device is Android, false otherwise
+ */
+export const isAndroidDevice = () => {
+  return /Android/i.test(navigator.userAgent);
+};
+
+/**
+ * Check if device is an older Android (likely to have WebGL limitations)
+ * @returns {boolean} True if the device is likely an older Android device
+ */
+export const isOlderAndroid = () => {
+  if (!isAndroidDevice()) return false;
+
+  // Check Android version number from user agent
+  const match = navigator.userAgent.match(/Android\s([0-9\.]*)/);
+  if (match && match[1]) {
+    const version = parseFloat(match[1]);
+    return version < 9; // Consider Android 8 and lower as "older"
+  }
+
+  return false;
+};
+
+/**
  * Detects if the current device is a tablet
  * @returns {boolean} True if the device is a tablet, false otherwise
  */
@@ -62,12 +87,17 @@ export const getOrientation = () => {
 export const optimizeRenderer = (renderer) => {
   if (!renderer) return;
 
-  const mobile = isMobileDevice();
+  const isAndroid = isAndroidDevice();
+  const isOldAndroid = isOlderAndroid();
 
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, mobile ? 1 : 2));
+  // Fixed pixel ratio - particularly important for older Android
+  renderer.setPixelRatio(1);
 
-  if (mobile) {
-    renderer.sortObjects = false; // Optimization for simpler scenes
+  // For older Android devices, enable additional optimizations
+  if (isOldAndroid) {
+    renderer.shadowMap.autoUpdate = false; // Manual shadow updates only
+    renderer.physicallyCorrectLights = false;
+    renderer.toneMapping = THREE.NoToneMapping;
   }
 };
 
@@ -79,69 +109,107 @@ export const optimizeRenderer = (renderer) => {
 export const setupShadows = (renderer, directionalLight) => {
   if (!renderer || !directionalLight) return;
 
-  const mobile = isMobileDevice();
+  const isAndroid = isAndroidDevice();
+  const isOldAndroid = isOlderAndroid();
 
-  // Enable shadows on the renderer
+  // Enable shadows on the renderer (unless it's an older Android)
   renderer.shadowMap.enabled = true;
 
-  // Choose shadow type based on device - PCFShadowMap works on most devices
-  renderer.shadowMap.type = THREE.PCFShadowMap;
+  // Special handling for Android devices
+  if (isAndroid) {
+    // For older Android, use the most basic shadow type
+    if (isOldAndroid) {
+      renderer.shadowMap.type = THREE.BasicShadowMap;
 
-  // Configure directional light to cast shadows
-  directionalLight.castShadow = true;
+      // Very small shadow maps for older Android
+      directionalLight.shadow.mapSize.width = 256;
+      directionalLight.shadow.mapSize.height = 256;
 
-  // Configure shadow map size based on device capability
-  if (mobile) {
-    directionalLight.shadow.mapSize.width = 512;
-    directionalLight.shadow.mapSize.height = 512;
+      // Tighter frustum for better precision
+      directionalLight.shadow.camera.near = 2;
+      directionalLight.shadow.camera.far = 30;
+      directionalLight.shadow.camera.left = -5;
+      directionalLight.shadow.camera.right = 5;
+      directionalLight.shadow.camera.top = 5;
+      directionalLight.shadow.camera.bottom = -5;
+
+      // More aggressive bias settings for basic shadow maps
+      directionalLight.shadow.bias = -0.005;
+      directionalLight.shadow.normalBias = 0.05;
+    } else {
+      // For newer Android devices
+      renderer.shadowMap.type = THREE.PCFShadowMap;
+
+      directionalLight.shadow.mapSize.width = 512;
+      directionalLight.shadow.mapSize.height = 512;
+
+      directionalLight.shadow.camera.near = 1;
+      directionalLight.shadow.camera.far = 50;
+      directionalLight.shadow.camera.left = -10;
+      directionalLight.shadow.camera.right = 10;
+      directionalLight.shadow.camera.top = 10;
+      directionalLight.shadow.camera.bottom = -10;
+
+      directionalLight.shadow.bias = -0.001;
+      directionalLight.shadow.normalBias = 0.03;
+    }
   } else {
+    // Non-Android devices (iOS, iPad, desktop)
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
     directionalLight.shadow.mapSize.width = 1024;
     directionalLight.shadow.mapSize.height = 1024;
+
+    directionalLight.shadow.camera.near = 0.5;
+    directionalLight.shadow.camera.far = 100;
+    directionalLight.shadow.camera.left = -20;
+    directionalLight.shadow.camera.right = 20;
+    directionalLight.shadow.camera.top = 20;
+    directionalLight.shadow.camera.bottom = -20;
+
+    directionalLight.shadow.bias = -0.0005;
+    directionalLight.shadow.normalBias = 0.02;
   }
 
-  // Shadow camera configuration
-  directionalLight.shadow.camera.near = 0.5;
-  directionalLight.shadow.camera.far = 50; // Reduced far plane for better precision
+  // Enable shadow casting
+  directionalLight.castShadow = true;
 
-  // Keep frustum reasonable
-  const frustumSize = mobile ? 10 : 20;
-  directionalLight.shadow.camera.left = -frustumSize;
-  directionalLight.shadow.camera.right = frustumSize;
-  directionalLight.shadow.camera.top = frustumSize;
-  directionalLight.shadow.camera.bottom = -frustumSize;
-
-  // Critical for fixing shadow artifacts
-  directionalLight.shadow.bias = -0.0005;
-  directionalLight.shadow.normalBias = 0.02;
-
+  // Update the camera projection matrix
   directionalLight.shadow.camera.updateProjectionMatrix();
 
-  // For mobile devices, add a simple helper function to fix common shadow issues
-  if (mobile) {
-    // Use a helper function to fix shadow rendering on scene objects
-    renderer.fixMobileShadows = (scene) => {
-      scene.traverse((object) => {
-        if (object.isMesh) {
-          // Ensure materials are set up correctly for shadows
-          if (object.castShadow || object.receiveShadow) {
-            if (object.material) {
-              // Handle array of materials
-              if (Array.isArray(object.material)) {
-                object.material.forEach((mat) => {
-                  mat.shadowSide = THREE.FrontSide;
-                  mat.needsUpdate = true;
-                });
-              } else {
-                // Single material
-                object.material.shadowSide = THREE.FrontSide;
-                object.material.needsUpdate = true;
-              }
-            }
-          }
-        }
-      });
-    };
+  // For older Android, we need to manually update shadows once on init
+  if (isOldAndroid) {
+    // Force shadow map update once
+    renderer.shadowMap.needsUpdate = true;
   }
+};
+
+/**
+ * Apply Android shadow compatibility for an entire scene
+ * @param {THREE.Scene} scene - The Three.js scene
+ */
+export const applyAndroidShadowFix = (scene) => {
+  if (!isAndroidDevice()) return;
+
+  // Traverse the scene and fix material settings
+  scene.traverse((object) => {
+    if (object.isMesh && object.material) {
+      // For arrays of materials
+      if (Array.isArray(object.material)) {
+        object.material.forEach((material) => {
+          // Disable shadow-causing features that may cause problems
+          material.flatShading = true;
+
+          // Ensure material updates
+          material.needsUpdate = true;
+        });
+      } else {
+        // For single materials
+        object.material.flatShading = true;
+        object.material.needsUpdate = true;
+      }
+    }
+  });
 };
 
 /**

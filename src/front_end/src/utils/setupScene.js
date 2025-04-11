@@ -5,6 +5,9 @@ import {
   resolveContainer,
   setupShadows,
   optimizeRenderer,
+  isAndroidDevice,
+  isOlderAndroid,
+  applyAndroidShadowFix,
 } from "../utils/deviceUtils";
 
 export const setupScene = (() => {
@@ -16,6 +19,8 @@ export const setupScene = (() => {
 
   return (containerRef) => {
     const { isMobile } = deviceStore;
+    const isAndroid = isAndroidDevice();
+    const isOldAndroid = isOlderAndroid();
 
     // Resolve container reference
     const container = resolveContainer(containerRef);
@@ -32,7 +37,14 @@ export const setupScene = (() => {
     // Scene setup
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(colors.sky);
-    scene.fog = new THREE.Fog(colors.sky, 20, 100);
+
+    // Adjust fog for better performance on Android
+    if (isOldAndroid) {
+      // Use simpler fog or disable it for older Android
+      scene.fog = new THREE.Fog(colors.sky, 10, 50);
+    } else {
+      scene.fog = new THREE.Fog(colors.sky, 20, 100);
+    }
 
     // Camera setup with cached aspect ratio
     const camera = new THREE.PerspectiveCamera(
@@ -46,9 +58,10 @@ export const setupScene = (() => {
 
     // Renderer setup with device-specific optimizations
     const renderer = new THREE.WebGLRenderer({
-      antialias: !isMobile(), // Disable antialiasing on mobile for performance
+      antialias: !(isMobile() || isAndroid), // Disable antialiasing on mobile and all Android
       powerPreference: "high-performance",
-      precision: isMobile() ? "lowp" : "mediump",
+      // Critical change: use mediump for Android to fix shadow rendering
+      precision: isAndroid ? "mediump" : isMobile() ? "lowp" : "mediump",
       stencil: false,
       alpha: false, // Optimization: disable alpha when using background color
     });
@@ -59,8 +72,14 @@ export const setupScene = (() => {
     container.appendChild(renderer.domElement);
 
     // Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    const ambientLight = new THREE.AmbientLight(
+      0xffffff,
+      isAndroid ? 0.7 : 0.5
+    );
+    const directionalLight = new THREE.DirectionalLight(
+      0xffffff,
+      isAndroid ? 0.6 : 0.8
+    );
     directionalLight.position.copy(directionalLightPosition);
 
     // Set up shadows with device-specific optimizations
@@ -68,6 +87,19 @@ export const setupScene = (() => {
 
     // Batch scene additions
     scene.add(ambientLight, directionalLight);
+
+    // Apply Android-specific shadow fix to scene materials
+    if (isAndroid) {
+      applyAndroidShadowFix(scene);
+    }
+
+    // For older Android, we need a manual shadow map update after scene setup
+    if (isOldAndroid && renderer.shadowMap.enabled) {
+      setTimeout(() => {
+        renderer.shadowMap.needsUpdate = true;
+        renderer.render(scene, camera); // Force a render to update shadow maps
+      }, 100);
+    }
 
     // Create resize handler that can be called externally
     const handleResize = () => {
