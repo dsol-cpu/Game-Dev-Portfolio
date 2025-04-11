@@ -1,12 +1,12 @@
-import { createSignal, createEffect } from "solid-js";
-import Sidebar from "./components/sidebar/index";
-import MobileNav from "./components/UI/MobileNav";
+import { createEffect, createSignal } from "solid-js";
+import Sidebar from "./components/sidebar/Sidebar";
 import ThreeScene from "./components/ThreeScene";
 import PagePortfolio from "./components/PagePortfolio";
 import { createThemeManager } from "./stores/theme";
 import { navigationStore } from "./stores/navigation";
 import { resumeStore } from "./stores/resume";
 import { viewStore } from "./stores/view";
+import { deviceStore } from "./stores/device";
 import ResumeModal from "./components/UI/ResumeModal";
 import { SvgSprite } from "./components/icons/SvgSpriteSheet";
 
@@ -15,16 +15,22 @@ const SvgSpriteSheet = () => <SvgSprite />;
 const App = () => {
   SvgSpriteSheet();
   createThemeManager();
+
   const { setTargetIsland, setIsNavigating, setDestinationSection } =
     navigationStore;
+  const { state: viewState } = viewStore;
+  const { isMobile, updateDeviceInfo, registerCleanup } = deviceStore;
 
+  // Register cleanup for device store events
+  registerCleanup();
+
+  // Create local state for sidebar and active section
   const [isSidebarOpen, setIsSidebarOpen] = createSignal(
-    window.innerWidth >= 768
+    !isMobile() // Now using the deviceStore
   );
-  const [isMobile, setIsMobile] = createSignal(window.innerWidth < 768);
-  // Use the viewStore instead of local state
-  const { state: viewState, toggleView } = viewStore;
+
   const [activeSection, setActiveSection] = createSignal("home");
+
   // Keep ThreeScene mounted always, just hide it when not active
   const [isThreeSceneInitialized, setIsThreeSceneInitialized] =
     createSignal(false);
@@ -44,16 +50,11 @@ const App = () => {
     };
 
     const handleResize = () => {
-      const mobile = window.innerWidth < 768;
-      setIsMobile(mobile);
+      // Using deviceStore's isMobile signal - will update automatically
 
-      // On desktop (>= 768px), sidebar is open by default
-      // On mobile (< 768px), sidebar is closed by default
-      if (!mobile) {
-        setIsSidebarOpen(true);
-      } else {
-        setIsSidebarOpen(false);
-      }
+      // On desktop, sidebar is open by default
+      // On mobile, sidebar is closed by default
+      !isMobile() ? setIsSidebarOpen(true) : setIsSidebarOpen(false);
     };
 
     window.addEventListener("sidebarToggle", handleSidebarToggle);
@@ -79,14 +80,11 @@ const App = () => {
 
   return (
     <div class="flex min-h-screen bg-slate-50 dark:bg-slate-900">
-      {/* Desktop Sidebar - hidden on mobile */}
+      {/* Sidebar component */}
       <Sidebar
         onToggle={(isOpen) => setIsSidebarOpen(isOpen)}
         isMobile={isMobile()}
       />
-
-      {/* Mobile Navigation */}
-      <MobileNav />
 
       {/* Main Content Area - Full width on mobile, adjusted on desktop */}
       <main

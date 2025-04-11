@@ -101,7 +101,6 @@ export function useNavigation(shipFn, setShipHeight, shipControlsHook) {
     });
   });
 
-  // Update ship position along navigation path
   const updateNavigation = () => {
     const ship = shipFn(); // Get the actual ship object
     if (!isNavigating() || !currentPath() || !ship) return false;

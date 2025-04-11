@@ -1,20 +1,28 @@
 import { createSignal, createEffect, createMemo } from "solid-js";
 import { createThemeManager } from "../../stores/theme";
-import ThemeToggle from "../ThemeToggle";
 import { navigationStore } from "../../stores/navigation";
 import { viewStore } from "../../stores/view";
-import ViewToggleSwitch from "../UI/ViewToggleSwitch";
+import { deviceStore } from "../../stores/device";
 import SidebarHeader from "./Header";
 import NavigationMenu from "./NavigationMenu";
 import SidebarFooter from "./Footer";
+import ThemeToggle from "../ThemeToggle";
+import ViewToggleSwitch from "../UI/ViewToggleSwitch";
+import MobileMenuButton from "./MobileMenuButton";
+import MobileMenu from "./MobileMenu";
 
 export default function Sidebar(props) {
   const { isDark } = createThemeManager();
-  const [isOpen, setIsOpen] = createSignal(!props.isMobile);
+  const { isMobile, registerCleanup } = deviceStore;
+  const [isOpen, setIsOpen] = createSignal(!isMobile());
   const [activeSection, setActiveSection] = createSignal("home");
   const { state: viewState, toggleView } = viewStore;
-
   const navigation = navigationStore;
+
+  // Register cleanup for device store
+  registerCleanup();
+
+  const portfolioSections = ["home", "experience", "projects", "resume"];
 
   const sidebarClass = createMemo(
     () =>
@@ -22,10 +30,8 @@ export default function Sidebar(props) {
         isDark()
           ? "bg-slate-900 text-green-300 border-cyan-700 bg-gradient-to-b from-slate-900 to-blue-900/40"
           : "bg-slate-100 text-slate-800 border-emerald-400 bg-gradient-to-b from-slate-100 to-teal-200/50"
-      } hidden md:block`
+      } ${isMobile() ? "hidden" : "hidden md:block"}`
   );
-
-  const portfolioSections = ["home", "experience", "projects", "resume"];
 
   // Notify parent of sidebar state changes
   const notifySidebarChange = (open) => {
@@ -63,7 +69,7 @@ export default function Sidebar(props) {
       setActiveSection(sectionId);
 
       // Close sidebar on mobile after navigation
-      if (props.isMobile) {
+      if (isMobile()) {
         setIsOpen(false);
         notifySidebarChange(false);
       }
@@ -78,7 +84,7 @@ export default function Sidebar(props) {
       activeSection() === sectionId
     ) {
       // Close sidebar on mobile
-      if (props.isMobile) {
+      if (isMobile()) {
         setIsOpen(false);
         notifySidebarChange(false);
       }
@@ -102,7 +108,7 @@ export default function Sidebar(props) {
     }
 
     // Close sidebar on mobile after starting navigation
-    if (props.isMobile) {
+    if (isMobile()) {
       setIsOpen(false);
       notifySidebarChange(false);
     }
@@ -116,9 +122,9 @@ export default function Sidebar(props) {
     }
   });
 
-  // Update isOpen when isMobile prop changes
+  // Update isOpen when isMobile changes (using deviceStore instead of props)
   createEffect(() => {
-    const newState = !props.isMobile;
+    const newState = !isMobile();
     setIsOpen(newState);
     notifySidebarChange(newState);
   });
@@ -160,41 +166,82 @@ export default function Sidebar(props) {
     };
   });
 
-  // Early return if mobile
-  if (props.isMobile) return null;
+  // Handle click outside mobile menu to close it
+  createEffect(() => {
+    if (!isMobile()) return;
 
+    const handleClickOutside = (event) => {
+      if (
+        isOpen() &&
+        !event.target.closest(".mobile-sidebar") &&
+        !event.target.closest(".mobile-menu-toggle")
+      ) {
+        setIsOpen(false);
+        notifySidebarChange(false);
+      }
+    };
+
+    document.addEventListener("click", handleClickOutside);
+    return () => document.removeEventListener("click", handleClickOutside);
+  });
+
+  // Render mobile or desktop sidebar based on deviceStore's isMobile
   return (
-    <aside
-      class={sidebarClass()}
-      style={{
-        width: "280px",
-        transform: isOpen() ? "translateX(0)" : "translateX(-100%)",
-        transition: "transform 0.3s ease",
-      }}
-    >
-      <div class="flex h-full flex-col pt-16">
-        <SidebarHeader />
+    <>
+      {isMobile() ? (
+        <>
+          <MobileMenuButton
+            isOpen={isOpen}
+            setIsOpen={(newState) => {
+              setIsOpen(newState);
+              notifySidebarChange(newState);
+            }}
+          />
+          <MobileMenu
+            isOpen={isOpen}
+            isDark={isDark}
+            portfolioSections={portfolioSections}
+            activeSection={activeSection}
+            navigation={navigation}
+            viewState={viewState}
+            toggleView={toggleView}
+            navigateToSection={navigateToSection}
+          />
+        </>
+      ) : (
+        <aside
+          class={sidebarClass()}
+          style={{
+            width: "280px",
+            transform: isOpen() ? "translateX(0)" : "translateX(-100%)",
+            transition: "transform 0.3s ease",
+          }}
+        >
+          <div class="flex h-full flex-col pt-16">
+            <SidebarHeader />
 
-        <ThemeToggle />
+            <ThemeToggle />
 
-        <NavigationMenu
-          sections={portfolioSections}
-          activeSection={activeSection}
-          isNavigating={navigation.isNavigating}
-          isArrived={navigation.isArrived}
-          navigatingSection={navigation.navigatingSection}
-          destinationSection={navigation.destinationSection}
-          navigationProgress={navigation.navigationProgress}
-          onNavigate={navigateToSection}
-        />
+            <NavigationMenu
+              sections={portfolioSections}
+              activeSection={activeSection}
+              isNavigating={navigation.isNavigating}
+              isArrived={navigation.isArrived}
+              navigatingSection={navigation.navigatingSection}
+              destinationSection={navigation.destinationSection}
+              navigationProgress={navigation.navigationProgress}
+              onNavigate={navigateToSection}
+            />
 
-        <ViewToggleSwitch
-          isScrollView={() => viewState.isScrollView}
-          onToggle={toggleView}
-        />
+            <ViewToggleSwitch
+              isScrollView={() => viewState.isScrollView}
+              onToggle={toggleView}
+            />
 
-        <SidebarFooter />
-      </div>
-    </aside>
+            <SidebarFooter />
+          </div>
+        </aside>
+      )}
+    </>
   );
 }
