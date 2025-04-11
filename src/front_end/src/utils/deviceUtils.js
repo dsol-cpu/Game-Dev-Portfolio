@@ -68,27 +68,6 @@ export const optimizeRenderer = (renderer) => {
 
   if (mobile) {
     renderer.sortObjects = false; // Optimization for simpler scenes
-
-    // Set precision for shadows on mobile without global highp
-    const gl = renderer.getContext();
-    if (gl) {
-      const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
-      const renderer = debugInfo
-        ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL)
-        : "";
-
-      // Check if using mobile GPU
-      const isMobileGPU = /Mali|Adreno|PowerVR|Apple GPU/i.test(renderer);
-
-      if (isMobileGPU) {
-        // Set precision for shadows only
-        const oldOnBeforeCompile = THREE.ShaderChunk.shadowmap_pars_fragment;
-        THREE.ShaderChunk.shadowmap_pars_fragment = oldOnBeforeCompile.replace(
-          "#ifdef USE_SHADOWMAP",
-          "#ifdef USE_SHADOWMAP\nprecision highp float;\nprecision highp int;"
-        );
-      }
-    }
   }
 };
 
@@ -105,47 +84,64 @@ export const setupShadows = (renderer, directionalLight) => {
   // Enable shadows on the renderer
   renderer.shadowMap.enabled = true;
 
-  // Configure shadow quality based on device
-  if (mobile) {
-    // Use basic shadow map for mobile to avoid precision artifacts
-    renderer.shadowMap.type = THREE.BasicShadowMap;
-    directionalLight.shadow.mapSize.width = 1024; // Increase shadow map size
-    directionalLight.shadow.mapSize.height = 1024;
-
-    // Critical adjustments for mobile shadow rendering
-    directionalLight.shadow.bias = -0.002; // More aggressive bias
-    directionalLight.shadow.normalBias = 0.1; // Increase normal bias
-
-    // Reduce shadow camera frustum to improve precision in smaller area
-    directionalLight.shadow.camera.near = 1;
-    directionalLight.shadow.camera.far = 50;
-    directionalLight.shadow.camera.left = -10;
-    directionalLight.shadow.camera.right = 10;
-    directionalLight.shadow.camera.top = 10;
-    directionalLight.shadow.camera.bottom = -10;
-  } else {
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Better quality for desktop
-    directionalLight.shadow.mapSize.width = 1024;
-    directionalLight.shadow.mapSize.height = 1024;
-
-    // Desktop settings
-    directionalLight.shadow.bias = -0.001;
-    directionalLight.shadow.normalBias = 0.05;
-
-    // Wider frustum for desktop
-    directionalLight.shadow.camera.near = 0.5;
-    directionalLight.shadow.camera.far = 100;
-    directionalLight.shadow.camera.left = -20;
-    directionalLight.shadow.camera.right = 20;
-    directionalLight.shadow.camera.top = 20;
-    directionalLight.shadow.camera.bottom = -20;
-  }
+  // Choose shadow type based on device - PCFShadowMap works on most devices
+  renderer.shadowMap.type = THREE.PCFShadowMap;
 
   // Configure directional light to cast shadows
   directionalLight.castShadow = true;
 
-  // Update the shadow camera - important to apply changes
+  // Configure shadow map size based on device capability
+  if (mobile) {
+    directionalLight.shadow.mapSize.width = 512;
+    directionalLight.shadow.mapSize.height = 512;
+  } else {
+    directionalLight.shadow.mapSize.width = 1024;
+    directionalLight.shadow.mapSize.height = 1024;
+  }
+
+  // Shadow camera configuration
+  directionalLight.shadow.camera.near = 0.5;
+  directionalLight.shadow.camera.far = 50; // Reduced far plane for better precision
+
+  // Keep frustum reasonable
+  const frustumSize = mobile ? 10 : 20;
+  directionalLight.shadow.camera.left = -frustumSize;
+  directionalLight.shadow.camera.right = frustumSize;
+  directionalLight.shadow.camera.top = frustumSize;
+  directionalLight.shadow.camera.bottom = -frustumSize;
+
+  // Critical for fixing shadow artifacts
+  directionalLight.shadow.bias = -0.0005;
+  directionalLight.shadow.normalBias = 0.02;
+
   directionalLight.shadow.camera.updateProjectionMatrix();
+
+  // For mobile devices, add a simple helper function to fix common shadow issues
+  if (mobile) {
+    // Use a helper function to fix shadow rendering on scene objects
+    renderer.fixMobileShadows = (scene) => {
+      scene.traverse((object) => {
+        if (object.isMesh) {
+          // Ensure materials are set up correctly for shadows
+          if (object.castShadow || object.receiveShadow) {
+            if (object.material) {
+              // Handle array of materials
+              if (Array.isArray(object.material)) {
+                object.material.forEach((mat) => {
+                  mat.shadowSide = THREE.FrontSide;
+                  mat.needsUpdate = true;
+                });
+              } else {
+                // Single material
+                object.material.shadowSide = THREE.FrontSide;
+                object.material.needsUpdate = true;
+              }
+            }
+          }
+        }
+      });
+    };
+  }
 };
 
 /**
