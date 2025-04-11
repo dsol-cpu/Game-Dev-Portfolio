@@ -1,7 +1,7 @@
 import { createMemo } from "solid-js";
-import { createThemeManager } from "../../stores/theme";
-import { viewStore } from "../../stores/view";
-import { Icon } from "../icons/Icon";
+import { createThemeManager } from "../stores/theme";
+import { viewStore } from "../stores/view";
+import { Icon } from "./icons/Icon";
 
 export default function ViewToggleSwitch() {
   const themeManager = createThemeManager();

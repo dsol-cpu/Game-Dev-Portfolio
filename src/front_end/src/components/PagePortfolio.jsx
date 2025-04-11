@@ -1,7 +1,7 @@
 import { createSignal, onMount, createEffect, createMemo } from "solid-js";
-import ProjectCard from "./UI/ProjectCard";
 import AboutSection from "./UI/AboutSection";
-import ExperienceSection from "./UI/ExperienceSection";
+import ExperienceSection from "./ExperienceSection";
+import ProjectsSection from "./ProjectsSection";
 import { navigationStore } from "../stores/navigation";
 import { createThemeManager } from "../stores/theme";
 
@@ -10,21 +10,10 @@ const GRID_CONFIG = {
   LINE_THICKNESS: "2px",
 };
 
-const PROJECTS = [
-  {
-    id: 1,
-    title: "Portfolio Website",
-    description: "A 3D game built with SolidJS and Three.js ",
-    technologies: ["SolidJS", "Three.js", "JavaScript"],
-    // imageUrl: "/assets/images/projects/space-explorer.jpg",
-    githubUrl: "https://github.com/dsol-cpu/Game-Dev-Portfolio",
-    demoUrl: "https://dsol-cpu.github.io/Game-Dev-Portfolio/",
-  },
-];
-
 const SECTIONS = [
   { id: "home", title: "", Component: AboutSection },
   { id: "experience", title: "", Component: ExperienceSection },
+  { id: "projects", title: "Projects", Component: ProjectsSection },
 ];
 
 const PagePortfolio = () => {
@@ -116,8 +105,8 @@ const PagePortfolio = () => {
   const renderSection = (id, title, Component) => (
     <section id={id} class="mb-16 scroll-mt-16">
       <div class={styles().section}>
-        {title && <h2 class={styles().heading}>{title}</h2>}
-        <Component />
+        {/* Pass isDark to components that need it */}
+        <Component isDark={isDark} />
       </div>
     </section>
   );
@@ -137,22 +126,10 @@ const PagePortfolio = () => {
       />
 
       <div class="container mx-auto px-4 py-8 relative z-10">
-        {/* Render predefined sections */}
+        {/* Render all sections using the same pattern */}
         {SECTIONS.map((section) =>
           renderSection(section.id, section.title, section.Component)
         )}
-
-        {/* Projects section with special rendering for the grid */}
-        <section id="projects" class="mb-16 scroll-mt-16">
-          <div class={styles().section}>
-            <h2 class={styles().heading}>Projects</h2>
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {PROJECTS.map((project) => (
-                <ProjectCard project={project} key={project.id} />
-              ))}
-            </div>
-          </div>
-        </section>
       </div>
     </div>
   );

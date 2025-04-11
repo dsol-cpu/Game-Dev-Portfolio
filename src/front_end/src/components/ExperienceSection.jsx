@@ -1,11 +1,17 @@
 import { createSignal, createMemo, For, Show } from "solid-js";
-import { createThemeManager } from "../../stores/theme";
-import Icon from "../icons/Icon";
+import { createThemeManager } from "../stores/theme";
+import Icon from "./icons/Icon";
+
+const CATEGORY_ID = {
+  ALL: 0,
+  SHIPPED: 1,
+  PROFESSIONAL: 2,
+};
 
 const CATEGORIES = [
-  { id: "all", label: "All Projects" },
-  { id: "shipped", label: "Shipped Games" },
-  { id: "professional", label: "Professional Work" },
+  { id: CATEGORY_ID.ALL, label: "All Projects" },
+  { id: CATEGORY_ID.SHIPPED, label: "Shipped Games" },
+  { id: CATEGORY_ID.PROFESSIONAL, label: "Professional Work" },
 ];
 
 const EXPERIENCES = [
@@ -16,7 +22,7 @@ const EXPERIENCES = [
     company: "",
     period: "2021",
     description: "WarioWare-like Cooking game.",
-    category: "shipped",
+    category: CATEGORY_ID.SHIPPED,
     responsibilities: ["Made the art", "Made DDR-like minigame"],
     technologies: ["SFML", "C++", "Git", "CMake"],
   },

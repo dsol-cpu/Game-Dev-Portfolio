@@ -7,7 +7,7 @@ import SidebarHeader from "./Header";
 import NavigationMenu from "./NavigationMenu";
 import SidebarFooter from "./Footer";
 import ThemeToggle from "../ThemeToggle";
-import ViewToggleSwitch from "../UI/ViewToggleSwitch";
+import ViewToggleSwitch from "../ViewToggleSwitch";
 import MobileMenuButton from "./MobileMenuButton";
 import MobileMenu from "./MobileMenu";
 

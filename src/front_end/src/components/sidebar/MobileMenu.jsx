@@ -1,5 +1,5 @@
 import ThemeToggle from "../ThemeToggle";
-import ViewToggleSwitch from "../UI/ViewToggleSwitch";
+import ViewToggleSwitch from "../ViewToggleSwitch";
 import NavigationMenu from "./NavigationMenu";
 
 export default function MobileMenu(props) {
