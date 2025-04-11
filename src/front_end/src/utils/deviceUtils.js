@@ -68,6 +68,27 @@ export const optimizeRenderer = (renderer) => {
 
   if (mobile) {
     renderer.sortObjects = false; // Optimization for simpler scenes
+
+    // Set precision for shadows on mobile without global highp
+    const gl = renderer.getContext();
+    if (gl) {
+      const debugInfo = gl.getExtension("WEBGL_debug_renderer_info");
+      const renderer = debugInfo
+        ? gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL)
+        : "";
+
+      // Check if using mobile GPU
+      const isMobileGPU = /Mali|Adreno|PowerVR|Apple GPU/i.test(renderer);
+
+      if (isMobileGPU) {
+        // Set precision for shadows only
+        const oldOnBeforeCompile = THREE.ShaderChunk.shadowmap_pars_fragment;
+        THREE.ShaderChunk.shadowmap_pars_fragment = oldOnBeforeCompile.replace(
+          "#ifdef USE_SHADOWMAP",
+          "#ifdef USE_SHADOWMAP\nprecision highp float;\nprecision highp int;"
+        );
+      }
+    }
   }
 };
 
@@ -86,27 +107,45 @@ export const setupShadows = (renderer, directionalLight) => {
 
   // Configure shadow quality based on device
   if (mobile) {
-    renderer.shadowMap.type = THREE.PCFShadowMap; // Less expensive for mobile
-    directionalLight.shadow.mapSize.width = 512;
-    directionalLight.shadow.mapSize.height = 512;
+    // Use basic shadow map for mobile to avoid precision artifacts
+    renderer.shadowMap.type = THREE.BasicShadowMap;
+    directionalLight.shadow.mapSize.width = 1024; // Increase shadow map size
+    directionalLight.shadow.mapSize.height = 1024;
+
+    // Critical adjustments for mobile shadow rendering
+    directionalLight.shadow.bias = -0.002; // More aggressive bias
+    directionalLight.shadow.normalBias = 0.1; // Increase normal bias
+
+    // Reduce shadow camera frustum to improve precision in smaller area
+    directionalLight.shadow.camera.near = 1;
+    directionalLight.shadow.camera.far = 50;
+    directionalLight.shadow.camera.left = -10;
+    directionalLight.shadow.camera.right = 10;
+    directionalLight.shadow.camera.top = 10;
+    directionalLight.shadow.camera.bottom = -10;
   } else {
     renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Better quality for desktop
     directionalLight.shadow.mapSize.width = 1024;
     directionalLight.shadow.mapSize.height = 1024;
+
+    // Desktop settings
+    directionalLight.shadow.bias = -0.001;
+    directionalLight.shadow.normalBias = 0.05;
+
+    // Wider frustum for desktop
+    directionalLight.shadow.camera.near = 0.5;
+    directionalLight.shadow.camera.far = 100;
+    directionalLight.shadow.camera.left = -20;
+    directionalLight.shadow.camera.right = 20;
+    directionalLight.shadow.camera.top = 20;
+    directionalLight.shadow.camera.bottom = -20;
   }
 
   // Configure directional light to cast shadows
   directionalLight.castShadow = true;
-  directionalLight.shadow.camera.near = 0.5;
-  directionalLight.shadow.camera.far = 100;
-  directionalLight.shadow.camera.left = -20;
-  directionalLight.shadow.camera.right = 20;
-  directionalLight.shadow.camera.top = 20;
-  directionalLight.shadow.camera.bottom = -20;
 
-  // Critical for fixing mobile artifacts
-  directionalLight.shadow.bias = -0.001;
-  directionalLight.shadow.normalBias = 0.05;
+  // Update the shadow camera - important to apply changes
+  directionalLight.shadow.camera.updateProjectionMatrix();
 };
 
 /**
