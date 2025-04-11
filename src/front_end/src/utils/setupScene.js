@@ -5,8 +5,6 @@ import {
   resolveContainer,
   setupShadows,
   optimizeRenderer,
-  isAndroidDevice,
-  createFillLight,
   addHemisphereLight,
 } from "../utils/deviceUtils";
 
@@ -19,7 +17,6 @@ export const setupScene = (() => {
 
   return (containerRef) => {
     const { isMobile } = deviceStore;
-    const isAndroid = isAndroidDevice();
 
     // Resolve container reference
     const container = resolveContainer(containerRef);
@@ -36,11 +33,7 @@ export const setupScene = (() => {
     // Scene setup
     const scene = new THREE.Scene();
     scene.background = new THREE.Color(colors.sky);
-    scene.fog = new THREE.Fog(
-      colors.sky,
-      isAndroid ? 15 : 20,
-      isAndroid ? 70 : 100
-    );
+    scene.fog = new THREE.Fog(colors.sky, 15, 70);
 
     // Camera setup with cached aspect ratio
     const camera = new THREE.PerspectiveCamera(
@@ -54,9 +47,9 @@ export const setupScene = (() => {
 
     // Renderer setup with device-specific optimizations
     const renderer = new THREE.WebGLRenderer({
-      antialias: !isMobile(), // Disable antialiasing on mobile for performance
+      antialias: !isMobile(),
       powerPreference: "high-performance",
-      precision: isAndroid ? "mediump" : isMobile() ? "lowp" : "mediump",
+      precision: isMobile() ? "highp" : "mediump",
       stencil: false,
       alpha: false, // Optimization: disable alpha when using background color
     });
@@ -70,20 +63,11 @@ export const setupScene = (() => {
     const hemiLight = addHemisphereLight(scene);
 
     // Lower ambient light intensity since we have hemisphere light
-    const ambientLight = new THREE.AmbientLight(
-      0xffffff,
-      isAndroid ? 0.3 : 0.2
-    );
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
 
     // Main directional light - adjust position for better shadow angles
-    const directionalLight = new THREE.DirectionalLight(
-      0xffffff,
-      isAndroid ? 0.6 : 0.8
-    );
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.6);
     directionalLight.position.copy(directionalLightPosition);
-
-    // Add a fill light from the opposite direction (for Android)
-    const fillLight = createFillLight(scene, directionalLight);
 
     // Set up shadows with device-specific optimizations
     setupShadows(renderer, directionalLight);

@@ -26,14 +26,6 @@ export const isMobileDevice = () => {
 };
 
 /**
- * Detects if the device is an Android device
- * @returns {boolean} True if the device is Android, false otherwise
- */
-export const isAndroidDevice = () => {
-  return /Android/i.test(navigator.userAgent);
-};
-
-/**
  * Detects if the current device is a tablet
  * @returns {boolean} True if the device is a tablet, false otherwise
  */
@@ -71,15 +63,8 @@ export const optimizeRenderer = (renderer) => {
   if (!renderer) return;
 
   const mobile = isMobileDevice();
-  const isAndroid = isAndroidDevice();
 
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, mobile ? 1 : 2));
-
-  // For Android specifically
-  if (isAndroid) {
-    // Set logarithmic depth buffer to help with shadow rendering
-    renderer.logarithmicDepthBuffer = true;
-  }
 
   if (mobile) {
     renderer.sortObjects = false; // Optimization for simpler scenes
@@ -95,37 +80,11 @@ export const setupShadows = (renderer, directionalLight) => {
   if (!renderer || !directionalLight) return;
 
   const mobile = isMobileDevice();
-  const isAndroid = isAndroidDevice();
 
   // Enable shadows on the renderer
   renderer.shadowMap.enabled = true;
 
-  // For Android, we need to use a special shadow configuration to avoid solid black shadows
-  if (isAndroid) {
-    // Use basic shadow mapping for faster rendering on Android
-    renderer.shadowMap.type = THREE.PCFShadowMap;
-
-    // Critical for Android shadow rendering
-    directionalLight.shadow.mapSize.width = 1024; // Higher resolution helps with gradient
-    directionalLight.shadow.mapSize.height = 1024;
-
-    // Most critical settings for fixing solid black shadows on Android
-    directionalLight.intensity = 0.6; // Lower intensity
-    directionalLight.shadow.bias = 0.00005; // Positive bias helps avoid black artifacts
-    directionalLight.shadow.normalBias = 0.02;
-
-    // Adjust shadow camera to be closer to the scene
-    directionalLight.shadow.camera.near = 1;
-    directionalLight.shadow.camera.far = 30;
-    directionalLight.shadow.camera.left = -10;
-    directionalLight.shadow.camera.right = 10;
-    directionalLight.shadow.camera.top = 10;
-    directionalLight.shadow.camera.bottom = -10;
-
-    // Add shadow radius for softer edges
-    directionalLight.shadow.radius = 4;
-  } else if (mobile) {
-    // For other mobile devices (like iPad)
+  if (mobile) {
     renderer.shadowMap.type = THREE.PCFShadowMap;
     directionalLight.shadow.mapSize.width = 512;
     directionalLight.shadow.mapSize.height = 512;
@@ -166,50 +125,16 @@ export const setupShadows = (renderer, directionalLight) => {
 };
 
 /**
- * Creates a secondary light to soften shadows - critical for Android
- * @param {THREE.Scene} scene - The Three.js scene
- * @param {THREE.DirectionalLight} mainLight - The main directional light
- * @returns {THREE.DirectionalLight} The secondary fill light
- */
-export const createFillLight = (scene, mainLight) => {
-  if (!scene || !mainLight) return null;
-
-  const isAndroid = isAndroidDevice();
-
-  if (isAndroid) {
-    // Create a secondary light from opposite direction
-    const fillLight = new THREE.DirectionalLight(0xffffff, 0.3);
-
-    // Position opposite to main light
-    fillLight.position
-      .copy(mainLight.position)
-      .negate()
-      .normalize()
-      .multiplyScalar(5);
-
-    // No shadows for fill light
-    fillLight.castShadow = false;
-
-    scene.add(fillLight);
-    return fillLight;
-  }
-
-  return null;
-};
-
-/**
  * Add an ambient hemispheric light to improve shadow appearance
  * @param {THREE.Scene} scene - The Three.js scene
  * @returns {THREE.HemisphereLight} The hemisphere light
  */
 export const addHemisphereLight = (scene) => {
-  const isAndroid = isAndroidDevice();
-
   // Create hemisphere light (sky color, ground color, intensity)
   const hemiLight = new THREE.HemisphereLight(
     0xffffff, // Sky color
     0xffffff, // Ground color
-    isAndroid ? 0.7 : 0.5 // Higher intensity for Android
+    0.5
   );
 
   scene.add(hemiLight);
