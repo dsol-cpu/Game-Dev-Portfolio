@@ -136,7 +136,7 @@ export const SvgSprite = () => {
         const themeClass = isSunOrMoon ? `theme-icon-${baseIconName}` : "";
         symbol.setAttribute("class", `themed-icon ${themeClass}`);
 
-        // Process the SVG elements - FIXED COLOR HANDLING
+        // Process the SVG elements - MODIFIED COLOR HANDLING
         const processNode = (node) => {
           if (node.nodeType !== 1) {
             // For non-element nodes, just clone and append
@@ -172,11 +172,14 @@ export const SvgSprite = () => {
             clone.setAttribute("stroke", "none");
           }
 
-          // Handle fill attribute
+          // Handle fill attribute - MODIFIED TO PRESERVE HEX COLORS
           if (hasFillAttr) {
-            // Preserve the original fill value if it's "none"
+            // Preserve the original fill value if it's "none" or starts with "#" (hex color)
             if (fillValue === "none") {
               clone.setAttribute("fill", "none");
+            } else if (fillValue.startsWith("#")) {
+              // Preserve hex color values
+              clone.setAttribute("fill", fillValue);
             } else {
               clone.setAttribute("fill", "currentColor");
             }
