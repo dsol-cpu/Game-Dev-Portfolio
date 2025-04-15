@@ -250,12 +250,12 @@ const ProjectCard = (props) => {
               class={`text-sm font-medium ${theme.detailsBtn} flex items-center gap-1`}
             >
               {expandedProject() === id ? "Hide details" : "View details"}
-              {/* <Icon
+              <Icon
                 name="chevron-down"
                 class={`ml-1 transition-transform ${
                   expandedProject() === id ? "scale-y-[-1]" : ""
                 }`}
-              /> */}
+              />
             </button>
           </Show>
 

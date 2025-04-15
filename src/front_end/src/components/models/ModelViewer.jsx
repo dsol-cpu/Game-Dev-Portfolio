@@ -25,16 +25,15 @@ const ModelViewer = (props) => {
   const [isInitialized, setIsInitialized] = createSignal(false);
   const [isVisible, setIsVisible] = createSignal(visible);
   const [availableModels, setAvailableModels] = createSignal([]);
-  const [currentModelId, setCurrentModelId] = createSignal(modelId); // Track current model ID
-  const [currentModelUrl, setCurrentModelUrl] = createSignal(modelUrl); // Track current URL
-  const [pendingLoad, setPendingLoad] = createSignal(false); // Flag to prevent reload loops
+  const [currentModelId, setCurrentModelId] = createSignal(modelId);
+  const [currentModelUrl, setCurrentModelUrl] = createSignal(modelUrl);
+  const [pendingLoad, setPendingLoad] = createSignal(false);
 
   // References
   let containerRef;
   let camera = null;
   let controls = null;
   let animationFrameId = null;
-  let rendererContainer = null;
 
   // Animation loop function
   const animate = () => {
@@ -44,8 +43,11 @@ const ModelViewer = (props) => {
       controls.update();
     }
 
-    // Use the resource manager's render function with our camera and the renderer's DOM element container
-    ResourceManager.render(camera, rendererContainer);
+    // Use the resource manager's render function
+    const rendererDomElement = containerRef.querySelector("canvas");
+    if (rendererDomElement) {
+      ResourceManager.render(camera, rendererDomElement);
+    }
 
     animationFrameId = requestAnimationFrame(animate);
   };
@@ -57,23 +59,23 @@ const ModelViewer = (props) => {
     // Create perspective camera
     const aspect = containerRef.clientWidth / containerRef.clientHeight;
     camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
-    camera.position.z = 5;
 
-    // Get or create the container for the renderer
-    rendererContainer = document.createElement("div");
-    rendererContainer.style.width = "100%";
-    rendererContainer.style.height = "100%";
-    rendererContainer.style.position = "absolute";
-    rendererContainer.style.top = "0";
-    rendererContainer.style.left = "0";
+    // Set initial camera position
+    camera.position.set(3, 2, 5);
 
-    // Clear the container and add our renderer element
-    containerRef.innerHTML = "";
-    containerRef.appendChild(rendererContainer);
+    // Create a canvas element for rendering if it doesn't exist
+    let canvasElement = containerRef.querySelector("canvas");
+    if (!canvasElement) {
+      canvasElement = document.createElement("canvas");
+      canvasElement.style.width = "100%";
+      canvasElement.style.height = "100%";
+      canvasElement.style.display = "block";
+      containerRef.appendChild(canvasElement);
+    }
 
-    // Create orbit controls if enabled
+    // Create orbit controls
     if (controlsEnabled) {
-      controls = new OrbitControls(camera, rendererContainer);
+      controls = new OrbitControls(camera, canvasElement);
       controls.enableDamping = true;
       controls.dampingFactor = 0.05;
       controls.autoRotate = autoRotate;
@@ -82,12 +84,6 @@ const ModelViewer = (props) => {
       controls.enableZoom = true;
       controls.minDistance = 1;
       controls.maxDistance = 20;
-    }
-
-    // Set initial camera position for better viewing
-    camera.position.set(3, 2, 3);
-    if (controls) {
-      controls.target.set(0, 0, 0);
       controls.update();
     }
   };
@@ -101,11 +97,17 @@ const ModelViewer = (props) => {
 
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
+
+    // Make sure the canvas size is updated
+    const canvasElement = containerRef.querySelector("canvas");
+    if (canvasElement) {
+      canvasElement.width = width;
+      canvasElement.height = height;
+    }
   };
 
   // Monitor loading progress
   const startProgressMonitoring = () => {
-    // Poll console logs for progress updates
     const originalConsoleLog = console.log;
     console.log = function (message) {
       if (typeof message === "string" && message.includes("Loading model")) {
@@ -153,10 +155,10 @@ const ModelViewer = (props) => {
 
       let loadedModel;
       if (id) {
-        // Use the preloaded models from the enhanced manager
+        console.log(`Trying to load model with ID: ${id}`);
         loadedModel = await ResourceManager.getModel(id);
       } else if (url) {
-        // Custom URL with generated ID
+        console.log(`Trying to load model from URL: ${url}`);
         const generatedId = `custom-${url.split("/").pop()}`;
         loadedModel = await ResourceManager.loadModel(url, generatedId);
       }
@@ -166,28 +168,46 @@ const ModelViewer = (props) => {
         ResourceManager.getScene().remove(model());
       }
 
-      // Center the model in the view
-      const box = new THREE.Box3().setFromObject(loadedModel);
-      const center = box.getCenter(new THREE.Vector3());
-      const size = box.getSize(new THREE.Vector3());
-
-      // Adjust camera and controls based on model size
-      const maxDim = Math.max(size.x, size.y, size.z);
-      if (controls) {
-        camera.position.set(maxDim * 2, maxDim * 1.5, maxDim * 2);
-        controls.target.copy(center);
-        controls.update();
-      }
-
       // Add the new model to the scene
-      ResourceManager.getScene().add(loadedModel);
-      setModel(loadedModel);
-      setIsInitialized(true);
-      onLoaded(loadedModel);
+      if (loadedModel) {
+        console.log("Model loaded successfully, adding to scene");
+
+        // Position the model at the center of the scene
+        loadedModel.position.set(0, 0, 0);
+
+        // Add to scene
+        ResourceManager.getScene().add(loadedModel);
+
+        // Calculate bounding box for camera positioning
+        const box = new THREE.Box3().setFromObject(loadedModel);
+        const center = box.getCenter(new THREE.Vector3());
+        const size = box.getSize(new THREE.Vector3());
+
+        // Adjust camera based on model size
+        const maxDim = Math.max(size.x, size.y, size.z);
+        camera.position.set(
+          center.x + maxDim * 2,
+          center.y + maxDim,
+          center.z + maxDim * 2
+        );
+
+        // Update controls target to model center
+        if (controls) {
+          controls.target.copy(center);
+          controls.update();
+        }
+
+        setModel(loadedModel);
+        setIsInitialized(true);
+        onLoaded(loadedModel);
+      } else {
+        throw new Error("Model loaded but returned null");
+      }
 
       // Restore original console log
       restoreConsoleLog();
     } catch (err) {
+      console.error("Error loading model:", err);
       setError(err.message || "Failed to load model");
       onError(err);
     } finally {
@@ -223,16 +243,21 @@ const ModelViewer = (props) => {
 
   // Initialize on mount
   onMount(async () => {
+    console.log("ModelViewer component mounting");
+
     // Initialize the resource manager if not already done
     if (!ResourceManager.isInitialized()) {
+      console.log("Initializing ResourceManager");
       await ResourceManager.init();
 
       // Get available models after initialization
       const models = ResourceManager.getAvailableModelIds();
+      console.log("Available models:", models);
       setAvailableModels(models);
     } else {
       // Get available models if already initialized
       const models = ResourceManager.getAvailableModelIds();
+      console.log("Available models (already initialized):", models);
       setAvailableModels(models);
     }
 
@@ -252,6 +277,7 @@ const ModelViewer = (props) => {
 
     // Initial model load - only if we have a model to load
     if (modelId || modelUrl) {
+      console.log(`Loading initial model: ID=${modelId}, URL=${modelUrl}`);
       loadModelFromManager();
     }
   });
@@ -327,6 +353,7 @@ const ModelViewer = (props) => {
         visibility: isVisible() ? "visible" : "hidden",
         opacity: isVisible() ? 1 : 0,
         overflow: "hidden", // Prevent scrollbars
+        background: "rgba(245, 245, 245, 0.05)", // Very subtle background to see the container
       }}
       data-model-id={modelId || "custom"}
     >
