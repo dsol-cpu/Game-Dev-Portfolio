@@ -308,7 +308,7 @@ function tick() {
   //All game models can use their animation mixers
   // If scroll view is not enabled, don't render the game camera
   gameModels;
-  requestAnimationFrame(animate);
+  requestAnimationFrame(tick);
 }
 
 function updateActiveProjectCardCameras(indices = []) {
@@ -319,6 +319,6 @@ function updateActiveProjectCardCameras(indices = []) {
   }
 }
 
-animate();
+tick();
 
 export { init, createModelViewer };
