@@ -25,7 +25,7 @@ export default defineConfig(({ mode }) => {
 
     server: {
       port: 5173,
-      // Add hot module replacement for better dev experience
+      // Add hot module replacement for better dev portfolio
       hmr: true,
     },
 
@@ -44,9 +44,18 @@ export default defineConfig(({ mode }) => {
               }
             : undefined,
           // Ensure asset filenames include hash for cache busting
-          assetFileNames: isProduction
-            ? "assets/[name].[hash].[ext]"
-            : "assets/[name].[ext]",
+          assetFileNames: (assetInfo) => {
+            const extType = assetInfo.name.split(".").pop();
+            // Handle .glb files and other assets appropriately
+            if (/\.(glb|gltf)$/i.test(assetInfo.name)) {
+              return isProduction
+                ? `assets/models/[name].[hash].[ext]`
+                : `assets/models/[name].[ext]`;
+            }
+            return isProduction
+              ? `assets/[name].[hash].[ext]`
+              : `assets/[name].[ext]`;
+          },
         },
       },
     },
@@ -63,6 +72,9 @@ export default defineConfig(({ mode }) => {
         plugins: [],
       },
     },
+
+    // Add assetsInclude to explicitly tell Vite to handle .glb files as assets
+    assetsInclude: ["**/*.glb", "**/*.gltf"],
 
     preview: {
       port: 5174,

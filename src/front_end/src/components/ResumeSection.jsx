@@ -1,6 +1,6 @@
 import { createSignal, Show } from "solid-js";
 
-const ResumeModal = (props) => {
+const ResumeSection = (props) => {
   const [isLoading, setIsLoading] = createSignal(true);
 
   const handleLoad = () => {
@@ -95,4 +95,4 @@ const ResumeModal = (props) => {
   );
 };
 
-export default ResumeModal;
+export default ResumeSection;

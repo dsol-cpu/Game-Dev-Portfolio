@@ -1,31 +1,41 @@
-import { createThemeManager } from "../../stores/theme";
+// This is a template - update with your actual NavigationButton structure
 import { createMemo } from "solid-js";
 
-export default function NavigationButton(props) {
-  const { isDark } = createThemeManager();
+const NavigationButton = (props) => {
+  const buttonClass = createMemo(() => {
+    const baseClass =
+      "flex items-center w-full p-2 rounded-md transition-all duration-200";
+    const activeClass = props.isActive()
+      ? "bg-blue-600 text-white font-bold"
+      : "hover:bg-blue-100 text-gray-700";
+    const disabledClass = props.isDisabled()
+      ? "opacity-50 cursor-not-allowed"
+      : "cursor-pointer";
 
-  const styles = createMemo(() => ({
-    item: isDark()
-      ? "hover:bg-blue-800/40 hover:text-yellow-300"
-      : "hover:bg-emerald-200/60 hover:text-blue-800",
-    active: isDark()
-      ? "bg-blue-900/60 text-green-400 border-l-4 border-green-500"
-      : "bg-teal-200/70 text-blue-900 border-l-4 border-blue-600",
-  }));
+    return `${baseClass} ${activeClass} ${disabledClass}`;
+  });
+
+  const handleClick = (e) => {
+    // Always call the onClick handler, even if button appears disabled
+    // The parent component will decide what to do
+    console.log("Button clicked:", props.sectionName);
+    props.onClick(e);
+  };
 
   return (
     <button
-      class={`flex w-full items-center rounded-lg px-4 py-3 font-medium transition-all duration-200
-        ${props.isActive() || props.isNavigatingTo() ? styles().active : styles().item}
-        ${props.isDisabled() ? "opacity-50 pointer-events-none" : ""}`}
-      onClick={props.onClick}
-      disabled={props.isDisabled()}
+      class={buttonClass()}
+      onClick={handleClick}
+      disabled={false} // Never actually disable the button
+      data-section={props.sectionName}
     >
-      <span class="mr-3">{props.icon}</span>
-      <span class="capitalize">
+      {props.icon && <span class="mr-2">{props.icon}</span>}
+      <span>
         {props.sectionName}
         {props.status()}
       </span>
     </button>
   );
-}
+};
+
+export default NavigationButton;

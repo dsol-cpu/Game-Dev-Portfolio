@@ -1,9 +1,9 @@
 import { createSignal, Show } from "solid-js";
-import ResumeModal from "./ResumeModal";
-import { createThemeManager } from "../../stores/theme";
-import me from "../../assets/me.png";
-import resume from "../../assets/David_Solinsky_resume.pdf";
-import Icon from "../icons/Icon";
+import ResumeSection from "./ResumeSection";
+import { createThemeManager } from "../stores/theme";
+import me from "../assets/me.png";
+import resume from "../assets/David_Solinsky_resume.pdf";
+import Icon from "./icons/Icon";
 
 const AboutSection = () => {
   const [showResumeModal, setShowResumeModal] = createSignal(false);
@@ -62,9 +62,9 @@ const AboutSection = () => {
 
           {/* Bio text */}
           <p class="w-full max-w-2xl text-center mb-8 text-gray-300 leading-relaxed">
-            Passionate game developer with 3 years of experience in Unity,
-            Godot, and C/C++ programming. Blending technical expertise with
-            creative vision to craft engaging gaming experiences.
+            Passionate game developer with 3 years of portfolio in Unity, Godot,
+            and C/C++ programming. Blending technical expertise with creative
+            vision to craft engaging gaming portfolios.
           </p>
 
           {/* Social links */}
@@ -106,7 +106,7 @@ const AboutSection = () => {
 
       {/* Resume Modal */}
       <Show when={showResumeModal()}>
-        <ResumeModal onClose={() => setShowResumeModal(false)} />
+        <ResumeSection onClose={() => setShowResumeModal(false)} />
       </Show>
     </section>
   );

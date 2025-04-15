@@ -22,7 +22,8 @@ export default function Sidebar(props) {
   // Register cleanup for device store
   registerCleanup();
 
-  const portfolioSections = ["home", "experience", "projects", "resume"];
+  const portfolioSections = ["about", "portfolio"];
+  const portfolioTitles = { about: "About", portfolio: "Portfolio" };
 
   const sidebarClass = createMemo(
     () =>
@@ -201,6 +202,7 @@ export default function Sidebar(props) {
             isOpen={isOpen}
             isDark={isDark}
             portfolioSections={portfolioSections}
+            portfolioSectionTitles={portfolioTitles}
             activeSection={activeSection}
             navigation={navigation}
             viewState={viewState}
@@ -224,6 +226,7 @@ export default function Sidebar(props) {
 
             <NavigationMenu
               sections={portfolioSections}
+              sectionTitles={portfolioTitles}
               activeSection={activeSection}
               isNavigating={navigation.isNavigating}
               isArrived={navigation.isArrived}

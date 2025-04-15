@@ -7,6 +7,7 @@ export default function MobileMenu(props) {
     isOpen,
     isDark,
     portfolioSections,
+    portfolioSectionTitles,
     activeSection,
     navigation,
     viewState,
@@ -46,6 +47,7 @@ export default function MobileMenu(props) {
           <div class="w-full max-w-xs">
             <NavigationMenu
               sections={portfolioSections}
+              sectionTitles={portfolioSectionTitles}
               activeSection={activeSection}
               isNavigating={navigation.isNavigating}
               isArrived={navigation.isArrived}

@@ -8,13 +8,3 @@ export const colors = {
   shipBody: 0xd3d3d3,
   shipAccent: 0x4169e1,
 };
-
-// Ship movement parameters
-export const shipParams = {
-  speed: 0.1,
-  turnSpeed: 0.03,
-  maxSpeed: 0.3,
-  friction: 0.98,
-  minY: 0,
-  maxY: 8,
-};

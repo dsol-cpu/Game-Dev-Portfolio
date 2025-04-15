@@ -19,9 +19,9 @@ export const ISLAND_DATA = [
     section: "home",
   },
   {
-    name: "Experience Island",
+    name: "Portfolio Island",
     position: new THREE.Vector3(60, 20, 20),
-    section: "experience",
+    section: "portfolio",
   },
   {
     name: "Projects Island",

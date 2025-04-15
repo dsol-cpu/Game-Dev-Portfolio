@@ -1,20 +1,19 @@
 import { createEffect, createSignal } from "solid-js";
 import Sidebar from "./components/sidebar/Sidebar";
-import ThreeScene from "./components/ThreeScene";
 import PagePortfolio from "./components/PagePortfolio";
 import { createThemeManager } from "./stores/theme";
 import { navigationStore } from "./stores/navigation";
 import { resumeStore } from "./stores/resume";
 import { viewStore } from "./stores/view";
 import { deviceStore } from "./stores/device";
-import ResumeModal from "./components/UI/ResumeModal";
+import ResumeSection from "./components/ResumeSection";
 import { SvgSprite } from "./components/icons/SvgSpriteSheet";
-
+import { init } from "./stores/modelResourceManager";
 const SvgSpriteSheet = () => <SvgSprite />;
-
 const App = () => {
-  SvgSpriteSheet();
+  init();
   createThemeManager();
+  SvgSpriteSheet();
 
   const { setTargetIsland, setIsNavigating, setDestinationSection } =
     navigationStore;
@@ -91,17 +90,17 @@ const App = () => {
         class={`flex-1 transition-all duration-300 ${isSidebarOpen() && !isMobile() ? "ml-[280px]" : "ml-0"}`}
       >
         {/* Keep ThreeScene mounted but hidden when not active */}
-        <div
+        {/* <div
           style={{
             display: viewState.isScrollView ? "none" : "block",
             height: "100%",
           }}
-        >
-          <ThreeScene
+        > */}
+        {/* <ThreeScene
             activeSection={activeSection()}
             isScrollView={viewState.isScrollView}
-          />
-        </div>
+          /> */}
+        {/* </div> */}
 
         {/* Traditional Portfolio Page - Only shown when scrollView is active */}
         {viewState.isScrollView && (
@@ -109,10 +108,10 @@ const App = () => {
         )}
       </main>
 
-      <ResumeModal
+      {/* <ResumeModal
         isOpen={resumeStore.state.isModalOpen}
         onClose={resumeStore.closeResumeModal}
-      />
+      /> */}
     </div>
   );
 };
