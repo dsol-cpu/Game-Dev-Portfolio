@@ -10,7 +10,6 @@ import {
 import { createStore } from "solid-js/store";
 import { createThemeManager } from "../stores/theme";
 import ProjectCard from "./ProjectCard";
-import * as THREE from "three";
 
 const CATEGORY_ID = {
   ALL: 0,
@@ -52,28 +51,43 @@ const EXPERIENCES = [
     // storeLink: "https://store.example.com/quick-quisine",
     // githubLink: "https://github.com/example/quick-quisine",
   },
-  // {
-  //   id: 2,
-  //   title: "Lead Programmer",
-  //   project: "Weather Visualizer",
-  //   company: "TechCorp",
-  //   period: "2022-2023",
-  //   description:
-  //     "Real-time weather visualization dashboard with interactive 3D globe and climate data.",
-  //   category: CATEGORY_ID.PROFESSIONAL,
-  //   responsibilities: [
-  //     "Developed 3D globe visualization using Three.js",
-  //     "Integrated with multiple weather APIs",
-  //     "Implemented real-time data updates and animations",
-  //   ],
-  //   technologies: ["Three.js", "React", "D3.js", "WebGL", "REST APIs"],
-  //   modelId: "weather_globe",
-  //   imageUrl: "/assets/images/weather-visualizer.jpg",
-  //   videoLink: "https://example.com/weather-demo",
-  //   storeLink: null,
-  //   githubLink: "https://github.com/techcorp/weather-visualizer",
-  // },
+  {
+    id: 2,
+    title: "Lead Programmer",
+    project: "Weather Visualizer",
+    company: "TechCorp",
+    period: "2022-2023",
+    description:
+      "Real-time weather visualization dashboard with interactive 3D globe and climate data.",
+    category: CATEGORY_ID.PROFESSIONAL,
+    responsibilities: [
+      "Developed 3D globe visualization using Three.js",
+      "Integrated with multiple weather APIs",
+      "Implemented real-time data updates and animations",
+    ],
+    technologies: ["Three.js", "React", "D3.js", "WebGL", "REST APIs"],
+    modelId: "babyTurtle",
+    imageUrl: "/assets/images/weather-visualizer.jpg",
+    videoLink: "https://example.com/weather-demo",
+    storeLink: null,
+    githubLink: "https://github.com/techcorp/weather-visualizer",
+  },
 ];
+
+//TODO: Rework this so it doesn't rely on model visibility.
+
+//It will rely on the component visibility.
+//Model visibility is inconsequential, it will always be "visible", but it will be selectively rendered by the camera added by each model viewer.
+// newViewer(name)
+// getModel(name)
+// camera = new Camera()
+// camera -> set position
+// _cameras.append(camera)
+// this._renderer.render(_scene, camera);
+
+// animate() should be in the modelResourceManager if there's a camera associated with
+
+// gameModelGroup -- list of models
 
 const PortfolioSection = () => {
   const [selectedCategory, setSelectedCategory] = createSignal(CATEGORY_ID.ALL);
@@ -81,7 +95,6 @@ const PortfolioSection = () => {
   const [modelStates, setModelStates] = createStore({});
   const { isDark } = createThemeManager();
 
-  // Global model cache to prevent re-creating models
   const modelCache = {};
 
   const theme = createMemo(() => {

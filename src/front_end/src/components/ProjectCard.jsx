@@ -6,7 +6,6 @@ import {
   onMount,
   onCleanup,
 } from "solid-js";
-import ModelViewer from "./models/ModelViewer";
 import Icon from "./icons/Icon";
 
 /**
@@ -49,7 +48,7 @@ const ProjectCard = (props) => {
 
   const [isModelLoaded, setIsModelLoaded] = createSignal(false);
   const [expandedProject, setExpandedProject] = createSignal(null);
-  const [modelVisible, setModelVisible] = createSignal(props.visible !== false);
+  const [isVisible, setIsVisible] = createSignal(true);
   let modelContainerRef;
 
   const toggleProject = (projectId) => {
@@ -75,7 +74,7 @@ const ProjectCard = (props) => {
   createEffect(() => {
     const isVisible = props.visible !== false;
     console.log(`[ProjectCard ${id}] Visibility changed to: ${isVisible}`);
-    setModelVisible(isVisible);
+    setIsVisible(isVisible);
   });
 
   onMount(() => {
@@ -165,7 +164,7 @@ const ProjectCard = (props) => {
             height="100%"
             autoRotate={true}
             controlsEnabled={true}
-            visible={modelVisible()}
+            visible={isVisible()}
             onLoaded={handleModelLoaded}
             onError={handleModelError}
           />

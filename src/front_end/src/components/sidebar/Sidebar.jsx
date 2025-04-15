@@ -3,9 +3,7 @@ import { createThemeManager } from "../../stores/theme";
 import { navigationStore } from "../../stores/navigation";
 import { viewStore } from "../../stores/view";
 import { deviceStore } from "../../stores/device";
-import SidebarHeader from "./Header";
 import NavigationMenu from "./NavigationMenu";
-import SidebarFooter from "./Footer";
 import ThemeToggle from "../ThemeToggle";
 import ViewToggleSwitch from "../ViewToggleSwitch";
 import MobileMenuButton from "./MobileMenuButton";
@@ -186,6 +184,11 @@ export default function Sidebar(props) {
     return () => document.removeEventListener("click", handleClickOutside);
   });
 
+  const nameGradient = createMemo(
+    () =>
+      `bg-gradient-to-r ${isDark() ? "from-green-400 to-cyan-400" : "from-blue-700 to-teal-600"} bg-clip-text text-transparent`
+  );
+
   // Render mobile or desktop sidebar based on deviceStore's isMobile
   return (
     <>
@@ -220,8 +223,12 @@ export default function Sidebar(props) {
           }}
         >
           <div class="flex h-full flex-col pt-16">
-            <SidebarHeader />
-
+            <div class="border-b border-cyan-500/30 px-6 py-6">
+              <h2 class="text-2xl font-bold">
+                <span class={nameGradient()}>David Solinsky</span>
+              </h2>
+              <p class="mt-1 text-sm opacity-80">Gameplay/Systems Programmer</p>
+            </div>
             <ThemeToggle />
 
             <NavigationMenu
@@ -241,7 +248,9 @@ export default function Sidebar(props) {
               onToggle={toggleView}
             />
 
-            <SidebarFooter />
+            <div class="select-none border-t border-cyan-500/30 p-4 text-center text-xs opacity-70">
+              <span> © {new Date().getFullYear()} David Solinsky</span>
+            </div>
           </div>
         </aside>
       )}

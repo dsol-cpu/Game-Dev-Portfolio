@@ -57,7 +57,7 @@ const AboutSection = () => {
             David Solinsky
           </h2>
           <p class="text-xl sm:text-2xl text-gray-300 mb-6">
-            Game Developer & 3D Artist
+            Gameplay and Systems Programmer
           </p>
 
           {/* Bio text */}

@@ -23,7 +23,7 @@ const SECTIONS = {
 
 const PagePortfolio = () => {
   // Use a signal for the active section
-  const [activeSection, setActiveSection] = createSignal("about");
+  const [activeSection, setActiveSection] = createSignal("portfolio");
   const { navigatingSection, setNavigatingSection, destinationSection } =
     navigationStore;
   const { isDark } = createThemeManager();

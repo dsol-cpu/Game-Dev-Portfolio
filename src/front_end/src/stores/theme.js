@@ -29,9 +29,6 @@ export function createThemeManager() {
         theme() === "system" ? getSystemTheme() : theme();
       setEffectiveTheme(newEffectiveTheme);
       setIsDarkMode(newEffectiveTheme === "dark");
-      // console.log(
-      //   `Theme updated: ${theme()} -> Effective: ${newEffectiveTheme}, isDark: ${newEffectiveTheme === "dark"}`
-      // );
     });
 
     // Apply theme to DOM
@@ -88,12 +85,10 @@ export function createThemeManager() {
       effectiveTheme,
       isDark: isDarkMode,
       setTheme: (newTheme) => {
-        // console.log(`Setting theme to: ${newTheme}`);
         setTheme(newTheme);
       },
       toggleTheme: () => {
         const newTheme = effectiveTheme() === "dark" ? "light" : "dark";
-        // console.log(`Toggling theme to: ${newTheme}`);
         setTheme(newTheme);
       },
       dispose: () => {
