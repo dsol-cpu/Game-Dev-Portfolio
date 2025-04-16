@@ -5,6 +5,9 @@ import { optimizeRenderer } from "../utils/deviceUtils";
 import { mapArray } from "solid-js";
 
 const modelCache = new Map(); // Each model's name will be its key
+const modelMap = new Map();
+const loadingPromises = new Map(); // Each model async load function
+const gltfLoader = new GLTFLoader();
 
 //Game scene variables
 const gameModelFiles = import.meta.glob("/src/assets/models/game/*.glb", {
@@ -19,11 +22,8 @@ const projectCardModelFiles = import.meta.glob(
     eager: false,
   }
 );
-//
-let projectCardCameras = new Map();
-// const cameras = [];  // Have a list of cameras to call render on?
-const loadingPromises = new Map(); // Each model async load function
-const gltfLoader = new GLTFLoader();
+const projectCardModelMap = new Map();
+const projectCardCameras = new Map();
 
 const projectCardScene = new THREE.Scene();
 const gameViewScene = new THREE.Scene();
@@ -48,7 +48,7 @@ async function init() {
     const filename = path.split("/").pop();
     const id = filename.replace(".glb", "");
     modelMap.set(id, path);
-    s;
+
     console.log(`[ResourceManager] Registered model: ${id} -> ${path}`);
   }
 
@@ -281,7 +281,7 @@ function createModelViewer(modelName) {
 
   camera.setPosition(getModel(modelName).position + CAMERA_OFFSET);
 
-  controls = new OrbitControls(camera, canvasElement);
+  const controls = new OrbitControls(camera, canvasElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.05;
   controls.autoRotate = autoRotate;
