@@ -1,16 +1,331 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#000000" />
-    <link rel="shortcut icon" type="image/ico" href="/src/assets/favicon.ico" />
-    <title>David Solinsky</title>
-  </head>
-  <body>
-    <noscript>You need to enable JavaScript to run this app.</noscript>
-    <div id="root"></div>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Game Developer Portfolio</title>
+    <meta
+      name="description"
+      content="Portfolio of Alex Johnson, Game Developer & 3D Artist"
+    />
 
-    <script src="/src/index.jsx" type="module"></script>
+    <!-- Preconnect to CDN for faster loading -->
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
+
+    <!-- CSS files -->
+    <link rel="stylesheet" href="src/styles/main.css" />
+    <link rel="stylesheet" href="src/styles/responsive.css" />
+
+    <script>
+      // Theme Management - Apply theme immediately to prevent flash
+      (() => {
+        // Function to get the theme preference
+        const getThemePreference = () => {
+          // First check local storage
+          const savedTheme = localStorage.getItem('theme');
+          if (savedTheme) {
+            return savedTheme;
+          }
+          
+          // If no saved preference, check system preference
+          return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        };
+    
+        // Apply theme immediately to prevent flash
+        document.documentElement.setAttribute('data-theme', getThemePreference());
+      })();
+    </script>
+  </head>
+  
+  <body>
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="profile">
+        <img
+          src="/images/me.png"
+          alt="Profile"
+          class="profile-image"
+          width="120"
+          height="120"
+          loading="lazy"
+        />
+        <h2 class="profile-name">David Solinsky</h2>
+        <p class="profile-title">Gameplay & Systems Programmer</p>
+      </div>
+
+      <ul class="nav-links">
+        <li><a href="" class="nav-link active" data-target="home">Home</a></li>
+        <li><a href="" class="nav-link" data-target="about">About Me</a></li>
+        <li><a href="" class="nav-link" data-target="portfolio">Portfolio</a></li>
+        <li><a href="" class="nav-link" data-target="contact">Contact</a></li>
+      </ul>
+
+      <div class="social-links">
+        <a href="" title="GitHub"></a>
+        <a href="" title="LinkedIn"></a>
+        <a href="" title="Twitter">TW</a>
+        <a href="" title="Instagram">IG</a>
+      </div>
+
+      <div class="theme-toggle">
+        <button id="theme-toggle-btn" aria-label="Toggle dark/light mode">
+          <span class="theme-icon light-icon">☀️</span>
+          <span class="theme-icon dark-icon">🌙</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+      <!-- Home Section -->
+      <section id="home" class="active">
+        <!-- Three.js Canvas -->
+        <div id="canvas-container"></div>
+        
+        <!-- Game Controls Info -->
+        <div class="game-controls-info">
+          <p>Use WASD or Arrow Keys to move character</p>
+        </div>
+      
+        <p>
+          Hello! I'm Alex Johnson, a passionate game developer specializing in
+          immersive 3D experiences and interactive storytelling. Explore my
+          portfolio to see my latest projects and experiments.
+        </p>
+      </section>
+
+      <!-- About Section -->
+      <section id="about">
+        <h1 class="section-title">About Me</h1>
+
+        <div class="about-container">
+          <div class="about-text">
+            <p>
+              I'm a game developer with over 5 years of experience creating
+              immersive gaming experiences. My passion for games started when I
+              was young, and I've turned that passion into a career crafting
+              interactive worlds and engaging gameplay mechanics.
+            </p>
+            <br />
+            <p>
+              I specialize in Unity and Unreal Engine development, with a strong
+              focus on gameplay programming, procedural generation, and shader
+              development. My experience includes working on indie titles as
+              well as collaborating with larger studios on AAA projects.
+            </p>
+            <br />
+            <p>
+              When I'm not coding, I enjoy experimenting with 3D modeling,
+              learning about game design principles, and playing games to stay
+              up-to-date with industry trends and innovations.
+            </p>
+          </div>            
+      </section>
+
+      <!-- Portfolio Section -->
+      <section id="portfolio">
+        <h1 class="section-title">My Portfolio</h1>
+
+        <div class="filter-buttons">
+          <button class="filter-button active" data-filter="all">All</button>
+          <button class="filter-button" data-filter="unity">Unity</button>
+          <button class="filter-button" data-filter="unreal">
+            Unreal Engine
+          </button>
+          <button class="filter-button" data-filter="web">Web Games</button>
+          <button class="filter-button" data-filter="3d">3D Modeling</button>
+        </div>
+
+        <div class="portfolio-grid">
+          <!-- Project 1 -->
+          <div class="portfolio-item" data-category="unity">
+            <div class="portfolio-img">
+              <img
+                src="assets/images/placeholder.jpg"
+                alt="Mystic Forest"
+                width="300"
+                height="200"
+                loading="lazy"
+              />
+            </div>
+            <div class="portfolio-info">
+              <h3 class="portfolio-title">Mystic Forest</h3>
+              <p class="portfolio-category">Unity, C#, Procedural Generation</p>
+              <p class="portfolio-desc">
+                An open-world adventure game with procedurally generated forests
+                and dynamic weather systems.
+              </p>
+              <div class="portfolio-links">
+                <a href="#">Demo</a>
+                <a href="#">Details</a>
+              </div>
+            </div>
+          </div>
+
+          <!-- Project 2 -->
+          <div class="portfolio-item" data-category="unreal">
+            <div class="portfolio-img">
+              <img
+                src="assets/images/placeholder.jpg"
+                alt="Space Odyssey"
+                width="300"
+                height="200"
+                loading="lazy"
+              />
+            </div>
+            <div class="portfolio-info">
+              <h3 class="portfolio-title">Space Odyssey</h3>
+              <p class="portfolio-category">Unreal Engine, C++, Blueprint</p>
+              <p class="portfolio-desc">
+                A sci-fi exploration game with realistic physics and advanced AI
+                systems.
+              </p>
+              <div class="portfolio-links">
+                <a href="#">Demo</a>
+                <a href="#">Details</a>
+              </div>
+            </div>
+          </div>
+
+          <!-- Project 3 -->
+          <div class="portfolio-item" data-category="web">
+            <div class="portfolio-img">
+              <img
+                src="assets/images/placeholder.jpg"
+                alt="Pixel Runner"
+                width="300"
+                height="200"
+                loading="lazy"
+              />
+            </div>
+            <div class="portfolio-info">
+              <h3 class="portfolio-title">Pixel Runner</h3>
+              <p class="portfolio-category">JavaScript, Three.js, WebGL</p>
+              <p class="portfolio-desc">
+                A browser-based endless runner with retro pixel art and online
+                leaderboards.
+              </p>
+              <div class="portfolio-links">
+                <a href="#">Play</a>
+                <a href="#">Details</a>
+              </div>
+            </div>
+          </div>
+
+          <!-- Project 4 -->
+          <div class="portfolio-item" data-category="3d">
+            <div class="portfolio-img">
+              <img
+                src="assets/images/placeholder.jpg"
+                alt="Character Assets"
+                width="300"
+                height="200"
+                loading="lazy"
+              />
+            </div>
+            <div class="portfolio-info">
+              <h3 class="portfolio-title">Fantasy Character Pack</h3>
+              <p class="portfolio-category">Blender, Substance Painter</p>
+              <p class="portfolio-desc">
+                A collection of low-poly fantasy character models with PBR
+                textures and animations.
+              </p>
+              <div class="portfolio-links">
+                <a href="#">Gallery</a>
+                <a href="#">Details</a>
+              </div>
+            </div>
+          </div>
+
+          <!-- Project 5 -->
+          <div class="portfolio-item" data-category="unity">
+            <div class="portfolio-img">
+              <img
+                src="assets/images/placeholder.jpg"
+                alt="Dungeon Crawler"
+                width="300"
+                height="200"
+                loading="lazy"
+              />
+            </div>
+            <div class="portfolio-info">
+              <h3 class="portfolio-title">Dungeon Delver</h3>
+              <p class="portfolio-category">Unity, C#, AI Systems</p>
+              <p class="portfolio-desc">
+                A procedurally generated dungeon crawler with advanced enemy AI
+                and combat systems.
+              </p>
+              <div class="portfolio-links">
+                <a href="#">Demo</a>
+                <a href="#">Details</a>
+              </div>
+            </div>
+          </div>
+
+          <!-- Project 6 -->
+          <div class="portfolio-item" data-category="unreal web">
+            <div class="portfolio-img">
+              <img
+                src="assets/images/placeholder.jpg"
+                alt="VR Experience"
+                width="300"
+                height="200"
+                loading="lazy"
+              />
+            </div>
+            <div class="portfolio-info">
+              <h3 class="portfolio-title">VR Meditation Space</h3>
+              <p class="portfolio-category">Unreal Engine, WebXR</p>
+              <p class="portfolio-desc">
+                A cross-platform VR experience designed to provide peaceful
+                meditation environments.
+              </p>
+              <div class="portfolio-links">
+                <a href="#">Demo</a>
+                <a href="#">Details</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Contact Section -->
+      <section id="contact">
+        <h1 class="section-title">Contact Me</h1>
+
+        <p>
+          I'm always interested in new projects and collaborations. Feel free to
+          reach out!
+        </p>
+
+        <form id="contact-form">
+          <div class="form-group">
+            <label for="name">Name</label>
+            <input type="text" id="name" name="name" required />
+          </div>
+
+          <div class="form-group">
+            <label for="email">Email</label>
+            <input type="email" id="email" name="email" required />
+          </div>
+
+          <div class="form-group">
+            <label for="message">Message</label>
+            <textarea id="message" name="message" rows="5" required></textarea>
+          </div>
+
+          <button type="submit">Send Message</button>
+        </form>
+      </section>
+    </div>
+
+    <script type="module">
+      import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.min.js';
+    </script>
+    
+    <!-- Import your other scripts as modules -->
+    <script type="module" src="/src/js/three-scene.js"></script>
+    <script type="module" src="/src/js/main.js"></script>
+    <script type="module" src="/src/js/theme-toggle"></script>
   </body>
 </html>

@@ -1,5 +1,5 @@
 import { onMount, createEffect, onCleanup } from "solid-js";
-import { createThemeManager } from "../../stores/theme";
+import { createThemeManager } from "../stores/theme";
 
 // Import all SVGs using Vite's built-in import.meta.glob
 const svgImports = import.meta.glob("/src/assets/icons/*.svg", {

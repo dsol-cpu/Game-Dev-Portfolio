@@ -1,0 +1,100 @@
+/* Responsive styles */
+
+/* Large devices (desktops, less than 1200px) */
+@media (max-width: 1200px) {
+  .portfolio-grid {
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  }
+}
+
+/* Medium devices (tablets, less than 992px) */
+@media (max-width: 992px) {
+  .about-container {
+    flex-direction: column;
+  }
+
+  .section-title {
+    font-size: 2rem;
+  }
+}
+
+/* Small devices (landscape phones, less than 768px) */
+@media (max-width: 768px) {
+  :root {
+    --sidebar-width: 100%;
+  }
+
+  body {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    height: auto;
+    position: relative;
+    padding: 1rem;
+  }
+
+  .main-content {
+    margin-left: 0;
+    width: 100%;
+    padding: 1rem;
+  }
+
+  .nav-links {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+
+  .nav-links li {
+    margin-bottom: 0;
+  }
+
+  .portfolio-grid {
+    grid-template-columns: 1fr;
+  }
+
+  section {
+    min-height: auto;
+    padding: 1rem 0;
+  }
+}
+
+/* Extra small devices (portrait phones, less than 576px) */
+@media (max-width: 576px) {
+  .filter-buttons {
+    justify-content: center;
+  }
+
+  .section-title {
+    font-size: 1.75rem;
+  }
+
+  .profile-image {
+    width: 100px;
+    height: 100px;
+  }
+}
+
+/* For print */
+@media print {
+  .sidebar {
+    display: none;
+  }
+
+  .main-content {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  section {
+    display: block !important;
+    min-height: auto;
+    page-break-after: always;
+  }
+
+  #canvas-container {
+    display: none;
+  }
+}
