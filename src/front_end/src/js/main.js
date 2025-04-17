@@ -4,6 +4,11 @@
  * and other UI interactions
  */
 
+let portfolioItemCount = 0;
+let activeProjectCardCamBitMask = 0;
+
+let filterButtons;
+let portfolioItems;
 document.addEventListener("DOMContentLoaded", function () {
   // Set up navigation
   initNavigation();
@@ -14,34 +19,6 @@ document.addEventListener("DOMContentLoaded", function () {
   // Set up contact form
   initContactForm();
 });
-
-/**
- * Initialize skill bar animations
- */
-function initSkillBars() {
-  const skillBars = document.querySelectorAll(".skill-bar-inner");
-
-  // Use Intersection Observer to trigger animations when visible
-  const observer = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry) => {
-        if (entry.isIntersecting) {
-          const width = entry.target.getAttribute("data-width");
-          entry.target.style.width = `${width}%`;
-          // Unobserve after animation is triggered
-          observer.unobserve(entry.target);
-        }
-      });
-    },
-    { threshold: 0.2 }
-  );
-
-  skillBars.forEach((bar) => {
-    // Start with 0 width
-    bar.style.width = "0%";
-    observer.observe(bar);
-  });
-}
 
 /**
  * Initialize navigation functionality
@@ -68,9 +45,9 @@ function initNavigation() {
         targetSection.classList.add("active");
 
         // Scroll to it (optional)
-        if (window.innerWidth <= 768) {
-          targetSection.scrollIntoView({ behavior: "smooth" });
-        }
+        // if (window.innerWidth <= 768) {
+        //   targetSection.scrollIntoView({ behavior: "smooth" });
+        // }
       }
     });
   });
@@ -80,8 +57,11 @@ function initNavigation() {
  * Initialize portfolio filtering
  */
 function initPortfolioFilters() {
-  const filterButtons = document.querySelectorAll(".filter-button");
-  const portfolioItems = document.querySelectorAll(".portfolio-item");
+  filterButtons = document.querySelectorAll(".filter-button");
+  portfolioItems = document.querySelectorAll(".portfolio-item");
+
+  portfolioItemCount = portfolioItems.length;
+  activeProjectCardCamBitMask = new Uint8Array(portfolioItemCount);
 
   filterButtons.forEach((button) => {
     button.addEventListener("click", function () {
@@ -144,4 +124,12 @@ function initContactForm() {
       contactForm.reset();
     });
   }
+}
+
+function createBitmask(indices) {
+  let bitmask = 0;
+  for (let index = 0; index < indices.length; index++) {
+    bitmask |= 1 << index;
+  }
+  return bitmask;
 }

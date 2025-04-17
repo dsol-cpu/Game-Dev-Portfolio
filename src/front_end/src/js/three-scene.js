@@ -1,13 +1,21 @@
-let renderer;
+import * as THREE from "./three/three.module.min.js";
+import { GLTFLoader } from "./three/GLTFLoader.js";
+import { OrbitControls } from "./three/OrbitControls.js";
+
+let renderer = null;
+let gameSceneCamera = null;
+let thirdPersonCamera = null;
+let gameScene = null;
+
+let activeProjectCardCamBitmask = new Uint8Array(2);
 let projectCardCameras = [];
 let projectCardScene = null;
-let gameSceneCamera;
-let gameScene = null;
+
 let player = null;
 let playerModel = null;
-let thirdPersonCamera = null;
-let moveSpeed = 0.1;
-let rotationSpeed = 0.05;
+
+const moveSpeed = 0.1;
+const rotationSpeed = 0.05;
 let keysPressed = {};
 
 // Resource Manager to handle models
@@ -16,7 +24,7 @@ const resourceManager = {
 
   // Load GLB model
   loadModel: function (name, url) {
-    const loader = new THREE.GLTFLoader();
+    const loader = new GLTFLoader();
     return new Promise((resolve, reject) => {
       loader.load(
         url,
@@ -47,19 +55,15 @@ const resourceManager = {
     return null;
   },
 
+  // TODO: Load Project Models into the Project Card Scene by a certain offset
   // Preload models from specific directories
   preloadProjectModels: async function () {
     const modelPaths = [
       // Add your project card model filenames here
       {
-        name: "project_model_1",
-        path: "/assets/models/project_card/model1.glb",
+        name: "baby_turtle",
+        path: "/assets/models/project_card/babyTurtle.glb",
       },
-      {
-        name: "project_model_2",
-        path: "/assets/models/project_card/model2.glb",
-      },
-      // Add more models as needed
     ];
 
     const loadPromises = modelPaths.map((model) =>
@@ -126,33 +130,34 @@ function initThreeJS() {
   if (!container) return;
 
   // Scene setup
-  scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x2c3e50);
+  gameScene = new THREE.Scene();
+  gameScene.background = null;
 
-  // Main camera setup (for home view)
-  mainCamera = new THREE.PerspectiveCamera(
+  // Game camera setup (for game view)
+  gameSceneCamera = new THREE.PerspectiveCamera(
     75,
     container.clientWidth / container.clientHeight,
     0.1,
     1000
   );
-  mainCamera.position.z = 5;
+  gameSceneCamera.position.z = 5;
 
   // Renderer setup
-  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setClearColor(0x000000, 0);
   renderer.setSize(container.clientWidth, container.clientHeight);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   container.appendChild(renderer.domElement);
 
-  // Lights for main scene
+  // Lights for game scene
   const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-  scene.add(ambientLight);
+  gameScene.add(ambientLight);
 
   const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
   directionalLight.position.set(1, 1, 1);
   directionalLight.castShadow = true;
-  scene.add(directionalLight);
+  gameScene.add(directionalLight);
 
   // Preload models
   resourceManager.preloadProjectModels();
@@ -164,8 +169,8 @@ function initThreeJS() {
     const height = container.clientHeight;
 
     // Update main camera
-    mainCamera.aspect = width / height;
-    mainCamera.updateProjectionMatrix();
+    gameSceneCamera.aspect = width / height;
+    gameSceneCamera.updateProjectionMatrix();
 
     // Update all project card cameras
     projectCardCameras.forEach((cameraInfo) => {
@@ -344,7 +349,7 @@ function initProjectCardScene() {
     cardElement.appendChild(renderer);
 
     // Set up orbital controls
-    const controls = new THREE.OrbitControls(camera, renderer);
+    const controls = new OrbitControls(camera, renderer);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
     controls.enableZoom = false;
@@ -463,11 +468,11 @@ function initGameScene() {
 }
 
 // Setup player model with third-person camera
-function setupPlayerWithCamera(scene) {
+function setupPlayerWithCamera() {
   // Create player container
   player = new THREE.Object3D();
   player.position.set(0, 0, 0);
-  scene.add(player);
+  gameScene.add(player);
 
   // Try to load player model
   playerModel = resourceManager.getModel("player_model");
@@ -510,6 +515,14 @@ function setupPlayerWithCamera(scene) {
 
   // Create third-person camera
   const container = document.getElementById("canvas-container");
+
+  gameSceneCamera = new THREE.PerspectiveCamera(
+    75,
+    container.clientWidth / container.clientHeight,
+    0.1,
+    1000
+  );
+
   thirdPersonCamera = new THREE.PerspectiveCamera(
     75,
     container.clientWidth / container.clientHeight,
@@ -589,65 +602,29 @@ function animate() {
     }
   });
 
+  //TODO: Make this respond to a switch
   // Render based on current section
   if (currentSection === "home" && gameScene && gameScene.visible) {
     // Render game scene in the main canvas using third-person camera if available
     if (thirdPersonCamera) {
-      renderer.render(gameScene.scene, thirdPersonCamera);
+      renderer.render(gameScene, thirdPersonCamera);
     } else {
-      renderer.render(gameScene.scene, gameScene.camera);
+      renderer.render(gameScene, gameSceneCamera);
     }
   } else {
     // Render main scene with main camera
-    renderer.render(scene, mainCamera);
+    renderer.render(gameScene, gameSceneCamera);
   }
 
   // Render all visible project cards in the portfolio section
   if (currentSection === "portfolio") {
-    projectCardCameras.forEach((cameraInfo) => {
-      if (cameraInfo.visible) {
-        // Create a temporary renderer for each card
-        const tempRenderer = new THREE.WebGLRenderer({ antialias: true });
-        tempRenderer.setSize(
-          cameraInfo.element.clientWidth,
-          cameraInfo.element.clientHeight
-        );
-
-        // Clear any previous renderers
-        while (cameraInfo.element.firstChild) {
-          cameraInfo.element.removeChild(cameraInfo.element.firstChild);
-        }
-
-        // Add the new renderer
-        cameraInfo.element.appendChild(tempRenderer.domElement);
-
-        // Render the shared scene with this camera
-        tempRenderer.render(projectCardScene, cameraInfo.camera);
-      }
-    });
+    for (let index = 0; index < portfolioItemCount; index++) {
+      renderer.render(projectCardScene, projectCardCameras[index]);
+    }
   }
 }
 
-// Initialize Three.js when document is loaded
-document.addEventListener("DOMContentLoaded", function () {
-  // First load the OrbitControls
-  const orbitControlsScript = document.createElement("script");
-  orbitControlsScript.src =
-    "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/controls/OrbitControls.js";
-  orbitControlsScript.onload = function () {
-    // Load the GLTFLoader
-    const gltfLoaderScript = document.createElement("script");
-    gltfLoaderScript.src =
-      "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/examples/js/loaders/GLTFLoader.js";
-    gltfLoaderScript.onload = function () {
-      // Now initialize the Three.js scene
-      initThreeJS();
-    };
-    document.head.appendChild(gltfLoaderScript);
-  };
-  document.head.appendChild(orbitControlsScript);
-});
-
+initThreeJS();
 // Set up navigation to toggle section visibility
 document.addEventListener("DOMContentLoaded", function () {
   const navLinks = document.querySelectorAll(".nav-link");
@@ -695,3 +672,21 @@ window.addEventListener("unload", function () {
     }
   });
 });
+
+function applyProjectCamBitmask(bitmask) {
+  activeProjectCardCamBitmask |= bitmask;
+}
+
+function enableAllProjectCardsCameras() {
+  activeProjectCardCamBitmask = (1 << portfolioItemCount) - 1;
+}
+
+function disableAllProjectCardsCameras() {
+  activeProjectCardCamBitMask = 0;
+}
+
+export {
+  applyProjectCamBitmask,
+  enableAllProjectCardsCameras,
+  disableAllProjectCardsCameras,
+};

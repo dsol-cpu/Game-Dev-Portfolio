@@ -209,17 +209,19 @@ class SvgSpriteManager {
             clone.setAttribute("stroke", "none");
           }
 
+          const fill_str = "fill";
+
           // Handle fill attribute
           if (hasFillAttr) {
             // Preserve the original fill value if it's "none"
             if (fillValue === "none") {
-              clone.setAttribute("fill", "none");
+              clone.setAttribute(fill_str, "none");
             } else {
-              clone.setAttribute("fill", "currentColor");
+              clone.setAttribute(fill_str, "currentColor");
             }
           } else if (!hasFillAttr) {
             // For elements without fill, add make fill none
-            clone.setAttribute("fill", "none");
+            clone.setAttribute(fill_str, "none");
           }
 
           // Process child nodes recursively
