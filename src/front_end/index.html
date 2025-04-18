@@ -4,82 +4,112 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Game Developer Portfolio</title>
-  <meta name="description" content="Portfolio of Alex Johnson, Game Developer & 3D Artist" />
+  <title>David Solinsky</title>
+  <meta name="description" content="Portfolio of David Solinsky, Gameplay and Systems Programmer" />
 
   <!-- Preconnect to CDN for faster loading -->
   <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
 
+
   <!-- CSS files -->
   <link rel="stylesheet" href="src/styles/main.css" />
   <link rel="stylesheet" href="src/styles/responsive.css" />
-
   <script>
+
     // Theme Management - Apply theme immediately to prevent flash
     (() => {
-      // Function to get the theme preference
-      const getThemePreference = () => {
-        // First check local storage
-        const savedTheme = localStorage.getItem('theme');
-        if (savedTheme) {
-          return savedTheme;
-        }
-
-        // If no saved preference, check system preference
-        return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-      };
-
-      // Apply theme immediately to prevent flash
-      document.documentElement.setAttribute('data-theme', getThemePreference());
-    })();
-
-    /* Script to initialize SVG Sprite Manager */
-    // Define icon paths and load them
-    document.addEventListener('DOMContentLoaded', async function () {
-      // List of icons to load
-      const iconList = [
-        'about.svg', 'portfolio.svg', 'github.svg', 'linkedin.svg',
-        'sun.svg', 'moon.svg', 'resume.svg', 'space.svg', 'shift.svg', 'wasd.svg'
-      ];
-
-      // Create an object to store SVG data
-      const svgData = {};
-      const baseIconPath = '/icons/';
-
-      // Helper function to fetch SVG content
-      async function fetchSvg(path) {
-        try {
-          const response = await fetch(path);
-          if (!response.ok) throw new Error(`Failed to load ${path}`);
-          return await response.text();
-        } catch (err) {
-          console.error(`Error loading SVG: ${path}`, err);
-          // Return a basic placeholder SVG if loading fails
-          return `<svg viewBox="0 0 24 24"><rect width="24" height="24" fill="red" opacity="0.3"/><text x="12" y="12" text-anchor="middle" dominant-baseline="middle" font-size="8">Error</text></svg>`;
-        }
+    // Function to get the theme preference
+    const getThemePreference = () => {
+      // First check local storage
+      const savedTheme = localStorage.getItem("theme");
+      if (savedTheme) {
+        return savedTheme;
       }
 
-      // Load each SVG file
-      for (const icon of iconList) {
-        const path = baseIconPath + icon;
-        svgData[path] = await fetchSvg(path);
+      // If no saved preference, check system preference
+      return window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "dark"
+        : "light";
+    };
+
+    // Apply theme immediately to prevent flash
+    document.documentElement.setAttribute("data-theme", getThemePreference());
+  })();
+
+  // Initialize everything else after DOM is loaded
+  document.addEventListener("DOMContentLoaded", async function () {
+    // List of icons to load
+    const iconList = [
+      "about.svg",
+      "portfolio.svg",
+      "github.svg",
+      "linkedin.svg",
+      "sun.svg",
+      "moon.svg",
+      "resume.svg",
+      "space.svg",
+      "shift.svg",
+      "wasd.svg",
+      "person.svg",
+    ];
+
+    // Create an object to store SVG data
+    const svgData = {};
+    const baseIconPath = "/icons/";
+
+    // Helper function to fetch SVG content
+    async function fetchSvg(path) {
+      try {
+        const response = await fetch(path);
+        if (!response.ok) throw new Error(`Failed to load ${path}`);
+        return await response.text();
+      } catch (err) {
+        console.error(`Error loading SVG: ${path}`, err);
+        // Return a basic placeholder SVG if loading fails
+        return `<svg viewBox="0 0 24 24"><rect width="24" height="24" fill="red" opacity="0.3"/><text x="12" y="12" text-anchor="middle" dominant-baseline="middle" font-size="8">Error</text></svg>`;
       }
+    }
 
-      // Initialize the sprite manager
-      const spriteManager = new SvgSpriteManager({
-        svgData,
-        isDarkMode: document.documentElement.getAttribute('data-theme') === 'dark'
-      });
+    // Load each SVG file
+    for (const icon of iconList) {
+      const path = baseIconPath + icon;
+      svgData[path] = await fetchSvg(path);
+    }
 
-      // Connect theme toggle button
-      document.getElementById('theme-toggle-btn').addEventListener('click', function () {
-        const isDark = spriteManager.toggleTheme();
-        document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
-        localStorage.setItem('theme', isDark ? 'dark' : 'light');
-      });
+    // Initialize the sprite manager
+    const spriteManager = new SvgSpriteManager({
+      svgData,
+      isDarkMode: document.documentElement.getAttribute("data-theme") === "dark",
     });
 
+    // Make spriteManager available globally
+    window.spriteManager = spriteManager;
+
+    // Connect theme toggle checkbox
+    const themeToggle = document.getElementById("theme-toggle");
+
+    // Set initial checkbox state based on current theme
+    const currentTheme = document.documentElement.getAttribute("data-theme");
+    themeToggle.checked = currentTheme === "dark";
+
+    // Add event listener for checkbox change
+    themeToggle.addEventListener("change", function () {
+      const isDark = this.checked;
+      document.documentElement.setAttribute(
+        "data-theme",
+        isDark ? "dark" : "light"
+      );
+      localStorage.setItem("theme", isDark ? "dark" : "light");
+
+      // Update sprite manager theme
+      if (spriteManager && typeof spriteManager.setTheme === "function") {
+        spriteManager.setTheme(isDark);
+      }
+    });
+  });
+
   </script>
+
 </head>
 
 <body>
@@ -94,7 +124,7 @@
     <ul class="nav-links">
       <li><a href="" class="nav-link active " data-target="about">
           <svg aria-hidden="true" class="nav-icon">
-            <use href="#icon-resume" />
+            <use href="#icon-person" />
           </svg>
           About Me
         </a></li>
@@ -126,14 +156,18 @@
     </div>
 
     <div class="theme-toggle">
-      <button id="theme-toggle-btn" aria-label="Toggle dark/light mode">
-        <svg class="theme-icon light-icon" aria-hidden="true">
-          <use href="#icon-sun" />
-        </svg>
-        <svg class="theme-icon dark-icon" aria-hidden="true">
-          <use href="#icon-moon" />
-        </svg>
-      </button>
+      <label class="theme-switch">
+        <input type="checkbox" id="theme-toggle">
+        <span class="slider"></span>
+        <div class="theme-icons">
+          <svg class="light-icon" aria-hidden="true">
+            <use href="#icon-sun" />
+          </svg>
+          <svg class="dark-icon" aria-hidden="true">
+            <use href="#icon-moon" />
+          </svg>
+        </div>
+      </label>
     </div>
   </div>
 
@@ -295,6 +329,15 @@
     </section>
     <section id="resume">
       <h1 class="section-title">Resume</h1>
+      
+      <div class="resume-container">
+        <!-- <div class="download-container">
+          <a href="src/assets/documents/David_Solinsky_resume.pdf" class="download-link" download>Download Resume PDF</a>
+        </div> -->
+        
+        <!-- Primary method: iframe for PDF viewing -->
+        <!-- <iframe src="src/assets/documents/David_Solinsky_resume.pdf" class="pdf-embed" title="Resume PDF"></iframe> -->
+      </div>
     </section>
 
     <!-- Three.js Canvas -->

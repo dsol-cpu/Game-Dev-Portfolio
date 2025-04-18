@@ -647,10 +647,10 @@ document.addEventListener("DOMContentLoaded", function () {
       console.log("sectionId:", sectionId, document.getElementById(sectionId));
       document.getElementById(sectionId).classList.add("active");
 
-      // Update game scene visibility based on section
-      if (gameScene) {
-        gameScene.visible = sectionId === "home";
-      }
+      // // Update game scene visibility based on section
+      // if (gameScene) {
+      //   gameScene.visible = sectionId === "about";
+      // }
     });
   });
 });
