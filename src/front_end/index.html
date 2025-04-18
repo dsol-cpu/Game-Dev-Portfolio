@@ -175,7 +175,6 @@
   <div class="main-content">
     <!-- About Section -->
     <section id="about" class="active">
-      <h1 class="section-title">About Me</h1>
       <div class="about-container">
         <div class="about-text">
           <p>
@@ -199,7 +198,6 @@
 
     <!-- Portfolio Section -->
     <section id="portfolio">
-      <h1 class="section-title">My Portfolio</h1>
 
       <div class="filter-buttons">
         <button class="filter-button active" data-filter="all">All</button>
@@ -210,127 +208,12 @@
         <button class="filter-button" data-filter="web">Web Games</button>
         <button class="filter-button" data-filter="3d">3D Modeling</button>
       </div>
-
-      <div class="portfolio-grid">
-        <!-- Project 1 -->
-        <div class="portfolio-item" data-category="unity">
-          <div class="portfolio-img">
-            <img src="assets/images/placeholder.jpg" alt="Geospatial Visualizer" width="300" height="200"
-              loading="lazy" />
-          </div>
-          <div class="portfolio-info">
-            <h3 class="portfolio-title">Geospatial Visualizer</h3>
-            <p class="portfolio-category">Unity, C#, Procedural Generation</p>
-            <p class="portfolio-desc">
-              A visualization of geospatial information.
-            </p>
-            <div class="portfolio-links">
-              <a href="#">Demo</a>
-              <a href="#">Details</a>
-            </div>
-          </div>
-        </div>
-
-        <!-- Project 2 -->
-        <div class="portfolio-item" data-category="unreal">
-          <div class="portfolio-img">
-            <img src="assets/images/placeholder.jpg" alt="Space Odyssey" width="300" height="200" loading="lazy" />
-          </div>
-          <div class="portfolio-info">
-            <h3 class="portfolio-title">Space Odyssey</h3>
-            <p class="portfolio-category">Unreal Engine, C++, Blueprint</p>
-            <p class="portfolio-desc">
-              A sci-fi exploration game with realistic physics and advanced AI
-              systems.
-            </p>
-            <div class="portfolio-links">
-              <a href="#">Demo</a>
-              <a href="#">Details</a>
-            </div>
-          </div>
-        </div>
-
-        <!-- Project 3 -->
-        <div class="portfolio-item" data-category="web">
-          <div class="portfolio-img">
-            <img src="assets/images/placeholder.jpg" alt="Portfolio Website" width="300" height="200" loading="lazy" />
-          </div>
-          <div class="portfolio-info">
-            <h3 class="portfolio-title">Portfolio Website</h3>
-            <p class="portfolio-category">JavaScript, Three.js, WebGL</p>
-            <p class="portfolio-desc">
-              A browser-based endless runner with retro pixel art and online
-              leaderboards.
-            </p>
-            <div class="portfolio-links">
-              <a target="_blank" href="">Play</a>
-              <a href="#">Details</a>
-            </div>
-          </div>
-        </div>
-
-        <!-- Project 4 -->
-        <div class="portfolio-item" data-category="3d">
-          <div class="portfolio-img">
-            <img src="assets/images/placeholder.jpg" alt="Character Assets" width="300" height="200" loading="lazy" />
-          </div>
-          <div class="portfolio-info">
-            <h3 class="portfolio-title">Fantasy Character Pack</h3>
-            <p class="portfolio-category">Blender, Substance Painter</p>
-            <p class="portfolio-desc">
-              A collection of low-poly fantasy character models with PBR
-              textures and animations.
-            </p>
-            <div class="portfolio-links">
-              <a href="#">Gallery</a>
-              <a href="#">Details</a>
-            </div>
-          </div>
-        </div>
-
-        <!-- Project 5 -->
-        <div class="portfolio-item" data-category="unity">
-          <div class="portfolio-img">
-            <img src="assets/images/placeholder.jpg" alt="Dungeon Crawler" width="300" height="200" loading="lazy" />
-          </div>
-          <div class="portfolio-info">
-            <h3 class="portfolio-title">Dungeon Delver</h3>
-            <p class="portfolio-category">Unity, C#, AI Systems</p>
-            <p class="portfolio-desc">
-              A procedurally generated dungeon crawler with advanced enemy AI
-              and combat systems.
-            </p>
-            <div class="portfolio-links">
-              <a href="#">Demo</a>
-              <a href="#">Details</a>
-            </div>
-          </div>
-        </div>
-
-        <!-- Project 6 -->
-        <div class="portfolio-item" data-category="unreal web">
-          <div class="portfolio-img">
-            <img src="assets/images/placeholder.jpg" alt="VR Experience" width="300" height="200" loading="lazy" />
-          </div>
-          <div class="portfolio-info">
-            <h3 class="portfolio-title">VR Meditation Space</h3>
-            <p class="portfolio-category">Unreal Engine, WebXR</p>
-            <p class="portfolio-desc">
-              A cross-platform VR experience designed to provide peaceful
-              meditation environments.
-            </p>
-            <div class="portfolio-links">
-              <a href="#">Demo</a>
-              <a href="#">Details</a>
-            </div>
-          </div>
-        </div>
-      </div>
+      <div class="portfolio-grid"></div>
     </section>
     <section id="resume">
-      <h1 class="section-title">Resume</h1>
       
       <div class="resume-container">
+        <canvas id="game-canvas"></canvas>
         <!-- <div class="download-container">
           <a href="src/assets/documents/David_Solinsky_resume.pdf" class="download-link" download>Download Resume PDF</a>
         </div> -->
@@ -364,16 +247,13 @@
       </div>
     </div> -->
   </div>
-
-  <!-- Import your other scripts as modules -->
   <script type="module" src="/src/js/three/three.core.min.js"></script>
   <script type="module" src="/src/js/three/three.module.min.js"></script>
   <script type="module" src="/src/js/three/BufferGeometryUtils.js"></script>
   <script type="module" src="/src/js/three/GLTFLoader.js"></script>
   <script type="module" src="/src/js/three/OrbitControls.js"></script>
-  <script type="module" src="/src/js/three-scene.js"></script>
-  <script type="module" src="/src/js/main.js"></script>
   <script type="module" src="/src/js/svg-sprite-manager.js"></script>
+  <script type="module" src="/src/js/main.js"></script>
 </body>
 
 </html>
