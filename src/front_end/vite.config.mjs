@@ -76,7 +76,7 @@ export default defineConfig({
   ],
 
   build: {
-    outDir: "../dist",
+    outDir: "./build",
     minify: "terser",
     terserOptions: {
       compress: {
