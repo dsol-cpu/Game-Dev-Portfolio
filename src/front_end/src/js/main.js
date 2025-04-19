@@ -209,104 +209,116 @@ const fallbackCube = new THREE.Mesh(
   new THREE.MeshBasicMaterial({ color: 0xff0000 }) // Red color for the cube
 );
 
-// Resource Manager to handle models
-const resourceManager = {
-  models: {},
+/**
+ * Loads a GLTF model with the given name
+ * @param {string} modelName - Name of the model to load
+ */
+function loadModel(modelName) {
+  const modelUrl = `/assets/models/${modelName}.gltf`; // Assuming model files are in .gltf format
 
-  // Load GLB model
-  loadModel(modelName) {
-    const modelUrl = `/assets/models/${modelName}.gltf`; // Assuming model files are in .gltf format
-
-    // Attempt to load the model
-    const loader = new GLTFLoader();
-    loader.load(
-      modelUrl,
-      (gltf) => {
-        const model = gltf.scene;
-        model.name = modelName;
-        models[modelName] = model;
-        console.log(`${modelName} to models dict`);
-      },
-      undefined, // onProgress callback, can be left undefined
-      (error) => {
-        console.error(`Model failed to load: ${modelName}. Error:`, error);
-        fallbackCube.name = modelName;
-        models[modelName] = fallbackCube;
-        console.log(models[modelName]);
-        console.warn(`Fallback cube used for missing model: ${modelName}`);
-      }
-    );
-  },
-
-  // Get model
-  getModel: function (name) {
-    console.log(`Getting model: ${models[name]}`);
-    console.log(`Models list: ${models}`);
-    return this.models[name].clone();
-  },
-
-  // Preload models for project cards
-  preloadProjectModels: async function () {
-    const modelPaths = [
-      {
-        name: "baby_turtle",
-        path: "/assets/models/project_card/babyTurtle.glb",
-      },
-    ];
-
-    const loadPromises = modelPaths.map((model) => {
-      this.loadModel(model.name, model.path);
-    });
-
-    try {
-      await Promise.all(loadPromises);
-      console.log("All project models loaded successfully");
-    } catch (error) {
-      console.error("Error preloading project models:", error);
+  // Attempt to load the model
+  const loader = new GLTFLoader();
+  loader.load(
+    modelUrl,
+    (gltf) => {
+      const model = gltf.scene;
+      model.name = modelName;
+      models[modelName] = model;
+      console.log(`${modelName} to models dict`);
+    },
+    undefined, // onProgress callback, can be left undefined
+    (error) => {
+      console.error(`Model failed to load: ${modelName}. Error:`, error);
+      fallbackCube.name = modelName;
+      models[modelName] = fallbackCube;
+      console.log(models[modelName]);
+      console.warn(`Fallback cube used for missing model: ${modelName}`);
     }
-  },
+  );
+}
 
-  // Preload models for the game scene
-  preloadGameModels: async function () {
-    const modelPaths = [
-      // { name: "game_model_1", path: "/assets/models/game/model1.glb" },
-      // { name: "game_model_2", path: "/assets/models/game/model2.glb" },
-      // { name: "player_model", path: "/assets/models/game/player.glb" },
-    ];
+/**
+ * Gets a clone of the specified model
+ * @param {string} name - Name of the model to retrieve
+ * @returns {Object} - Clone of the requested model
+ */
+function getModel(name) {
+  console.log(`Getting model: ${models[name]}`);
+  console.log(`Models list: ${models}`);
+  return models[name].clone();
+}
 
-    const loadPromises = modelPaths.map((model) =>
-      this.loadModel(model.name, model.path)
-    );
+/**
+ * Preloads models for project cards
+ * @returns {Promise} - Promise that resolves when all models are loaded
+ */
+async function preloadProjectModels() {
+  const modelPaths = [
+    {
+      name: "baby_turtle",
+      path: "/assets/models/project_card/babyTurtle.glb",
+    },
+  ];
 
-    try {
-      await Promise.all(loadPromises);
-      console.log("All game models loaded successfully");
-    } catch (error) {
-      console.error("Error preloading game models:", error);
-    }
-  },
+  const loadPromises = modelPaths.map((model) => {
+    loadModel(model.name);
+    console.log(`Model ${modelName} loaded!`);
+  });
 
-  // Clear resources
-  clear: function () {
-    Object.values(this.models).forEach((model) => {
-      model.traverse((child) => {
-        if (child.isMesh) {
-          if (child.geometry) child.geometry.dispose();
-          if (child.material) {
-            if (Array.isArray(child.material)) {
-              child.material.forEach((material) => material.dispose());
-            } else {
-              child.material.dispose();
-            }
+  try {
+    await Promise.all(loadPromises);
+    console.log("All project models loaded successfully");
+  } catch (error) {
+    console.error("Error preloading project models:", error);
+  }
+}
+
+/**
+ * Preloads models for the game scene
+ * @returns {Promise} - Promise that resolves when all models are loaded
+ */
+async function preloadGameModels() {
+  const modelPaths = [
+    // { name: "game_model_1", path: "/assets/models/game/model1.glb" },
+    // { name: "game_model_2", path: "/assets/models/game/model2.glb" },
+    // { name: "player_model", path: "/assets/models/game/player.glb" },
+  ];
+
+  const loadPromises = modelPaths.map((model) =>
+    loadModel(model.name, model.path)
+  );
+
+  try {
+    await Promise.all(loadPromises);
+    console.log("All game models loaded successfully");
+  } catch (error) {
+    console.error("Error preloading game models:", error);
+  }
+}
+
+/**
+ * Clears all resources and disposes of geometries and materials
+ */
+function clearResources() {
+  Object.values(models).forEach((model) => {
+    model.traverse((child) => {
+      if (child.isMesh) {
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (Array.isArray(child.material)) {
+            child.material.forEach((material) => material.dispose());
+          } else {
+            child.material.dispose();
           }
         }
-      });
+      }
     });
+  });
 
-    this.models = {};
-    console.log("Resources cleared");
-  },
-};
+  // Clear the models dictionary
+  Object.keys(models).forEach((key) => delete models[key]);
+  console.log("Resources cleared");
+}
 
 // Initialize Three.js scenes: Game Scene and Project Card Scene
 function initThreeJS() {
@@ -333,8 +345,8 @@ function initThreeJS() {
   );
 
   // Preload models
-  resourceManager.preloadProjectModels();
-  resourceManager.preloadGameModels();
+  preloadProjectModels();
+  preloadGameModels();
 
   console.log("done");
   //Initialize Game Scene
@@ -458,7 +470,7 @@ function initGameScene() {
   console.log("ccc");
 
   // Create player model (after loading)
-  // playerModel = resourceManager.getModel("player_model");
+  // playerModel = getModel("player_model");
   // if (!playerModel) return;
 
   // player = playerModel.clone();
@@ -523,7 +535,7 @@ function initProjectCardScene() {
     const modelName = "baby_turtle";
 
     // Get the model and add it to the scene at the specified position
-    const model = resourceManager.getModel(modelName);
+    const model = getModel(modelName);
     const box = new THREE.Box3().setFromObject(model);
     const center = box.getCenter(new THREE.Vector3());
     const size = box.getSize(new THREE.Vector3());
