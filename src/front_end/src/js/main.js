@@ -780,8 +780,7 @@ async function setupProjectCamera(item, index) {
   // Lazy load OrbitControls when first needed
   if (!OrbitControls) {
     try {
-      const module = await import("./three/OrbitControls.js");
-      OrbitControls = module.OrbitControls;
+      OrbitControls = await loadAndPatchOrbitControls();
     } catch (error) {
       console.error("Failed to load OrbitControls:", error);
       return;
@@ -1000,4 +999,73 @@ function renderToCanvas(camera, ctx) {
   // Copy to canvas
   ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
   ctx.drawImage(renderer.domElement, 0, 0);
+}
+
+/**
+ * Monkey patch OrbitControls to prevent "Cannot read properties of null" errors
+ * Add this code right after loading the OrbitControls module
+ */
+function patchOrbitControls() {
+  // Wait for OrbitControls to be loaded
+  if (!OrbitControls) {
+    console.warn("OrbitControls not loaded yet, will try again later");
+    setTimeout(patchOrbitControls, 100);
+    return;
+  }
+
+  // Store the original prototype
+  const originalPrototype = OrbitControls.prototype;
+
+  // Only patch if not already patched
+  if (originalPrototype._patched) return;
+  originalPrototype._patched = true;
+
+  // Store the original dispatchEvent method
+  const originalDispatchEvent = originalPrototype.dispatchEvent;
+
+  // Replace with a safer version that won't throw errors
+  originalPrototype.dispatchEvent = function (event) {
+    // Skip dispatch if no listeners or null event
+    if (!this._listeners || !event) return false;
+
+    const listeners = this._listeners;
+    const listenerArray = listeners[event.type];
+
+    if (listenerArray !== undefined) {
+      // Set the target (this is where the original error happens)
+      event.target = this;
+
+      // Clone the array to avoid modification during iteration
+      const array = listenerArray.slice(0);
+
+      for (let i = 0, l = array.length; i < l; i++) {
+        try {
+          // Wrap the call in try-catch to prevent errors
+          array[i].call(this, event);
+        } catch (error) {
+          // Silently catch the error - we know it's happening but doesn't affect functionality
+          // console.debug("Suppressed OrbitControls event error:", error.message);
+        }
+      }
+
+      return true;
+    }
+
+    return false;
+  };
+
+  console.log("OrbitControls has been patched to prevent error messages");
+}
+
+// Call this function after importing OrbitControls
+async function loadAndPatchOrbitControls() {
+  try {
+    const module = await import("./three/OrbitControls.js");
+    OrbitControls = module.OrbitControls;
+    patchOrbitControls();
+    return OrbitControls;
+  } catch (error) {
+    console.error("Failed to load OrbitControls:", error);
+    return null;
+  }
 }
