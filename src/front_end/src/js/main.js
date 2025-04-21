@@ -431,16 +431,18 @@ function initProjectCards() {
 }
 
 function initPortfolioCanvases() {
-  portfolioItems.forEach((item, index) => {
-    // Only create canvas when scrolled into view or needed
-    const observer = new IntersectionObserver((entries) => {
-      if (entries[0].isIntersecting) {
-        setupProjectCamera(item, index);
-        observer.disconnect();
-      }
+  // Add a small delay to ensure DOM is ready
+  setTimeout(() => {
+    portfolioItems.forEach((item, index) => {
+      const observer = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting) {
+          setupProjectCamera(item, index);
+          observer.disconnect();
+        }
+      });
+      observer.observe(item);
     });
-    observer.observe(item);
-  });
+  }, 100);
 }
 
 /**
@@ -786,42 +788,94 @@ async function setupProjectCamera(item, index) {
     }
   }
 
-  // Make sure the canvas is actually in the DOM and has dimensions
-  if (canvas.parentNode && canvas.width > 0 && canvas.height > 0) {
-    try {
-      // Create orbit controls
-      const controls = new OrbitControls(camera, canvas);
-      controls.enableDamping = true;
-      controls.dampingFactor = 0.05;
-      controls.autoRotate = true;
-      controls.autoRotateSpeed = 2.0;
-      controls.enableZoom = false;
-      controls.target.set(0, 0, 0);
-      controls.update();
+  // IMPORTANT: Wait until next frame to ensure canvas is in DOM and sized properly
+  await new Promise(requestAnimationFrame);
 
-      projectCardControls[index] = controls;
-    } catch (error) {
-      console.error(`Failed to create controls for item ${index}:`, error);
-      // Create a simple auto-rotation function as fallback
-      projectCardControls[index] = {
-        update: () => {
-          if (camera) {
-            // Simple rotation around the y-axis
-            const rotationSpeed = 0.01;
-            camera.position.x =
-              camera.position.x * Math.cos(rotationSpeed) -
-              camera.position.z * Math.sin(rotationSpeed);
-            camera.position.z =
-              camera.position.x * Math.sin(rotationSpeed) +
-              camera.position.z * Math.cos(rotationSpeed);
-            camera.lookAt(0, 0, 0);
-          }
-        },
-      };
-    }
-  } else {
-    console.warn(`Canvas for item ${index} not ready, skipping OrbitControls`);
+  // Check again if canvas is valid
+  if (!canvas.isConnected || canvas.width <= 0 || canvas.height <= 0) {
+    console.warn(`Canvas for item ${index} not ready or not properly sized`);
+
+    // Create a simple manual rotation function as fallback
+    projectCardControls[index] = {
+      update: () => {
+        if (camera) {
+          const rotationSpeed = 0.01;
+          camera.position.x =
+            camera.position.x * Math.cos(rotationSpeed) -
+            camera.position.z * Math.sin(rotationSpeed);
+          camera.position.z =
+            camera.position.x * Math.sin(rotationSpeed) +
+            camera.position.z * Math.cos(rotationSpeed);
+          camera.lookAt(0, 0, 0);
+        }
+      },
+    };
+    return;
   }
+
+  try {
+    // Create a temporary DOM element to check event handling
+    const tempElement = document.createElement("div");
+    tempElement.style.position = "absolute";
+    tempElement.style.left = "-9999px";
+    document.body.appendChild(tempElement);
+
+    // Test if element can receive events
+    let eventTestPassed = false;
+    const testHandler = () => {
+      eventTestPassed = true;
+    };
+    tempElement.addEventListener("mousedown", testHandler);
+    tempElement.dispatchEvent(new MouseEvent("mousedown"));
+    tempElement.removeEventListener("mousedown", testHandler);
+    document.body.removeChild(tempElement);
+
+    if (!eventTestPassed) {
+      throw new Error("Event handling not working in this context");
+    }
+
+    // Now create orbit controls with verified event handling
+    const controls = new OrbitControls(camera, canvas);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 2.0;
+    controls.enableZoom = false;
+    controls.target.set(0, 0, 0);
+
+    // Verify the controls have created valid event handlers
+    if (!controls.domElement || typeof controls.update !== "function") {
+      throw new Error("Controls not properly initialized");
+    }
+
+    controls.update();
+    projectCardControls[index] = controls;
+  } catch (error) {
+    console.error(`Failed to create controls for item ${index}:`, error);
+
+    // Create a simple auto-rotation function as fallback
+    projectCardControls[index] = {
+      update: () => {
+        if (camera) {
+          const rotationSpeed = 0.01;
+          camera.position.x =
+            camera.position.x * Math.cos(rotationSpeed) -
+            camera.position.z * Math.sin(rotationSpeed);
+          camera.position.z =
+            camera.position.x * Math.sin(rotationSpeed) +
+            camera.position.z * Math.cos(rotationSpeed);
+          camera.lookAt(0, 0, 0);
+        }
+      },
+    };
+  }
+}
+
+function cleanupControls(index) {
+  if (projectCardControls[index] && projectCardControls[index].dispose) {
+    projectCardControls[index].dispose();
+  }
+  projectCardControls[index] = null;
 }
 
 /**
@@ -897,6 +951,15 @@ function renderActiveScenes() {
     const camera = projectCardCameras[i];
     const ctx = canvasContexts[i];
     if (!camera || !ctx) continue;
+
+    if (!projectCardControls[i] || projectCardControls[i].disposed) {
+      // Reset the camera position if controls are missing
+      const camera = projectCardCameras[i];
+      if (camera) {
+        camera.position.set(0, 0, 2);
+        camera.lookAt(0, 0, 0);
+      }
+    }
 
     // Get the model for this card
     const item = portfolioItems[i];
