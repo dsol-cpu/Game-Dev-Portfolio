@@ -30,13 +30,20 @@ export default defineConfig({
 
     // Image optimization
     imagemin({
-      gifsicle: { optimizationLevel: 3 },
+      gifsicle: { optimizationLevel: 7, interlaced: false },
       optipng: { optimizationLevel: 7 },
       mozjpeg: { quality: 80, progressive: true },
-      pngquant: { quality: [0.8, 0.9], speed: 4 },
+      pngquant: { quality: [0.65, 0.9], speed: 4 },
       svgo: {
-        plugins: [{ name: "removeViewBox", active: false }],
+        plugins: [
+          { name: "removeViewBox", active: false },
+          { name: "removeEmptyAttrs", active: true },
+          { name: "removeUnusedNS", active: true },
+          { name: "cleanupIDs", active: true },
+          { name: "removeDimensions", active: true },
+        ],
       },
+      webp: { quality: 80 }, // Add WebP conversion
     }),
 
     // Intelligent code splitting (adapted for vanilla JS)
@@ -52,18 +59,21 @@ export default defineConfig({
 
     // Compression options
     compression({
-      algorithm: "gzip",
-      threshold: 10240, // 10KB
-      exclude: [/\.(jpg|jpeg|png|gif|webp)$/i],
-      compressionOptions: { level: 9 },
-    }),
-
-    // Also add Brotli compression for even better performance
-    compression({
       algorithm: "brotliCompress",
       threshold: 10240,
-      exclude: [/\.(jpg|jpeg|png|gif|webp)$/i],
-      compressionOptions: { level: 11 },
+      exclude: [/\.(jpg|jpeg|png|gif|webp|glb|gltf|hdr)$/i],
+      deleteOriginFile: false,
+      compressionOptions: {
+        level: 11,
+      },
+    }),
+
+    compression({
+      algorithm: "gzip",
+      threshold: 10240,
+      exclude: [/\.(jpg|jpeg|png|gif|webp|glb|gltf|hdr)$/i],
+      deleteOriginFile: false,
+      compressionOptions: { level: 9 },
     }),
 
     // Bundle size visualization (creates stats.html after build)
@@ -72,6 +82,7 @@ export default defineConfig({
       gzipSize: true,
       brotliSize: true,
       open: false,
+      template: "treemap",
     }),
   ],
 
@@ -83,33 +94,38 @@ export default defineConfig({
         drop_console: true,
         drop_debugger: true,
         pure_funcs: ["console.log", "console.info", "console.debug"],
+        passes: 3,
+        unsafe: true,
+        unsafe_math: true,
+        unsafe_symbols: true,
+        ecma: 2020,
       },
       format: {
         comments: false,
+        ascii_only: true,
       },
       mangle: {
         safari10: true,
+        properties: {
+          regex: /^_/,
+        },
       },
     },
     rollupOptions: {
       input: {
-        // Add all your HTML pages here
         main: path.resolve(__dirname, "index.html"),
-        // Example: Add additional pages if you have them
-        // about: path.resolve(__dirname, "about.html"),
-        // projects: path.resolve(__dirname, "projects.html"),
       },
       output: {
         // Optimize for caching and organization
         assetFileNames: (assetInfo) => {
-          const extType = assetInfo.name.split(".").at(1);
+          const extType = assetInfo.name.split(".").pop();
           if (/png|jpe?g|svg|gif|tiff|bmp|ico/i.test(extType)) {
             return `assets/images/[name].[hash][extname]`;
           }
           if (/css/i.test(extType)) {
             return `assets/css/[name].[hash][extname]`;
           }
-          if (/woff|woff2|eot|ttf|otf/i.test(extType)) {
+          if (/woff2?|eot|ttf|otf/i.test(extType)) {
             return `assets/fonts/[name].[hash][extname]`;
           }
           if (/mp3|wav|ogg/i.test(extType)) {
@@ -135,14 +151,17 @@ export default defineConfig({
       },
     },
     copyPublicDir: true,
-    // Optimization for Three.js applications
-    target: "esnext",
     sourcemap: false,
-    // This helps with large 3D models
-    assetsInlineLimit: 4096, // Only inline files smaller than 4kb
+    assetsInlineLimit: 4096,
+    modulePreload: {
+      polyfill: true,
+    },
+    cssCodeSplit: true,
+    reportCompressedSize: false,
+    chunkSizeWarningLimit: 1000,
   },
 
-  publicDir: "src/assets",
+  // publicDir: "src/assets",
   assetsInclude: [
     "**/*.png",
     "**/*.jpg",
@@ -160,24 +179,50 @@ export default defineConfig({
     "**/*.frag", // Shader files
   ],
 
-  // Optimize development experience
+  // Optimize development experience with corrected server settings
   server: {
     open: true,
-    host: true,
+    host: "localhost", // Changed from 'true' to 'localhost'
+    port: 5174,
+    strictPort: false, // Allow Vite to try other ports if 5173 is in use
     cors: true,
     hmr: {
+      // protocol: "ws",
+      // host: "localhost",
+      // port: 5173,
+      // clientPort: 5173,
       overlay: true,
     },
+    watch: {
+      usePolling: false, // Try not using polling first
+    },
+    headers: {
+      "Cache-Control": "no-store", // Changed to prevent caching during development
+    },
+  },
+
+  optimizeDeps: {
+    exclude: ["@vite/client", "@vite/env"],
+    esbuildOptions: {
+      target: "esnext",
+    },
+  },
+
+  cacheDir: ".vite-cache",
+
+  define: {
+    "process.env.NODE_ENV": process.env.NODE_ENV
+      ? JSON.stringify(process.env.NODE_ENV)
+      : '"development"',
   },
 
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
-      "@assets": path.resolve(__dirname, "./src/assets"),
       "@js": path.resolve(__dirname, "./src/js"),
       "@css": path.resolve(__dirname, "./src/css"),
-      "@models": path.resolve(__dirname, "./src/assets/models"),
-      "@shaders": path.resolve(__dirname, "./src/assets/shaders"),
+      "@models": path.resolve(__dirname, "./public/models"),
+      "@shaders": path.resolve(__dirname, "./public/shaders"),
     },
   },
 });

@@ -59,6 +59,13 @@
     min-height: auto;
     padding: 1rem 0;
   }
+
+  .game-view-container {
+    width: 100%;
+    top: 60px; /* Account for mobile header if you have one */
+    height: calc(100vh - 60px); /* Viewport height minus header */
+    max-height: calc(100vh - 60px);
+  }
 }
 
 /* Extra small devices (portrait phones, less than 576px) */

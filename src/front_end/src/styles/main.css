@@ -49,6 +49,7 @@ body {
   color: var(--text-color);
   display: flex;
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
 p,
@@ -61,14 +62,14 @@ h6,
 span,
 li,
 a:not(.nav-links a) {
-  color: var(--text-color);
+  color: var(--dark-color);
 }
 
 /* Sidebar styles */
 .sidebar {
   width: var(--sidebar-width);
   background-color: var(--sidebar-bg);
-  color: var(--sidebar-text);
+  color: var(--dark-color);
   padding: 2rem 1rem;
   position: fixed;
   height: 100vh;
@@ -567,18 +568,15 @@ section.active {
   align-items: center;
 }
 
-.theme-toggle-label {
-  font-family: "Orbitron", sans-serif;
-  font-size: 0.9rem;
-  margin-bottom: 0.5rem;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  color: var(--sidebar-text);
+.theme-toggle-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: relative;
 }
 
 .theme-switch {
   position: relative;
-  display: inline-block;
   width: 60px;
   height: 30px;
   background-color: transparent;
@@ -626,52 +624,117 @@ input:checked + .slider:before {
   transform: translateX(30px);
 }
 
-.theme-icons {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0 8px;
-  box-sizing: border-box;
-  pointer-events: none;
-  z-index: 1;
-}
-
-.theme-icons svg {
+.light-icon,
+.dark-icon {
   width: 24px;
   height: 24px;
   transition: all 0.3s ease;
 }
 
-.theme-icons .light-icon {
-  margin-left: 4px;
+.light-icon {
   color: #f39c12;
 }
 
-.theme-icons .dark-icon {
-  margin-right: 4px;
+.dark-icon {
   color: #f5f6fa;
 }
 
-/* Make the icons more visible in both themes */
-[data-theme="light"] .theme-icons .light-icon {
+/* Icon visibility per theme */
+[data-theme="light"] .light-icon {
   opacity: 1;
-  color: #f39c12;
 }
 
-[data-theme="light"] .theme-icons .dark-icon {
+[data-theme="light"] .dark-icon {
   opacity: 0.4;
-  color: #f5f6fa;
 }
 
-[data-theme="dark"] .theme-icons .light-icon {
+[data-theme="dark"] .light-icon {
   opacity: 0.4;
-  color: #f39c12;
 }
 
-[data-theme="dark"] .theme-icons .dark-icon {
+[data-theme="dark"] .dark-icon {
   opacity: 1;
-  color: #f5f6fa;
+}
+
+/* View Toggle Button */
+.view-toggle {
+  margin-top: 20px;
+  display: flex;
+  justify-content: center;
+}
+
+.view-toggle-btn {
+  background-color: var(--accent-color);
+  color: var(--bg-color);
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.view-toggle-btn:hover {
+  background-color: var(--hover-color);
+  transform: translateY(-2px);
+}
+
+/* Game View Container */
+.game-view-container {
+  position: fixed;
+  top: 0;
+  left: 240px; /* Width of sidebar */
+  right: 0;
+  bottom: 0;
+  background-color: var(--bg-color);
+  display: none; /* Hidden by default */
+  z-index: 100;
+}
+
+.game-mode .main-content {
+  display: none;
+}
+
+.game-mode .game-view-container {
+  display: block;
+}
+
+#main-game-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+/* Game Controls Info Styling */
+.game-view-container .game-controls-info {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  background-color: rgba(0, 0, 0, 0.6);
+  padding: 10px 15px;
+  border-radius: 8px;
+  color: white;
+}
+
+.game-view-container .game-controls-info ul {
+  list-style-type: none;
+  padding: 0;
+  margin: 0;
+}
+
+.game-view-container .game-controls-info li {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.game-view-container .game-controls-info li svg {
+  width: 24px;
+  height: 24px;
+  margin-right: 10px;
+  fill: white;
+}
+
+.game-view-container .game-controls-info p {
+  margin: 0;
 }

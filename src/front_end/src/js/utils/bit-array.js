@@ -56,6 +56,15 @@ function createBitmask(length, indices = []) {
   return mask;
 }
 
+/**
+ * Check if a bit is set in the bitmask
+ */
+function isBitSet(bitArray, index) {
+  const byteIndex = Math.floor(index / 8);
+  const bitPosition = index % 8;
+  return (bitArray.bytes[byteIndex] & (1 << bitPosition)) !== 0;
+}
+
 function logBitArray(bitArray) {
   let str = "";
   for (let i = 0; i < bitArray.length; i++) {
@@ -74,4 +83,5 @@ export {
   createBitmask,
   logBitArray,
   applyBitmask,
+  isBitSet,
 };
