@@ -430,6 +430,19 @@ function initProjectCards() {
   portfolioGrid.appendChild(fragment);
 }
 
+function initPortfolioCanvases() {
+  portfolioItems.forEach((item, index) => {
+    // Only create canvas when scrolled into view or needed
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        setupProjectCamera(item, index);
+        observer.disconnect();
+      }
+    });
+    observer.observe(item);
+  });
+}
+
 /**
  * Initialize portfolio filtering functionality
  * Sets up filter buttons and their event listeners
@@ -621,6 +634,8 @@ function initThreeJS() {
       initGameScene();
       initProjectCardScene();
 
+      initPortfolioCanvases();
+
       // Start animation loop
       requestAnimationFrame(animate);
     })
@@ -724,11 +739,6 @@ function initProjectCardScene() {
       model.visible = false; // Initially hidden
       projectCardScene.add(model);
     }
-  });
-
-  // Set up cameras for each portfolio item
-  portfolioItems.forEach((item, index) => {
-    setupProjectCamera(item, index);
   });
 
   console.log("Project card scene initialized");
