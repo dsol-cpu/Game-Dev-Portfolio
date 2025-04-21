@@ -14,11 +14,13 @@ function enableAllBits(bitArray) {
     const mask = 0xff >>> extraBits;
     bitArray.bytes[bitArray.bytes.length - 1] &= mask;
   }
+  return bitArray; // Return the modified array
 }
 
 // Disables all bits
 function disableAllBits(bitArray) {
   bitArray.bytes.fill(0);
+  return bitArray; // Return the modified array for consistency
 }
 
 // Applies a bitmask with bitwise operation (OR, AND, XOR)
@@ -39,6 +41,7 @@ function applyBitmask(bitArray, mask, operation = "OR") {
         throw new Error(`Unsupported operation: ${operation}`);
     }
   }
+  return bitArray; // Return the modified array for consistency
 }
 
 // Creates a bitmask from an array of bit indices (1s where enabled)

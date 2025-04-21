@@ -13,6 +13,10 @@ import {
   applyBitmask,
 } from "./utils/bit-array.js";
 
+import * as THREE from "./three/three.module.min.js";
+import { GLTFLoader } from "./three/GLTFLoader.js";
+import { OrbitControls } from "./three/OrbitControls.js";
+
 let portfolioItemCount = 0;
 let activeProjectCardCamBitMask = 0;
 
@@ -41,18 +45,39 @@ const portfolioData = [
     title: "Geospatial Visualizer",
     tags: [TechTags.UNITY, TechTags.CSHARP, TechTags.PROCEDURAL],
     description: "A visualization of geospatial information.",
-    demoLink: "#",
-    detailsLink: "#",
+    demoLink: "",
+    detailsLink: "",
   },
   {
     category: PortfolioCategory.WEB,
     title: "Interactive Dashboard",
     tags: [TechTags.REACT, TechTags.D3, TechTags.API],
     description: "A dashboard showing dynamic financial data.",
-    demoLink: "#",
-    detailsLink: "#",
+    demoLink: "",
+    detailsLink: "",
   },
 ];
+
+// Renderer and scene variables
+let renderer = null;
+let gameSceneCamera = null;
+let thirdPersonCamera = null;
+let gameScene = null;
+
+let projectCardCameras = [];
+let projectCardScene = null; // Single shared scene for all project cards
+let projectCardModels = []; // Array to store individual models for each card
+let projectCardControls = []; // Array to store individual orbit controls
+let canvasContexts = [];
+
+let models = {};
+
+// Create fallback cube for when model loading fails
+const fallbackCube = new THREE.Mesh(
+  new THREE.BoxGeometry(1, 1, 1),
+  new THREE.MeshNormalMaterial()
+);
+
 document.addEventListener("DOMContentLoaded", function () {
   // Set up navigation
   initNavigation();
@@ -62,7 +87,7 @@ document.addEventListener("DOMContentLoaded", function () {
   // Set up portfolio filtering
   initPortfolioFilters();
 
-  //Initialize the Game and Project Scenes
+  // Initialize the Game and Project Scenes
   initThreeJS();
 });
 
@@ -93,7 +118,6 @@ function initNavigation() {
     });
   });
 }
-
 function createProjectCard(item) {
   const wrapper = document.createElement("div");
   wrapper.className = "portfolio-item";
@@ -117,8 +141,6 @@ function createProjectCard(item) {
 }
 
 function initProjectCards() {
-  activeProjectCardCamBitMask = createBitArray(portfolioItemCount);
-
   const portfolioGrid = document.querySelector(".portfolio-grid");
 
   portfolioData.forEach((item) => {
@@ -132,10 +154,11 @@ function initProjectCards() {
  */
 function initPortfolioFilters() {
   filterButtons = document.querySelectorAll(".filter-button");
-  portfolioItems = document.querySelectorAll("portfolio-item");
+  portfolioItems = document.querySelectorAll(".portfolio-item");
 
   portfolioItemCount = portfolioItems.length;
   activeProjectCardCamBitMask = createBitArray(portfolioItemCount);
+  enableAllBits(activeProjectCardCamBitMask); // Now modifies in place
 
   filterButtons.forEach((button) => {
     button.addEventListener("click", function () {
@@ -168,7 +191,7 @@ function initPortfolioFilters() {
 
       // Update bitmask
       const newMask = createBitmask(portfolioItemCount, visibleIndices);
-      disableAllBits(activeProjectCardCamBitMask);
+      disableAllBits(activeProjectCardCamBitMask); // Now works because activeProjectCardCamBitMask was properly initialized
       applyBitmask(activeProjectCardCamBitMask, newMask, "OR");
 
       console.log(
@@ -180,71 +203,43 @@ function initPortfolioFilters() {
   });
 }
 
-import * as THREE from "./three/three.module.min.js";
-import { GLTFLoader } from "./three/GLTFLoader.js";
-import { OrbitControls } from "./three/OrbitControls.js";
-
-let renderer = null;
-let gameSceneCamera = null;
-let thirdPersonCamera = null;
-let gameScene = null;
-
-let projectCardCameras = [];
-let projectCardScene = null;
-let renderTarget = null;
-
-let models = [];
-let canvasContexts = [];
-
-let player = null;
-let playerModel = null;
-
-const moveSpeed = 0.1;
-const rotationSpeed = 0.05;
-let keysPressed = {};
-
-// Create fallback cube if model doesn't load
-const fallbackCube = new THREE.Mesh(
-  new THREE.BoxGeometry(1, 1, 1), // A simple cube geometry
-  new THREE.MeshBasicMaterial({ color: 0xff0000 }) // Red color for the cube
-);
-
 /**
  * Loads a GLTF model with the given name
  * @param {string} modelName - Name of the model to load
  */
 function loadModel(modelName) {
-  const modelUrl = `/assets/models/${modelName}.gltf`; // Assuming model files are in .gltf format
+  const modelUrl = `/assets/models/${modelName}.gltf`;
 
-  // Attempt to load the model
-  const loader = new GLTFLoader();
-  loader.load(
-    modelUrl,
-    (gltf) => {
-      const model = gltf.scene;
-      model.name = modelName;
-      models[modelName] = model;
-      console.log(`${modelName} to models dict`);
-    },
-    undefined, // onProgress callback, can be left undefined
-    (error) => {
-      console.error(`Model failed to load: ${modelName}. Error:`, error);
-      fallbackCube.name = modelName;
-      models[modelName] = fallbackCube;
-      console.log(models[modelName]);
-      console.warn(`Fallback cube used for missing model: ${modelName}`);
-    }
-  );
+  return new Promise((resolve, reject) => {
+    const loader = new GLTFLoader();
+    loader.load(
+      modelUrl,
+      (gltf) => {
+        models[modelName] = gltf.scene;
+        console.log(`Model ${modelName} loaded successfully`);
+        resolve(gltf.scene);
+      },
+      undefined,
+      (error) => {
+        console.error(`Model failed to load: ${modelName}. Error:`, error);
+        models[modelName] = null;
+        console.warn(`Will use fallback cube for ${modelName}`);
+        resolve(null);
+      }
+    );
+  });
 }
 
 /**
  * Gets a clone of the specified model
  * @param {string} name - Name of the model to retrieve
- * @returns {Object} - Clone of the requested model
+ * @returns {Object} - Clone of the requested model or null if not found
  */
 function getModel(name) {
-  console.log(`Getting model: ${models[name]}`);
-  console.log(`Models list: ${models}`);
+  if (!models[name]) {
+    console.warn(`Model ${name} not found in cache, using fallback`);
+    return null;
+  }
   return models[name].clone();
 }
 
@@ -253,16 +248,10 @@ function getModel(name) {
  * @returns {Promise} - Promise that resolves when all models are loaded
  */
 async function preloadProjectModels() {
-  const modelPaths = [
-    {
-      name: "baby_turtle",
-      path: "/assets/models/project_card/babyTurtle.glb",
-    },
-  ];
+  const modelPaths = [{ name: "baby_turtle" }];
 
   const loadPromises = modelPaths.map((model) => {
-    loadModel(model.name);
-    console.log(`Model ${modelName} loaded!`);
+    return loadModel(model.name);
   });
 
   try {
@@ -274,33 +263,12 @@ async function preloadProjectModels() {
 }
 
 /**
- * Preloads models for the game scene
- * @returns {Promise} - Promise that resolves when all models are loaded
- */
-async function preloadGameModels() {
-  const modelPaths = [
-    // { name: "game_model_1", path: "/assets/models/game/model1.glb" },
-    // { name: "game_model_2", path: "/assets/models/game/model2.glb" },
-    // { name: "player_model", path: "/assets/models/game/player.glb" },
-  ];
-
-  const loadPromises = modelPaths.map((model) =>
-    loadModel(model.name, model.path)
-  );
-
-  try {
-    await Promise.all(loadPromises);
-    console.log("All game models loaded successfully");
-  } catch (error) {
-    console.error("Error preloading game models:", error);
-  }
-}
-
-/**
  * Clears all resources and disposes of geometries and materials
  */
 function clearResources() {
   Object.values(models).forEach((model) => {
+    if (!model) return;
+
     model.traverse((child) => {
       if (child.isMesh) {
         if (child.geometry) child.geometry.dispose();
@@ -322,135 +290,48 @@ function clearResources() {
 
 // Initialize Three.js scenes: Game Scene and Project Card Scene
 function initThreeJS() {
-  const container = document.getElementById("game-canvas");
-  console.log(container);
-
-  if (!container) return;
-
   // Renderer setup
   renderer = new THREE.WebGLRenderer({
     preserveDrawingBuffer: true,
     antialias: true,
     alpha: true,
+    premultipliedAlpha: true,
+    autoClear: true,
   });
   renderer.setClearColor(0x000000, 0);
-  renderer.setSize(container.clientWidth, container.clientHeight);
+  renderer.setSize(300, 200);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-  // Swappable render target for rendering using the same renderer
-  renderTarget = new THREE.WebGLRenderTarget(
-    container.clientWidth,
-    container.clientHeight
-  );
+  // Preload models and initialize scenes
+  preloadProjectModels()
+    .then(() => {
+      initGameScene();
+      console.log("Game scene initialized");
 
-  // Preload models
-  preloadProjectModels();
-  preloadGameModels();
+      initProjectCardScene();
+      console.log("Project card scene initialized");
 
-  console.log("done");
-  //Initialize Game Scene
-  initGameScene();
-  console.log("Game scene initialized");
+      // Start animation loop
+      animate();
+    })
+    .catch((error) => {
+      console.error("Error initializing scenes:", error);
+    });
 
-  //Initialize ProjectCard Scene
-  initProjectCardScene();
-  console.log("Project card scene initialized");
   // Handle window resize
   window.addEventListener("resize", () => {
-    const width = container.clientWidth;
-    const height = container.clientHeight;
-
-    // Update camera
-    gameSceneCamera.aspect = width / height;
-    gameSceneCamera.updateProjectionMatrix();
-
     // Update all project card cameras
-    projectCardCameras.forEach((cameraInfo) => {
-      if (cameraInfo.camera) {
-        cameraInfo.camera.aspect = width / height;
-        cameraInfo.camera.updateProjectionMatrix();
+    projectCardCameras.forEach((camera, index) => {
+      if (camera) {
+        const canvas = document.querySelectorAll(".threejs-canvas")[index];
+        if (canvas) {
+          camera.aspect = canvas.width / canvas.height;
+          camera.updateProjectionMatrix();
+        }
       }
     });
   });
-
-  // Set up keyboard controls
-  setupKeyboardControls();
-
-  // Start animation loop
-  console.log("yay");
-  animate();
-}
-
-// Set up keyboard controls for player movement
-function setupKeyboardControls() {
-  // Key down event
-  document.addEventListener("keydown", (event) => {
-    keysPressed[event.key.toLowerCase()] = true;
-  });
-
-  // Key up event
-  document.addEventListener("keyup", (event) => {
-    keysPressed[event.key.toLowerCase()] = false;
-  });
-}
-
-// Update player position based on key input
-function updatePlayerPosition() {
-  if (!player || !gameScene) return;
-
-  // Forward vector based on player's current rotation
-  const forward = new THREE.Vector3(0, 0, -1);
-  forward.applyQuaternion(player.quaternion);
-
-  // Right vector
-  const right = new THREE.Vector3(1, 0, 0);
-  right.applyQuaternion(player.quaternion);
-
-  // Apply movement based on keys pressed
-  let moved = false;
-
-  // Forward / Backward
-  if (keysPressed["w"] || keysPressed["arrowup"]) {
-    player.position.addScaledVector(forward, moveSpeed);
-    moved = true;
-  }
-  if (keysPressed["s"] || keysPressed["arrowdown"]) {
-    player.position.addScaledVector(forward, -moveSpeed);
-    moved = true;
-  }
-
-  // Left / Right rotation
-  if (keysPressed["a"] || keysPressed["arrowleft"]) {
-    player.rotation.y += rotationSpeed;
-    moved = true;
-  }
-  if (keysPressed["d"] || keysPressed["arrowright"]) {
-    player.rotation.y -= rotationSpeed;
-    moved = true;
-  }
-
-  // If the player moved, update the camera position to follow
-  if (moved && thirdPersonCamera) {
-    updateThirdPersonCamera();
-  }
-}
-
-// Update third-person camera position to follow player
-function updateThirdPersonCamera() {
-  if (!player || !thirdPersonCamera) return;
-
-  // Define camera offset from player (behind and above)
-  const cameraOffset = new THREE.Vector3(0, 2, 5);
-  cameraOffset.applyQuaternion(player.quaternion);
-
-  // Set camera position relative to player
-  thirdPersonCamera.position.copy(player.position).add(cameraOffset);
-
-  // Make camera look at player
-  thirdPersonCamera.lookAt(
-    player.position.clone().add(new THREE.Vector3(0, 1, 0))
-  );
 }
 
 function initGameScene() {
@@ -467,55 +348,53 @@ function initGameScene() {
   directionalLight.castShadow = true;
   gameScene.add(directionalLight);
 
-  console.log("ccc");
-
-  // Create player model (after loading)
-  // playerModel = getModel("player_model");
-  // if (!playerModel) return;
-
-  // player = playerModel.clone();
-  // player.position.set(0, 0, 0);
-  // player.scale.set(0.5, 0.5, 0.5);
-  // gameScene.add(player);
-
-  // Add orbit controls for the game camera
-
-  // const controls = new OrbitControls(gameSceneCamera, renderer.domElement);
-  // controls.target.set(0, 1, 0);
-  // controls.enableDamping = true;
-  // controls.dampingFactor = 0.25;
-  // controls.enableZoom = true;
-
-  // Camera for third-person view (fixed behind the player)
+  // Camera for third-person view
   thirdPersonCamera = new THREE.PerspectiveCamera(
     75,
     window.innerWidth / window.innerHeight,
     0.1,
     1000
   );
+  thirdPersonCamera.position.set(0, 2, 5);
+  thirdPersonCamera.lookAt(0, 0, 0);
 }
 
-// Initialize shared scene for all project cards with separate models and cameras
-function initProjectCardScene() {
-  projectCardScene = new THREE.Scene();
-
-  // Add lights to the shared scene
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-  projectCardScene.add(ambientLight);
-
-  const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-  directionalLight.position.set(1, 1, 1);
-  projectCardScene.add(directionalLight);
-
+// Initialize single shared scene for all project cards with separate models and cameras
+async function initProjectCardScene() {
   portfolioItems = document.querySelectorAll(".portfolio-item");
   portfolioItemCount = portfolioItems.length;
 
-  // Position offset to ensure models are far apart (1000 units between each model)
-  const SPACING = 1000;
+  // Initialize bit array for camera visibility
+  activeProjectCardCamBitMask = createBitArray(portfolioItemCount);
+  enableAllBits(activeProjectCardCamBitMask);
+
+  // Create the single shared scene
+  projectCardScene = new THREE.Scene();
+  projectCardScene.background = null;
+
+  // Add lights to the shared scene
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+  projectCardScene.add(ambientLight);
+
+  const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
+  dirLight.position.set(1, 1, 1);
+  projectCardScene.add(dirLight);
 
   portfolioItems.forEach((item, index) => {
     const canvas = item.querySelector(".threejs-canvas");
-    canvasContexts.push(canvas);
+    if (!canvas) {
+      console.error(`Canvas not found for portfolio item ${index}`);
+      return;
+    }
+
+    // Get 2D context for the canvas
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      console.error(`Failed to get 2D context for canvas ${index}`);
+      return;
+    }
+    canvasContexts[index] = ctx;
+
     // Set up camera
     const camera = new THREE.PerspectiveCamera(
       75,
@@ -523,173 +402,102 @@ function initProjectCardScene() {
       0.1,
       1000
     );
+    camera.position.set(0, 0, 2);
+    projectCardCameras[index] = camera;
 
-    const positionX = index * SPACING;
-    const positionZ = 0;
+    // Try to get the model
+    const model = getModel("baby_turtle");
 
-    // Setup camera for this project card
-    camera.position.set(positionX, 0, 2);
-    camera.lookAt(positionX, 0, 0);
+    if (model) {
+      // We have a loaded model
+      // Center and scale the model properly
+      const box = new THREE.Box3().setFromObject(model);
+      const center = box.getCenter(new THREE.Vector3());
+      const size = box.getSize(new THREE.Vector3());
 
-    // Determine which model to use based on data attribute
-    const modelName = "baby_turtle";
+      // Center the model
+      model.position.sub(center);
 
-    // Get the model and add it to the scene at the specified position
-    const model = getModel(modelName);
-    const box = new THREE.Box3().setFromObject(model);
-    const center = box.getCenter(new THREE.Vector3());
-    const size = box.getSize(new THREE.Vector3());
+      // Scale to reasonable size
+      const maxDim = Math.max(size.x, size.y, size.z);
+      const scale = 1 / maxDim;
+      model.scale.multiplyScalar(scale);
 
-    model.position.x = positionX - center.x;
-    model.position.y = -center.y;
-    model.position.z = positionZ - center.z;
-
-    const maxDim = Math.max(size.x, size.y, size.z);
-    model.scale.multiplyScalar(1 / maxDim);
-
-    projectCardScene.add(model);
-
-    // Create the project card camera to match the renderer
-    projectCardCameras.push(camera);
-
-    // Render the project card view
-    function renderProjectCardView() {
-      // Ensure the camera's aspect ratio is updated
-      camera.aspect = cardElement.offsetWidth / cardElement.offsetHeight;
-      camera.updateProjectionMatrix();
-
-      // Render the scene
-      renderer.render(projectCardScene, camera);
+      // Add model to the shared scene
+      model.visible = true; // All models start visible
+      projectCardScene.add(model);
+      projectCardModels[index] = model;
+    } else {
+      // Use a new fallback cube
+      const fallback = new THREE.Mesh(
+        new THREE.BoxGeometry(1, 1, 1),
+        new THREE.MeshNormalMaterial()
+      );
+      fallback.visible = true;
+      projectCardScene.add(fallback);
+      projectCardModels[index] = fallback;
     }
 
-    // Add event listener to resize renderer when the portfolio image is resized
-    window.addEventListener("resize", renderProjectCardView);
+    // Create orbit controls for this camera
+    const controls = new OrbitControls(camera, canvas);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.autoRotate = true;
+    controls.autoRotateSpeed = 2.0;
+    controls.enableZoom = false;
 
-    // Call render function initially
-    renderProjectCardView();
+    // Set the target to the center of the model
+    controls.target.set(0, 0, 0);
+    controls.update();
+
+    projectCardControls[index] = controls;
+
+    console.log(`Setup complete for portfolio item ${index}`);
   });
 }
 
 // Game loop function
 function animate() {
-  // Update the game scene, camera, and player position
-  // updatePlayerPosition();
-
-  // // Update orbit controls
-  // if (thirdPersonCamera) {
-  //   thirdPersonCamera.update();
-  // }
-
-  // Render the game scene via different viewports to different canvases with their respective cameras.
-  // renderer.render(gameScene, gameSceneCamera);
-  activeProjectCardCamBitMask.forEach((bit, i) => {
-    console.log(`Processing camera at index ${i}, bit: ${bit}`); // Log the index and bit value
-
-    if (bit !== 1) {
-      console.log(`Skipping camera at index ${i} because the bit is disabled`); // Debug when skipping
-      return; // Skip this camera if the bit is disabled
-    }
-
-    const camera = projectCardCameras[i];
-    const ctx = canvasContexts[i];
-
-    console.log(`Rendering camera at index ${i} to render target`); // Debug when rendering
-    // Render to shared render target
-    renderer.setRenderTarget(renderTarget);
-    renderer.render(projectCardScene, camera);
-    renderer.setRenderTarget(null);
-
-    // Read pixels from render target
-    console.log(`Reading pixels from render target for camera at index ${i}`); // Debug for pixel read
-    const pixels = new Uint8Array(width * height * 4);
-    renderer.readRenderTargetPixels(renderTarget, 0, 0, width, height, pixels);
-
-    console.log(`Creating image data for canvas at index ${i}`); // Debug for image data creation
-    // Create image data for canvas
-    const imageData = ctx.createImageData(width, height);
-
-    // Flip Y axis and copy pixel data
-    console.log(`Flipping and copying pixel data for camera at index ${i}`); // Debug pixel flipping
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const src = ((height - y - 1) * width + x) * 4;
-        const dst = (y * width + x) * 4;
-        imageData.data[dst] = pixels[src];
-        imageData.data[dst + 1] = pixels[src + 1];
-        imageData.data[dst + 2] = pixels[src + 2];
-        imageData.data[dst + 3] = pixels[src + 3];
-      }
-    }
-
-    console.log(`Drawing image data to canvas at index ${i}`); // Debug when drawing to canvas
-    // Draw to canvas
-    ctx.putImageData(imageData, 0, 0);
-  });
-
-  // Call the next frame
-  console.log("Requesting next animation frame"); // Debug for next frame
   requestAnimationFrame(animate);
+
+  // Render project card scenes
+  portfolioItems.forEach((item, index) => {
+    if (index >= projectCardCameras.length || !canvasContexts[index]) return;
+
+    const camera = projectCardCameras[index];
+    const ctx = canvasContexts[index];
+    const controls = projectCardControls[index];
+    const model = projectCardModels[index];
+
+    if (!camera || !ctx || !model) return;
+
+    // Check if this camera is active in the bitmask
+    const byteIndex = Math.floor(index / 8);
+    const bitPosition = index % 8;
+    const isActive =
+      (activeProjectCardCamBitMask.bytes[byteIndex] >> bitPosition) & 1;
+
+    // Only render if this card is visible and the camera is active in the bitmask
+    if (item.style.display !== "none" && isActive === 1) {
+      // Make only this model visible in the shared scene
+      projectCardModels.forEach((m, i) => {
+        if (m) m.visible = i === index;
+      });
+
+      // Update the orbit controls
+      if (controls) {
+        controls.update();
+      }
+
+      // Clear the canvas before rendering
+      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+
+      // Use renderer to render the shared scene with this card's camera
+      renderer.setSize(ctx.canvas.width, ctx.canvas.height);
+      renderer.render(projectCardScene, camera);
+
+      // Copy from renderer to canvas
+      ctx.drawImage(renderer.domElement, 0, 0);
+    }
+  });
 }
-
-// Assuming you're using a canvas with id="threejs-canvas"
-
-// const canvas = document.querySelector("#threejs-canvas");
-
-// // Set up scene, camera, renderer
-// const scene = new THREE.Scene();
-// const camera = new THREE.PerspectiveCamera(
-//   75,
-//   canvas.width / canvas.height,
-//   0.1,
-//   1000
-// );
-// const rendererums = new THREE.WebGLRenderer({
-//   canvas: canvas,
-//   antialias: true,
-// });
-
-// rendererums.setSize(canvas.width, canvas.height);
-
-// // Add a cube as a placeholder or fallback
-// const geometry = new THREE.BoxGeometry(1, 1, 1);
-// const material = new THREE.MeshNormalMaterial(); // colorful surface
-// const cube = new THREE.Mesh(geometry, material);
-// scene.add(cube);
-
-// // Add ambient light (helps make things look nice)
-// const light = new THREE.AmbientLight(0xffffff, 1);
-// scene.add(light);
-
-// // OrbitControls
-// const controls = new OrbitControls(camera, rendererums.domElement);
-// controls.enableDamping = true; // adds smoothing to movement
-// controls.dampingFactor = 0.1;
-// controls.target.set(0, 0, 0); // optional: focus on center
-// controls.update();
-
-// // Position camera back a bit
-// camera.position.z = 3;
-
-// // Save initial positions
-// const initialCameraPosition = camera.position.clone();
-// const initialTarget = controls.target.clone();
-
-// // Reset button logic
-// const resetButton = document.getElementById("reset-orbit-btn");
-// resetButton.addEventListener("click", () => {
-//   camera.position.copy(initialCameraPosition);
-//   controls.target.copy(initialTarget);
-//   controls.update();
-// });
-
-// // Animation loop
-// function animateums() {
-//   requestAnimationFrame(animateums);
-
-//   controls.update(); // required if damping is enabled
-//   const SPEED = 0.01;
-//   cube.rotation.x -= SPEED * 2;
-//   rendererums.render(scene, camera);
-// }
-
-// animateums();
