@@ -776,17 +776,42 @@ async function setupProjectCamera(item, index) {
     }
   }
 
-  // Create orbit controls
-  const controls = new OrbitControls(camera, canvas);
-  controls.enableDamping = true;
-  controls.dampingFactor = 0.05;
-  controls.autoRotate = true;
-  controls.autoRotateSpeed = 2.0;
-  controls.enableZoom = false;
-  controls.target.set(0, 0, 0);
-  controls.update();
+  // Make sure the canvas is actually in the DOM and has dimensions
+  if (canvas.parentNode && canvas.width > 0 && canvas.height > 0) {
+    try {
+      // Create orbit controls
+      const controls = new OrbitControls(camera, canvas);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.autoRotate = true;
+      controls.autoRotateSpeed = 2.0;
+      controls.enableZoom = false;
+      controls.target.set(0, 0, 0);
+      controls.update();
 
-  projectCardControls[index] = controls;
+      projectCardControls[index] = controls;
+    } catch (error) {
+      console.error(`Failed to create controls for item ${index}:`, error);
+      // Create a simple auto-rotation function as fallback
+      projectCardControls[index] = {
+        update: () => {
+          if (camera) {
+            // Simple rotation around the y-axis
+            const rotationSpeed = 0.01;
+            camera.position.x =
+              camera.position.x * Math.cos(rotationSpeed) -
+              camera.position.z * Math.sin(rotationSpeed);
+            camera.position.z =
+              camera.position.x * Math.sin(rotationSpeed) +
+              camera.position.z * Math.cos(rotationSpeed);
+            camera.lookAt(0, 0, 0);
+          }
+        },
+      };
+    }
+  } else {
+    console.warn(`Canvas for item ${index} not ready, skipping OrbitControls`);
+  }
 }
 
 /**
