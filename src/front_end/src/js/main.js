@@ -31,35 +31,19 @@ import {
   PCFSoftShadowMap,
 } from "./three/three.module.min.js";
 
-/**
- * Global state variables
- * @type {number} portfolioItemCount - Total number of portfolio items
- * @type {number} activeProjectCardCamBitMask - Bitmask for active project card cameras
- * @type {boolean} isAnimating - Flag to control animation loop
- * @type {number} lastRenderTime - Timestamp of last render
- * @type {number} TARGET_FRAMERATE - Target framerate for rendering
- * @type {number} FRAME_INTERVAL - Milliseconds between frames
- */
+// Global state
 let portfolioItemCount = 0;
 let activeProjectCardCamBitMask = 0;
 let isAnimating = true;
 let lastRenderTime = 0;
-const TARGET_FRAMERATE = 60; // Limit to 30fps for project cards
+const TARGET_FRAMERATE = 60;
 const FRAME_INTERVAL = 1000 / TARGET_FRAMERATE;
 
-/**
- * DOM Elements
- * @type {NodeListOf<Element>} filterButtons - Collection of filter buttons
- * @type {NodeListOf<Element>} portfolioItems - Collection of portfolio items
- */
+// DOM Elements
 let filterButtons;
 let portfolioItems;
 
-/**
- * Portfolio category enum
- * @readonly
- * @enum {string}
- */
+// Enums
 const PortfolioCategory = Object.freeze({
   UNITY: "unity",
   WEB: "web",
@@ -67,11 +51,6 @@ const PortfolioCategory = Object.freeze({
   GAME: "game",
 });
 
-/**
- * Technology tags enum
- * @readonly
- * @enum {string}
- */
 const TechTags = Object.freeze({
   UNITY: "Unity",
   CSHARP: "C#",
@@ -81,17 +60,7 @@ const TechTags = Object.freeze({
   API: "API",
 });
 
-/**
- * Portfolio item data array
- * @type {Array<Object>}
- * @property {string} category - Project category
- * @property {string} title - Project title
- * @property {Array<string>} tags - Technology tags
- * @property {string} description - Project description
- * @property {string} demoLink - URL to demo
- * @property {string} detailsLink - URL to details page
- * @property {string} modelName - 3D model name to display
- */
+// Portfolio data
 const portfolioData = [
   {
     category: PortfolioCategory.UNITY,
@@ -113,102 +82,49 @@ const portfolioData = [
   },
 ];
 
-/**
- * Renderer and scene variables
- * @type {WebGLRenderer} renderer - Shared WebGL renderer
- * @type {PerspectiveCamera} gameSceneCamera - Camera for game scene
- * @type {PerspectiveCamera} thirdPersonCamera - Third person camera
- * @type {boolean} gameSceneCameraActive - Flag for active camera
- * @type {Scene} gameScene - Main game scene
- */
+// Three.js variables
 let renderer = null;
-let gameSceneCamera = null;
 let thirdPersonCamera = null;
 let gameSceneCameraActive = false;
 let gameScene = null;
-
-/**
- * Project card related variables
- * @type {Array<PerspectiveCamera>} projectCardCameras - Cameras for project cards
- * @type {Scene} projectCardScene - Shared scene for project cards
- * @type {Array<OrbitControls>} projectCardControls - Orbit controls for cards
- * @type {Array<CanvasRenderingContext2D>} canvasContexts - Canvas contexts
- */
 let projectCardCameras = [];
-let projectCardScene = null; // Single shared scene for all project cards
-let projectCardControls = []; // Array to store individual orbit controls
+let projectCardScene = null;
+let projectCardControls = [];
 let canvasContexts = [];
-
-/**
- * Model cache
- * @type {Object<string, Object3D>} models - Cached 3D models
- * @type {Object<string, Promise>} modelLoadPromises - Promises for model loading
- */
 let models = {};
 let modelLoadPromises = {};
-
-/**
- * Shared fallback cube for all models
- * @type {Mesh}
- */
 let sharedFallbackCube = null;
-
-/**
- * Lazy loaded modules
- * @type {Object} GLTFLoader - For loading GLTF models
- * @type {Object} OrbitControls - For camera controls
- */
 let GLTFLoader = null;
 let OrbitControls = null;
-
-/**
- * Game view variables
- * @type {boolean} isGameViewActive - Flag for game view mode
- * @type {HTMLCanvasElement} mainGameCanvas - Main game canvas element
- * @type {CanvasRenderingContext2D} mainGameCanvasContext - Main game canvas context
- * @type {number} gameAnimationFrameId - Animation frame ID for game view
- */
 let isGameViewActive = false;
 let mainGameCanvas = null;
 let mainGameCanvasContext = null;
 let gameAnimationFrameId = null;
+let modelPositions = {};
 
-/**
- * Initialize on DOM load
- * @listens DOMContentLoaded
- */
+const fallbackCubeName = "fallbackCube";
+
+// Initialize on DOM load
 document.addEventListener("DOMContentLoaded", function () {
-  // Set up navigation
   initNavigation();
-
-  // Create project cards
   initProjectCards();
-
-  // Set up portfolio filtering
   initPortfolioFilters();
-
-  // Initialize the Game and Project Scenes
   initThreeJS();
-
   initGameView();
 
-  // Add visibility change handling to pause animation when tab is not active
+  // Handle visibility change
   document.addEventListener("visibilitychange", () => {
     isAnimating = !document.hidden;
     if (isAnimating) {
       lastRenderTime = 0;
       requestAnimationFrame(animate);
-
-      if (isGameViewActive) {
-        renderGameView();
-      }
+      if (isGameViewActive) renderGameView();
     }
   });
 });
 
 /**
  * Toggle between scroll view and game view
- * Updates UI classes and starts/stops game rendering
  */
 function toggleGameView() {
   const body = document.body;
@@ -220,37 +136,27 @@ function toggleGameView() {
   if (isGameViewActive) {
     body.classList.add("game-mode");
     viewLabel.textContent = "Game View";
-
-    // Start game rendering
     startGameRendering();
   } else {
     body.classList.remove("game-mode");
     viewLabel.textContent = "Scroll View";
-
-    // Stop game rendering
     stopGameRendering();
   }
 }
 
 /**
- * Resize the game canvas when window size changes
- * Updates canvas dimensions and camera aspect ratio
+ * Resize the game canvas
  */
 function resizeGameCanvas() {
   if (!mainGameCanvas) return;
 
-  // Get container dimensions
   const container = document.getElementById("game-view-container");
-  const width = container.clientWidth || 1; // Ensure at least 1px
-  const height = container.clientHeight || 1; // Ensure at least 1px
+  const width = container.clientWidth || 1;
+  const height = container.clientHeight || 1;
 
-  console.log(`Resizing game canvas to ${width}x${height}`);
-
-  // Update canvas size
   mainGameCanvas.width = width;
   mainGameCanvas.height = height;
 
-  // Update camera aspect ratio
   if (thirdPersonCamera) {
     thirdPersonCamera.aspect = width / height;
     thirdPersonCamera.updateProjectionMatrix();
@@ -258,39 +164,21 @@ function resizeGameCanvas() {
 }
 
 /**
- * Start rendering the game view
- * Sets up renderer and context for the main game canvas
+ * Game rendering functions
  */
 function startGameRendering() {
-  if (!renderer || !gameScene || !thirdPersonCamera) {
-    console.error("Game components not initialized");
-    return;
-  }
+  if (!renderer || !gameScene || !thirdPersonCamera) return;
 
-  // Set renderer to use the main game canvas
   mainGameCanvasContext = mainGameCanvas.getContext("2d");
+  if (!mainGameCanvasContext) return;
 
-  if (!mainGameCanvasContext) {
-    console.error("Failed to get 2D context for main game canvas");
-    return;
-  }
+  if (mainGameCanvas.width === 0 || mainGameCanvas.height === 0)
+    resizeGameCanvas();
 
-  // Make sure the canvas dimensions are properly set
-  if (mainGameCanvas.width === 0 || mainGameCanvas.height === 0) {
-    resizeGameCanvas(); // Force resize to ensure proper dimensions
-  }
-
-  // Resize the renderer to match canvas dimensions
   renderer.setSize(mainGameCanvas.width, mainGameCanvas.height);
-
-  // Start the game animation loop
   renderGameView();
 }
 
-/**
- * Stop rendering the game view
- * Cancels the animation frame to stop rendering
- */
 function stopGameRendering() {
   if (gameAnimationFrameId) {
     cancelAnimationFrame(gameAnimationFrameId);
@@ -298,62 +186,44 @@ function stopGameRendering() {
   }
 }
 
-/**
- * Render the game view
- * Called recursively via requestAnimationFrame while game view is active
- */
 function renderGameView() {
   if (!isGameViewActive) return;
 
   if (mainGameCanvas.width === 0 || mainGameCanvas.height === 0) {
-    console.warn("Skipping render: Canvas has zero dimensions");
     resizeGameCanvas();
     gameAnimationFrameId = requestAnimationFrame(renderGameView);
     return;
   }
 
-  // Update game logic here
-  // ...
-
-  // Render the scene
   renderer.render(gameScene, thirdPersonCamera);
 
-  // Copy to canvas
   mainGameCanvasContext.clearRect(
     0,
     0,
     mainGameCanvas.width,
     mainGameCanvas.height
   );
-  if (renderer.domElement.width === 0 || renderer.domElement.height === 0) {
-    console.warn("Renderer has zero dimensions!");
-    return;
-  }
-
   mainGameCanvasContext.drawImage(renderer.domElement, 0, 0);
+
+  gameAnimationFrameId = requestAnimationFrame(renderGameView);
 }
 
 /**
  * Initialize game view
- * Sets up canvas and event listeners
  */
 function initGameView() {
   const viewToggleBtn = document.getElementById("view-toggle-btn");
   mainGameCanvas = document.getElementById("main-game-canvas");
 
   if (viewToggleBtn && mainGameCanvas) {
-    // Set up the canvas size
     resizeGameCanvas();
-
-    // Set up event listeners
     viewToggleBtn.addEventListener("click", toggleGameView);
     window.addEventListener("resize", resizeGameCanvas);
   }
 }
 
 /**
- * Initialize navigation functionality
- * Sets up event listeners for navigation links
+ * Initialize navigation
  */
 function initNavigation() {
   const navLinks = document.querySelectorAll(".nav-link");
@@ -361,34 +231,22 @@ function initNavigation() {
 
   navLinks.forEach((link) => {
     link.addEventListener("click", function (e) {
-      // Make sure this line is executing
       e.preventDefault();
-      console.log("Navigation link clicked, default prevented");
 
-      // Remove active classes
       navLinks.forEach((l) => l.classList.remove("active"));
       sections.forEach((s) => s.classList.remove("active"));
 
-      // Set active link
       this.classList.add("active");
 
-      // Activate the target section
       const targetId = this.getAttribute("data-target");
       const targetSection = document.getElementById(targetId);
-      if (targetSection) {
-        targetSection.classList.add("active");
-        console.log(`Activated section: ${targetId}`);
-      } else {
-        console.error(`Target section not found: ${targetId}`);
-      }
+      if (targetSection) targetSection.classList.add("active");
     });
   });
 }
 
 /**
- * Create a project card DOM element
- * @param {Object} item - Portfolio item data
- * @returns {HTMLElement} The created project card element
+ * Create a project card
  */
 function createProjectCard(item) {
   const wrapper = document.createElement("div");
@@ -414,8 +272,7 @@ function createProjectCard(item) {
 }
 
 /**
- * Initialize project cards from data
- * Creates DOM elements for each portfolio item
+ * Initialize project cards
  */
 function initProjectCards() {
   const portfolioGrid = document.querySelector(".portfolio-grid");
@@ -423,31 +280,96 @@ function initProjectCards() {
 
   const fragment = document.createDocumentFragment();
   portfolioData.forEach((item) => {
-    const projectCard = createProjectCard(item);
-    fragment.appendChild(projectCard);
+    fragment.appendChild(createProjectCard(item));
   });
 
   portfolioGrid.appendChild(fragment);
 }
 
+/**
+ * Initialize portfolio canvases
+ */
 function initPortfolioCanvases() {
-  // Add a small delay to ensure DOM is ready
+  portfolioItems = document.querySelectorAll(".portfolio-item");
+  portfolioItemCount = portfolioItems.length;
+
+  projectCardCameras = new Array(portfolioItemCount);
+  projectCardControls = new Array(portfolioItemCount);
+  canvasContexts = new Array(portfolioItemCount);
+
+  // Setup intersection observer for lazy loading
   setTimeout(() => {
-    portfolioItems.forEach((item, index) => {
-      const observer = new IntersectionObserver((entries) => {
-        if (entries[0].isIntersecting) {
-          setupProjectCamera(item, index);
-          observer.disconnect();
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            const item = entry.target;
+            const index = Array.from(portfolioItems).indexOf(item);
+            setupProjectCamera(item, index);
+            observer.unobserve(item);
+          }
+        });
+      },
+      { threshold: 0.1 }
+    );
+
+    portfolioItems.forEach((item) => observer.observe(item));
+
+    // Fallback to ensure all cameras get set up eventually
+    setTimeout(() => {
+      portfolioItems.forEach((item, index) => {
+        if (!projectCardCameras[index]) setupProjectCamera(item, index);
+      });
+    }, 2000);
+  }, 100);
+
+  // Watch for new portfolio items
+  const portfolioGrid = document.querySelector(".portfolio-grid");
+  if (portfolioGrid) {
+    const mutationObserver = new MutationObserver((mutations) => {
+      let newItemsAdded = false;
+
+      mutations.forEach((mutation) => {
+        if (mutation.type === "childList" && mutation.addedNodes.length > 0) {
+          mutation.addedNodes.forEach((node) => {
+            if (node.classList?.contains("portfolio-item"))
+              newItemsAdded = true;
+          });
         }
       });
-      observer.observe(item);
+
+      if (newItemsAdded) {
+        const oldCount = portfolioItemCount;
+        portfolioItems = document.querySelectorAll(".portfolio-item");
+        portfolioItemCount = portfolioItems.length;
+
+        // Process only newly added items
+        for (let i = oldCount; i < portfolioItemCount; i++) {
+          setupProjectCamera(portfolioItems[i], i);
+        }
+
+        // Update bitmask if needed
+        if (activeProjectCardCamBitMask.length < portfolioItemCount) {
+          const newMask = createBitArray(portfolioItemCount);
+          for (let i = 0; i < activeProjectCardCamBitMask.length; i++) {
+            if (isBitSet(activeProjectCardCamBitMask, i)) {
+              setBit(newMask, i);
+            }
+          }
+          activeProjectCardCamBitMask = newMask;
+        }
+      }
     });
-  }, 100);
+
+    mutationObserver.observe(portfolioGrid, {
+      childList: true,
+      subtree: false,
+    });
+  }
 }
 
 /**
- * Initialize portfolio filtering functionality
- * Sets up filter buttons and their event listeners
+ * Initialize portfolio filters
  */
 function initPortfolioFilters() {
   filterButtons = document.querySelectorAll(".filter-button");
@@ -460,69 +382,39 @@ function initPortfolioFilters() {
   filterButtons.forEach((button) => {
     button.addEventListener("click", function () {
       const filter = this.getAttribute("data-filter");
-      console.log(`🔍 Filter clicked: "${filter}"`);
 
-      // Clear active classes
       filterButtons.forEach((btn) => btn.classList.remove("active"));
       this.classList.add("active");
 
-      // Create new mask for visible indices
       const visibleIndices = [];
-
-      // Process only portfolio items that match the filter
       portfolioItems.forEach((item, index) => {
         const categories = item.getAttribute("data-category");
         const match = filter === "all" || categories.includes(filter);
-
-        // Update display style
         item.style.display = match ? "block" : "none";
-
-        if (match) {
-          visibleIndices.push(index);
-        }
+        if (match) visibleIndices.push(index);
       });
 
-      // Update bitmask efficiently
       updateActiveCameraBitmask(visibleIndices);
     });
   });
 }
 
 /**
- * Update the camera bitmask based on visible indices
- * @param {Array<number>} visibleIndices - Indices of visible portfolio items
+ * Update camera bitmask
  */
 function updateActiveCameraBitmask(visibleIndices) {
-  // Disable all bits first
   disableAllBits(activeProjectCardCamBitMask);
-
-  // Create and apply the new mask directly
   const newMask = createBitmask(portfolioItemCount, visibleIndices);
   applyBitmask(activeProjectCardCamBitMask, newMask, "OR");
-
-  console.log(
-    `🧠 New active camera bitmask: ${logBitArray(activeProjectCardCamBitMask)}`
-  );
 }
 
 /**
- * Load a model or get from cache if already loaded
- * Uses a promise cache to prevent duplicate loading requests
- * @param {string} modelName - Name of the model to load
- * @returns {Promise<Object3D|null>} Promise that resolves to the loaded model or null
+ * Load a model
  */
 async function loadModel(modelName) {
-  // If we already have the model loaded
-  if (models[modelName]) {
-    return Promise.resolve(models[modelName]);
-  }
+  if (models[modelName]) return models[modelName];
+  if (modelLoadPromises[modelName]) return modelLoadPromises[modelName];
 
-  // If we're already loading this model, return the existing promise
-  if (modelLoadPromises[modelName]) {
-    return modelLoadPromises[modelName];
-  }
-
-  // Lazy load GLTFLoader when first needed
   if (!GLTFLoader) {
     try {
       const module = await import("./three/GLTFLoader.js");
@@ -534,22 +426,23 @@ async function loadModel(modelName) {
   }
 
   const modelUrl = `/models/${modelName}.glb`;
-
-  // Create and cache the loading promise
   const loadPromise = new Promise((resolve) => {
     const loader = new GLTFLoader();
     loader.load(
       modelUrl,
       (gltf) => {
         models[modelName] = gltf.scene;
-        console.log(`Model ${modelName} loaded successfully`);
+        setupModel(gltf.scene);
+        if (projectCardScene) {
+          projectCardScene.add(gltf.scene);
+          updateModelPosition(modelName);
+        }
         resolve(gltf.scene);
       },
       undefined,
       (error) => {
-        console.error(`Model failed to load: ${modelName}. Error:`, error);
+        console.error(`Model failed to load: ${modelName}`, error);
         models[modelName] = null;
-        console.warn(`Will use fallback cube for ${modelName}`);
         resolve(null);
       }
     );
@@ -560,61 +453,147 @@ async function loadModel(modelName) {
 }
 
 /**
- * Preloads models for project cards with efficient caching
- * @returns {Promise<void>}
+ * Optimize model
  */
-async function preloadProjectModels() {
-  // Extract unique model names from portfolio data
+function optimizeModel(model) {
+  if (!model) return;
+
+  const geometries = {};
+  const materials = {};
+
+  model.traverse((child) => {
+    if (!child.isMesh) return;
+
+    // Optimize geometry
+    const geo = child.geometry;
+    if (geo) {
+      const geoKey = geo.uuid;
+      const sharedGeo = geometries[geoKey];
+      child.geometry = sharedGeo || geo;
+
+      if (!sharedGeo && geo.attributes?.position) {
+        if (!geo.attributes?.normal) geo.computeVertexNormals();
+        geometries[geoKey] = geo;
+      }
+    }
+
+    // Optimize material
+    const material = child.material;
+    if (material) {
+      if (Array.isArray(material)) {
+        child.material = material.map((mat) => {
+          const matKey = mat?.uuid;
+          if (!matKey) return mat;
+          if (!materials[matKey]) materials[matKey] = mat;
+          return materials[matKey];
+        });
+      } else {
+        const matKey = material?.uuid;
+        if (matKey) {
+          if (!materials[matKey]) materials[matKey] = material;
+          child.material = materials[matKey];
+        }
+      }
+    }
+  });
+}
+
+/**
+ * Preload project models
+ */
+async function preloadProjectModels(priorityModels = []) {
   const modelNames = [
     ...new Set(portfolioData.map((item) => item.modelName).filter(Boolean)),
   ];
-
   if (modelNames.length === 0) return;
 
-  const loadPromises = modelNames.map((name) => loadModel(name));
+  const loadQueue = [
+    ...priorityModels.filter((name) => modelNames.includes(name)),
+    ...modelNames.filter((name) => !priorityModels.includes(name)),
+  ];
 
-  try {
-    await Promise.all(loadPromises);
-    console.log("All project models loaded successfully");
-  } catch (error) {
-    console.error("Error preloading project models:", error);
+  const BATCH_SIZE = 3;
+  const failedModels = [];
+
+  for (let i = 0; i < loadQueue.length; i += BATCH_SIZE) {
+    const batch = loadQueue.slice(i, i + BATCH_SIZE);
+    try {
+      const results = await Promise.allSettled(
+        batch.map((name) => loadModel(name))
+      );
+      results.forEach((result, index) => {
+        if (result.status !== "fulfilled" || !result.value) {
+          failedModels.push(batch[index]);
+        }
+      });
+    } catch (error) {
+      console.error("Error loading model batch:", error);
+    }
+  }
+
+  // Retry failed models once
+  if (failedModels.length > 0) {
+    try {
+      await Promise.allSettled(failedModels.map((name) => loadModel(name)));
+    } catch (error) {
+      console.error("Error retrying failed models:", error);
+    }
   }
 }
 
 /**
- * Clears all resources and disposes of geometries and materials
- * Important for memory management
+ * Clear model cache
  */
-function clearResources() {
-  Object.values(models).forEach((model) => {
-    if (!model) return;
+function clearModelCache(
+  options = { memory: true, storage: true, models: [] }
+) {
+  const { memory, storage, models: targetModels } = options;
+  const modelsToProcess =
+    targetModels.length > 0 ? targetModels : Object.keys(models);
 
-    model.traverse((child) => {
-      if (child.isMesh) {
-        if (child.geometry) child.geometry.dispose();
-        if (child.material) {
-          if (Array.isArray(child.material)) {
-            child.material.forEach((material) => material.dispose());
-          } else {
-            child.material.dispose();
+  if (memory) {
+    modelsToProcess.forEach((modelName) => {
+      if (models[modelName]) {
+        models[modelName].traverse((child) => {
+          if (child.isMesh) {
+            if (child.geometry && !child.geometry._isShared)
+              child.geometry.dispose();
+            if (child.material) {
+              if (Array.isArray(child.material)) {
+                child.material.forEach((mat) => {
+                  if (!mat._isShared) mat.dispose();
+                });
+              } else if (!child.material._isShared) {
+                child.material.dispose();
+              }
+            }
           }
-        }
+        });
+        delete models[modelName];
       }
     });
-  });
+  }
 
-  // Clear caches
-  models = {};
-  modelLoadPromises = {};
-  console.log("Resources cleared");
+  if (storage && window.localStorage) {
+    modelsToProcess.forEach((modelName) => {
+      try {
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key.startsWith(`model_${modelName}_`)) keysToRemove.push(key);
+        }
+        keysToRemove.forEach((key) => localStorage.removeItem(key));
+      } catch (error) {
+        console.error(`Error clearing storage for model ${modelName}:`, error);
+      }
+    });
+  }
 }
 
 /**
- * Initialize Three.js scenes: Game Scene and Project Card Scene
- * Creates shared renderer and preloads models
+ * Initialize Three.js
  */
 function initThreeJS() {
-  // Create shared renderer
   renderer = new WebGLRenderer({
     preserveDrawingBuffer: true,
     antialias: true,
@@ -627,29 +606,21 @@ function initThreeJS() {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = PCFSoftShadowMap;
 
-  // Create shared fallback cube
   createSharedFallbackCube();
 
-  // Preload models and initialize scenes
   preloadProjectModels()
     .then(() => {
       initGameScene();
       initProjectCardScene();
-
       initPortfolioCanvases();
-
-      // Start animation loop
       requestAnimationFrame(animate);
     })
-    .catch((error) => {
-      console.error("Error initializing scenes:", error);
-    });
+    .catch((error) => console.error("Error initializing scenes:", error));
 
-  // Handle window resize efficiently with debouncing
+  // Handle window resize
   let resizeTimeout;
   window.addEventListener("resize", () => {
     if (resizeTimeout) clearTimeout(resizeTimeout);
-
     resizeTimeout = setTimeout(() => {
       projectCardCameras.forEach((camera, index) => {
         if (!camera) return;
@@ -665,27 +636,22 @@ function initThreeJS() {
 }
 
 /**
- * Create a single shared fallback cube for all models
- * @returns {Mesh} The created fallback cube
+ * Create fallback cube
  */
 function createSharedFallbackCube() {
   const geometry = new BoxGeometry(1, 1, 1);
   const material = new MeshNormalMaterial();
   sharedFallbackCube = new Mesh(geometry, material);
-
-  // We'll add this to the scene only once later
   return sharedFallbackCube;
 }
 
 /**
- * Initialize the game scene
- * Creates scene, lights, and camera
+ * Initialize game scene
  */
 function initGameScene() {
   gameScene = new Scene();
   gameScene.background = null;
 
-  // Add lights
   const ambientLight = new AmbientLight(0xffffff, 0.5);
   gameScene.add(ambientLight);
 
@@ -694,7 +660,6 @@ function initGameScene() {
   directionalLight.castShadow = true;
   gameScene.add(directionalLight);
 
-  // Create camera
   thirdPersonCamera = new PerspectiveCamera(
     75,
     window.innerWidth / window.innerHeight,
@@ -703,27 +668,21 @@ function initGameScene() {
   );
   thirdPersonCamera.position.set(0, 2, 5);
   thirdPersonCamera.lookAt(0, 0, 0);
-
-  console.log("Game scene initialized");
 }
 
 /**
- * Initialize shared scene for project cards
- * Creates shared scene, lights, and sets up cameras
+ * Initialize project card scene
  */
 function initProjectCardScene() {
   portfolioItems = document.querySelectorAll(".portfolio-item");
   portfolioItemCount = portfolioItems.length;
 
-  // Initialize visibility bit array
   activeProjectCardCamBitMask = createBitArray(portfolioItemCount);
   enableAllBits(activeProjectCardCamBitMask);
 
-  // Create shared scene
   projectCardScene = new Scene();
   projectCardScene.background = null;
 
-  // Add shared lights
   const ambientLight = new AmbientLight(0xffffff, 0.7);
   projectCardScene.add(ambientLight);
 
@@ -731,338 +690,273 @@ function initProjectCardScene() {
   dirLight.position.set(1, 1, 1);
   projectCardScene.add(dirLight);
 
-  // Add shared fallback cube to scene once
+  sharedFallbackCube.position.set(0, 0, 0);
   projectCardScene.add(sharedFallbackCube);
 
-  // Add all loaded models to scene once
-  Object.values(models).forEach((model) => {
+  calculateModelPositions();
+
+  Object.entries(models).forEach(([modelName, model]) => {
     if (model) {
       setupModel(model);
-      model.visible = false; // Initially hidden
+      const position = getModelPosition(modelName);
+      model.position.set(position.x, position.y, position.z);
       projectCardScene.add(model);
     }
   });
+}
 
-  console.log("Project card scene initialized");
+/**
+ * Calculate model positions
+ */
+function calculateModelPositions() {
+  const GRID_SIZE = 325;
+  modelPositions = {};
+
+  const modelNames = [
+    ...new Set(portfolioData.map((item) => item.modelName).filter(Boolean)),
+    fallbackCubeName,
+  ];
+
+  const gridSide = Math.ceil(Math.sqrt(modelNames.length));
+
+  modelNames.forEach((name, index) => {
+    const row = Math.floor(index / gridSide);
+    const col = index % gridSide;
+
+    const offsetX = (col - (gridSide - 1) / 2) * GRID_SIZE;
+    const offsetZ = (row - (gridSide - 1) / 2) * GRID_SIZE;
+
+    modelPositions[name] = new Vector3(offsetX, 0, offsetZ);
+  });
+
+  modelPositions[fallbackCubeName] = new Vector3(0, 0, 0);
+}
+
+/**
+ * Get model position
+ */
+function getModelPosition(modelName) {
+  return modelPositions[modelName] || new Vector3(0, 0, 0);
 }
 
 /**
  * Set up camera and controls for a project card
- * @param {HTMLElement} item - Portfolio item element
- * @param {number} index - Index of the portfolio item
- * @returns {Promise<void>}
  */
 async function setupProjectCamera(item, index) {
   const canvas = item.querySelector(".threejs-canvas");
-  if (!canvas) {
-    console.error(`Canvas not found for portfolio item ${index}`);
-    return;
-  }
+  if (!canvas) return;
 
-  // Get canvas context
   const ctx = canvas.getContext("2d");
-  if (!ctx) {
-    console.error(`Failed to get 2D context for canvas ${index}`);
-    return;
-  }
+  if (!ctx) return;
   canvasContexts[index] = ctx;
 
-  // Create camera
+  const modelName = item.getAttribute("data-model") || fallbackCubeName;
+  const targetPosition = getModelPosition(modelName);
+
   const camera = new PerspectiveCamera(
     75,
     canvas.width / canvas.height,
     0.1,
     1000
   );
-  camera.position.set(0, 0, 2);
+
+  const cameraDistance = 3;
+  const angleOffset = (index % 8) * (Math.PI / 4);
+
+  camera.position.x = targetPosition.x + Math.sin(angleOffset) * cameraDistance;
+  camera.position.y = targetPosition.y + 1.5;
+  camera.position.z = targetPosition.z + Math.cos(angleOffset) * cameraDistance;
+
+  camera.lookAt(targetPosition.x, targetPosition.y, targetPosition.z);
+
   projectCardCameras[index] = camera;
 
-  // Lazy load OrbitControls when first needed
   if (!OrbitControls) {
     try {
       OrbitControls = await loadAndPatchOrbitControls();
     } catch (error) {
       console.error("Failed to load OrbitControls:", error);
-      return;
     }
   }
 
-  // IMPORTANT: Wait until next frame to ensure canvas is in DOM and sized properly
   await new Promise(requestAnimationFrame);
 
-  // Check again if canvas is valid
-  if (!canvas.isConnected || canvas.width <= 0 || canvas.height <= 0) {
-    console.warn(`Canvas for item ${index} not ready or not properly sized`);
+  const createSimpleAutorotation = () => ({
+    update: () => {
+      if (!camera) {
+        return;
+      }
+      const rotationSpeed = 0.005 + (index % 5) * 0.002;
+      const currentAngle = Math.atan2(
+        camera.position.x - targetPosition.x,
+        camera.position.z - targetPosition.z
+      );
+      const newAngle = currentAngle + rotationSpeed;
 
-    // Create a simple manual rotation function as fallback
-    projectCardControls[index] = {
-      update: () => {
-        if (camera) {
-          const rotationSpeed = 0.01;
-          camera.position.x =
-            camera.position.x * Math.cos(rotationSpeed) -
-            camera.position.z * Math.sin(rotationSpeed);
-          camera.position.z =
-            camera.position.x * Math.sin(rotationSpeed) +
-            camera.position.z * Math.cos(rotationSpeed);
-          camera.lookAt(0, 0, 0);
-        }
-      },
-    };
+      camera.position.x =
+        targetPosition.x + Math.sin(newAngle) * cameraDistance;
+      camera.position.z =
+        targetPosition.z + Math.cos(newAngle) * cameraDistance;
+
+      camera.lookAt(targetPosition.x, targetPosition.y, targetPosition.z);
+    },
+  });
+
+  if (!canvas.isConnected || canvas.width <= 0 || canvas.height <= 0) {
+    projectCardControls[index] = createSimpleAutorotation();
     return;
   }
 
   try {
-    // Create a temporary DOM element to check event handling
-    const tempElement = document.createElement("div");
-    tempElement.style.position = "absolute";
-    tempElement.style.left = "-9999px";
-    document.body.appendChild(tempElement);
-
-    // Test if element can receive events
-    let eventTestPassed = false;
-    const testHandler = () => {
-      eventTestPassed = true;
-    };
-    tempElement.addEventListener("mousedown", testHandler);
-    tempElement.dispatchEvent(new MouseEvent("mousedown"));
-    tempElement.removeEventListener("mousedown", testHandler);
-    document.body.removeChild(tempElement);
-
-    if (!eventTestPassed) {
-      throw new Error("Event handling not working in this context");
+    if (!OrbitControls) {
+      projectCardControls[index] = createSimpleAutorotation();
     }
-
-    // Now create orbit controls with verified event handling
     const controls = new OrbitControls(camera, canvas);
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
     controls.autoRotate = true;
-    controls.autoRotateSpeed = 2.0;
-    controls.enableZoom = false;
-    controls.target.set(0, 0, 0);
-
-    // Verify the controls have created valid event handlers
-    if (!controls.domElement || typeof controls.update !== "function") {
-      throw new Error("Controls not properly initialized");
-    }
-
+    controls.autoRotateSpeed = 1.0 + (index % 5) * 0.5;
+    controls.enableZoom = true;
+    controls.minDistance = 2;
+    controls.maxDistance = 8;
+    controls.target.set(targetPosition.x, targetPosition.y, targetPosition.z);
     controls.update();
     projectCardControls[index] = controls;
   } catch (error) {
-    console.error(`Failed to create controls for item ${index}:`, error);
-
-    // Create a simple auto-rotation function as fallback
-    projectCardControls[index] = {
-      update: () => {
-        if (camera) {
-          const rotationSpeed = 0.01;
-          camera.position.x =
-            camera.position.x * Math.cos(rotationSpeed) -
-            camera.position.z * Math.sin(rotationSpeed);
-          camera.position.z =
-            camera.position.x * Math.sin(rotationSpeed) +
-            camera.position.z * Math.cos(rotationSpeed);
-          camera.lookAt(0, 0, 0);
-        }
-      },
-    };
+    projectCardControls[index] = createSimpleAutorotation();
   }
-}
-
-function cleanupControls(index) {
-  if (projectCardControls[index] && projectCardControls[index].dispose) {
-    projectCardControls[index].dispose();
-  }
-  projectCardControls[index] = null;
 }
 
 /**
- * Set up model positioning and scaling
- * Centers and scales the model to fit in view
- * @param {Object3D} model - 3D model to set up
+ * Set up model
  */
-function setupModel(model) {
-  // Center and scale the model
+function setupModel(model, options = { randomRotation: true }) {
+  if (!model) return;
+
   const box = new Box3().setFromObject(model);
   const center = box.getCenter(new Vector3());
   const size = box.getSize(new Vector3());
 
-  // Center the model
   model.position.sub(center);
+  model.position.y += size.y * 0.1;
 
-  // Scale to reasonable size
   const maxDim = Math.max(size.x, size.y, size.z);
-  const scale = 1 / maxDim;
-  model.scale.multiplyScalar(scale);
+  if (maxDim > 0) {
+    const scale = 1 / maxDim;
+    model.scale.multiplyScalar(scale);
+  }
+
+  if (options.randomRotation) {
+    model.rotation.y = Math.random() * Math.PI * 2;
+  }
+
+  model.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow = true;
+      child.receiveShadow = true;
+    }
+  });
 }
 
 /**
- * Optimized animation loop with frame rate control
- * @param {number} timestamp - Current timestamp from requestAnimationFrame
+ * Animation loop
  */
 function animate(timestamp) {
   if (isAnimating) {
     requestAnimationFrame(animate);
   }
 
-  // Limit framerate for performance
   if (timestamp - lastRenderTime < FRAME_INTERVAL) return;
   lastRenderTime = timestamp;
 
-  // First update all active controls
-  updateActiveControls();
-
-  // Then render only active scenes
-  renderActiveScenes();
-}
-
-/**
- * Update only active controls
- * Uses bitmask to skip inactive items for performance
- */
-function updateActiveControls() {
+  // Update active controls
   for (let i = 0; i < portfolioItemCount; i++) {
-    if (!isBitSet(activeProjectCardCamBitMask, i)) continue;
-    if (!projectCardControls[i]) continue;
-
-    projectCardControls[i].update();
+    if (isBitSet(activeProjectCardCamBitMask, i) && projectCardControls[i]) {
+      projectCardControls[i].update();
+    }
   }
-}
 
-/**
- * Render only active scenes
- * Uses visibility toggling to render each item efficiently
- */
-function renderActiveScenes() {
-  // Hide all models initially
-  sharedFallbackCube.visible = false;
-  Object.values(models).forEach((model) => {
-    if (model) model.visible = false;
-  });
-
-  // Loop through all items
+  // Render active scenes
   for (let i = 0; i < portfolioItemCount; i++) {
-    // Skip inactive cameras
     if (!isBitSet(activeProjectCardCamBitMask, i)) continue;
 
-    // Skip if missing components
     const camera = projectCardCameras[i];
     const ctx = canvasContexts[i];
     if (!camera || !ctx) continue;
 
-    if (!projectCardControls[i] || projectCardControls[i].disposed) {
-      // Reset the camera position if controls are missing
-      const camera = projectCardCameras[i];
-      if (camera) {
-        camera.position.set(0, 0, 2);
-        camera.lookAt(0, 0, 0);
-      }
-    }
-
-    // Get the model for this card
-    const item = portfolioItems[i];
-    const modelName = item.getAttribute("data-model");
-    const model = models[modelName];
-
-    // Show either the model or fallback cube
-    if (model) {
-      model.visible = true;
-    } else {
-      sharedFallbackCube.visible = true;
-    }
-
     // Render to canvas
-    renderToCanvas(camera, ctx);
-
-    // Hide the model again
-    if (model) {
-      model.visible = false;
-    } else {
-      sharedFallbackCube.visible = false;
-    }
+    renderer.setSize(ctx.canvas.width, ctx.canvas.height);
+    renderer.render(projectCardScene, camera);
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    ctx.drawImage(renderer.domElement, 0, 0);
   }
 }
 
 /**
- * Render a scene to a canvas
- * @param {PerspectiveCamera} camera - Camera to render from
- * @param {CanvasRenderingContext2D} ctx - Canvas context to render to
+ * Update model position
  */
-function renderToCanvas(camera, ctx) {
-  // Set renderer size
-  renderer.setSize(ctx.canvas.width, ctx.canvas.height);
-
-  // Render scene
-  renderer.render(projectCardScene, camera);
-
-  // Copy to canvas
-  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-  ctx.drawImage(renderer.domElement, 0, 0);
-}
-
-/**
- * Monkey patch OrbitControls to prevent "Cannot read properties of null" errors
- * Add this code right after loading the OrbitControls module
- */
-function patchOrbitControls() {
-  // Wait for OrbitControls to be loaded
-  if (!OrbitControls) {
-    console.warn("OrbitControls not loaded yet, will try again later");
-    setTimeout(patchOrbitControls, 100);
+function updateModelPosition(modelName) {
+  if (modelPositions[modelName]) {
+    const model = models[modelName];
+    if (model) {
+      const position = modelPositions[modelName];
+      model.position.set(position.x, position.y, position.z);
+    }
     return;
   }
 
-  // Store the original prototype
-  const originalPrototype = OrbitControls.prototype;
+  calculateModelPositions();
 
-  // Only patch if not already patched
-  if (originalPrototype._patched) return;
-  originalPrototype._patched = true;
-
-  // Store the original dispatchEvent method
-  const originalDispatchEvent = originalPrototype.dispatchEvent;
-
-  // Replace with a safer version that won't throw errors
-  originalPrototype.dispatchEvent = function (event) {
-    // Skip dispatch if no listeners or null event
-    if (!this._listeners || !event) return false;
-
-    const listeners = this._listeners;
-    const listenerArray = listeners[event.type];
-
-    if (listenerArray !== undefined) {
-      // Set the target (this is where the original error happens)
-      event.target = this;
-
-      // Clone the array to avoid modification during iteration
-      const array = listenerArray.slice(0);
-
-      for (let i = 0, l = array.length; i < l; i++) {
-        try {
-          // Wrap the call in try-catch to prevent errors
-          array[i].call(this, event);
-        } catch (error) {
-          // Silently catch the error - we know it's happening but doesn't affect functionality
-          // console.debug("Suppressed OrbitControls event error:", error.message);
-        }
-      }
-
-      return true;
+  Object.entries(models).forEach(([name, model]) => {
+    if (model && modelPositions[name]) {
+      const position = modelPositions[name];
+      model.position.set(position.x, position.y, position.z);
     }
+  });
 
-    return false;
-  };
-
-  console.log("OrbitControls has been patched to prevent error messages");
+  portfolioItems.forEach((item, index) => {
+    const controls = projectCardControls[index];
+    if (controls?.target) {
+      const modelName = item.getAttribute("data-model") || fallbackCubeName;
+      const position = modelPositions[modelName] || new Vector3(0, 0, 0);
+      controls.target.set(position.x, position.y, position.z);
+    }
+  });
 }
 
-// Call this function after importing OrbitControls
+/**
+ * Load and patch OrbitControls
+ */
 async function loadAndPatchOrbitControls() {
   try {
     const module = await import("./three/OrbitControls.js");
     OrbitControls = module.OrbitControls;
-    patchOrbitControls();
+
+    // Patch OrbitControls to prevent errors
+    if (!OrbitControls.prototype._patched) {
+      OrbitControls.prototype._patched = true;
+      const originalDispatchEvent = OrbitControls.prototype.dispatchEvent;
+
+      OrbitControls.prototype.dispatchEvent = function (event) {
+        if (!this._listeners || !event) return false;
+
+        const listeners = this._listeners;
+        const listenerArray = listeners[event.type];
+
+        if (listenerArray === undefined) {
+          return false;
+        }
+
+        event.target = this;
+        const array = listenerArray.slice(0);
+
+        for (let i = 0, l = array.length; i < l; i++) {
+          array[i].call(this, event);
+        }
+        return true;
+      };
+    }
+
     return OrbitControls;
   } catch (error) {
     console.error("Failed to load OrbitControls:", error);
