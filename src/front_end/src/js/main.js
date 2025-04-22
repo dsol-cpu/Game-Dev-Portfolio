@@ -11,7 +11,6 @@ import {
   enableAllBits,
   disableAllBits,
   createBitmask,
-  logBitArray,
   applyBitmask,
   isBitSet,
 } from "./utils/bit-array.js";
@@ -31,11 +30,14 @@ import {
   PCFSoftShadowMap,
 } from "./three/three.module.min.js";
 
+import { initBlogPosts } from "./blog.js";
+
 // Global state
 let portfolioItemCount = 0;
 let activeProjectCardCamBitMask = 0;
 let isAnimating = true;
 let lastRenderTime = 0;
+
 const TARGET_FRAMERATE = 60;
 const FRAME_INTERVAL = 1000 / TARGET_FRAMERATE;
 
@@ -110,6 +112,7 @@ document.addEventListener("DOMContentLoaded", function () {
   initProjectCards();
   initPortfolioFilters();
   initThreeJS();
+  initBlogPosts();
   initGameView();
 
   // Handle visibility change
@@ -833,6 +836,8 @@ async function setupProjectCamera(item, index) {
 function setupModel(model, options = { randomRotation: true }) {
   if (!model) return;
 
+  optimizeModel(model);
+
   const box = new Box3().setFromObject(model);
   const center = box.getCenter(new Vector3());
   const size = box.getSize(new Vector3());
@@ -876,6 +881,11 @@ function animate(timestamp) {
     }
   }
 
+  if (gameSceneCameraActive) {
+    renderer.setSize(mainGameCanvas.width, mainGameCanvas.height);
+    renderer.render(gameScene, thirdPersonCamera);
+  }
+
   // Render active scenes
   for (let i = 0; i < portfolioItemCount; i++) {
     if (!isBitSet(activeProjectCardCamBitMask, i)) continue;
@@ -883,6 +893,8 @@ function animate(timestamp) {
     const camera = projectCardCameras[i];
     const ctx = canvasContexts[i];
     if (!camera || !ctx) continue;
+
+    //TODO: Make only 1 project card width and height. No need to set it each time.
 
     // Render to canvas
     renderer.setSize(ctx.canvas.width, ctx.canvas.height);

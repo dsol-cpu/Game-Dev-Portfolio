@@ -295,7 +295,6 @@ a:not(.nav-links a) {
 .social-links {
   display: flex;
   justify-content: center;
-  gap: 1.5rem;
   margin-top: 2.5rem;
 }
 
@@ -931,4 +930,26 @@ input:checked + .slider:before {
 
 .game-view-container .game-controls-info p {
   margin: 0;
+}
+
+.blog-list {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.blog-post {
+  width: 80%;
+  flex-direction: column;
+  border-width: 10px;
+  border-color: var(--secondary-color);
+  border-radius: 12px;
+  background: var(--card-bg);
+  text-align: center;
+}
+
+.blog-post-desc {
+  flex-direction: column;
 }
