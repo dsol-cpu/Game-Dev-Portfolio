@@ -2,7 +2,7 @@
  * @fileoverview Main JavaScript for portfolio site.
  * Handles navigation, portfolio filtering, form submission,
  * and other UI interactions.
- * @author Portfolio Developer
+ * @author David Solinsky
  * @version 1.0.0
  */
 
@@ -32,6 +32,9 @@ import {
 
 import { initBlogPosts } from "./blog.js";
 
+import { setupBackdropListener, renderProjectsGrid } from "./project-card.js";
+
+import { projectCardData } from "./data/project.js";
 // Global state
 let portfolioItemCount = 0;
 let activeProjectCardCamBitMask = 0;
@@ -44,45 +47,6 @@ const FRAME_INTERVAL = 1000 / TARGET_FRAMERATE;
 // DOM Elements
 let filterButtons;
 let portfolioItems;
-
-// Enums
-const PortfolioCategory = Object.freeze({
-  UNITY: "unity",
-  WEB: "web",
-  MOBILE: "mobile",
-  GAME: "game",
-});
-
-const TechTags = Object.freeze({
-  UNITY: "Unity",
-  CSHARP: "C#",
-  PROCEDURAL: "Procedural Generation",
-  REACT: "React",
-  D3: "D3.js",
-  API: "API",
-});
-
-// Portfolio data
-const portfolioData = [
-  {
-    category: PortfolioCategory.UNITY,
-    title: "Geospatial Visualizer",
-    tags: [TechTags.UNITY, TechTags.CSHARP],
-    description: "A visualization of geospatial information.",
-    demoLink: "",
-    detailsLink: "",
-    modelName: "babyTurtle",
-  },
-  {
-    category: PortfolioCategory.WEB,
-    title: "Interactive Dashboard",
-    tags: [TechTags.REACT, TechTags.D3, TechTags.API],
-    description: "A dashboard showing dynamic financial data.",
-    demoLink: "",
-    detailsLink: "",
-    modelName: "",
-  },
-];
 
 // Three.js variables
 let renderer = null;
@@ -114,6 +78,7 @@ document.addEventListener("DOMContentLoaded", function () {
   initThreeJS();
   initBlogPosts();
   initGameView();
+  setupBackdropListener(); // Set up event listener for backdrop
 
   // Handle visibility change
   document.addEventListener("visibilitychange", () => {
@@ -249,44 +214,14 @@ function initNavigation() {
 }
 
 /**
- * Create a project card
- */
-function createProjectCard(item) {
-  const wrapper = document.createElement("div");
-  wrapper.className = "portfolio-item";
-  wrapper.setAttribute("data-category", item.category);
-  wrapper.setAttribute("data-model", item.modelName || "");
-
-  wrapper.innerHTML = `
-    <div class="portfolio-canvas">
-      <canvas class="threejs-canvas" width="300" height="200"></canvas>
-    </div>
-    <div class="portfolio-info">
-      <h3 class="portfolio-title">${item.title}</h3>
-      <p class="portfolio-category">${item.tags.join(", ")}</p>
-      <p class="portfolio-desc">${item.description}</p>
-      <div class="portfolio-links">
-        <a href="${item.demoLink || "#"}">Demo</a>
-        <a href="${item.detailsLink || "#"}">Details</a>
-      </div>
-    </div>
-  `;
-  return wrapper;
-}
-
-/**
  * Initialize project cards
  */
 function initProjectCards() {
   const portfolioGrid = document.querySelector(".portfolio-grid");
   if (!portfolioGrid) return;
 
-  const fragment = document.createDocumentFragment();
-  portfolioData.forEach((item) => {
-    fragment.appendChild(createProjectCard(item));
-  });
-
-  portfolioGrid.appendChild(fragment);
+  // Using the renderProjectsGrid function from project-card.js
+  renderProjectsGrid(projectCardData);
 }
 
 /**
@@ -294,7 +229,6 @@ function initProjectCards() {
  */
 function initPortfolioCanvases() {
   portfolioItems = document.querySelectorAll(".portfolio-item");
-  portfolioItemCount = portfolioItems.length;
 
   projectCardCameras = new Array(portfolioItemCount);
   projectCardControls = new Array(portfolioItemCount);
@@ -506,7 +440,7 @@ function optimizeModel(model) {
  */
 async function preloadProjectModels(priorityModels = []) {
   const modelNames = [
-    ...new Set(portfolioData.map((item) => item.modelName).filter(Boolean)),
+    ...new Set(projectCardData.map((item) => item.modelName).filter(Boolean)),
   ];
   if (modelNames.length === 0) return;
 
@@ -716,7 +650,7 @@ function calculateModelPositions() {
   modelPositions = {};
 
   const modelNames = [
-    ...new Set(portfolioData.map((item) => item.modelName).filter(Boolean)),
+    ...new Set(projectCardData.map((item) => item.modelName).filter(Boolean)),
     fallbackCubeName,
   ];
 
@@ -823,6 +757,16 @@ async function setupProjectCamera(item, index) {
     controls.minDistance = 2;
     controls.maxDistance = 8;
     controls.target.set(targetPosition.x, targetPosition.y, targetPosition.z);
+
+    // Add event listeners for OrbitControls cursor changes
+    controls.addEventListener("start", () => {
+      canvas.style.cursor = "grabbing";
+    });
+
+    controls.addEventListener("end", () => {
+      canvas.style.cursor = "grab";
+    });
+
     controls.update();
     projectCardControls[index] = controls;
   } catch (error) {
@@ -893,8 +837,6 @@ function animate(timestamp) {
     const camera = projectCardCameras[i];
     const ctx = canvasContexts[i];
     if (!camera || !ctx) continue;
-
-    //TODO: Make only 1 project card width and height. No need to set it each time.
 
     // Render to canvas
     renderer.setSize(ctx.canvas.width, ctx.canvas.height);

@@ -1,27 +1,32 @@
 :root {
-  /* Light Theme (default) - Skies of Arcadia inspired */
-  --primary-color: #7eb6ff; /* Softer sky blue */
-  --secondary-color: #ffdb94; /* Softer gold */
-  --dark-color: #5f7a9a; /* Softer dark blue */
-  --light-color: #f8fbff; /* Lighter sky */
-  --accent-color: #ff9292; /* Softer red accent */
+  /* Light Theme (default) - Professional Pastel */
+  --primary-color: #6a9be7; /* Mature sky blue */
+  --secondary-color: #ffb88c; /* Soft peach */
+  --dark-color: #4a5d7e; /* Professional navy blue */
+  --light-color: #f8faff; /* Clean white with hint of blue */
+  --accent-color: #f794a4; /* Soft pink accent */
   --sidebar-width: 250px;
-  --text-color: #2d3748; /* Dark text for light mode */
-  --bg-color: #f2f9ff; /* Light sky background */
-  --sidebar-bg: #4a90e2; /* Blue sidebar in light mode */
-  --sidebar-text: #ffffff; /* White text on blue sidebar */
-  --card-bg: #ffffff;
-  --input-bg: #ffffff;
-  --input-border: #cbd5e0;
-  --nav-hover-bg: #74b3ff; /* Lighter blue for hover states */
+  --text-color: #2e3a52; /* Deep blue-gray text */
+  --bg-color: #f0f5ff; /* Very light blue background */
+  --sidebar-bg: #f794a4; /* Pink sidebar */
+  --sidebar-text: #ffffff; /* White text on pink sidebar */
+  --card-bg: #fef4fa; /* Very light pink card background */
+  --input-bg: #f5f8ff;
+  --input-border: #d0ddf0;
+  --nav-hover-bg: #faa6b3; /* Slightly darker pink for hover */
   --nav-hover-text: #ffffff;
-  --nav-icon-color: #ffffff; /* White icons in light mode */
-  --portfolio-card-bg: #ffffff;
-  --portfolio-card-shadow: 0 8px 20px rgba(95, 122, 154, 0.15);
-  --portfolio-card-border: rgba(126, 182, 255, 0.5);
-  --portfolio-title-color: #4a90e2;
-  --portfolio-text-color: #2d3748;
-  --portfolio-category-color: #ff9292;
+  --nav-icon-color: #ffffff;
+  --portfolio-card-bg: #fcf2ff; /* Soft lavender card background */
+  --portfolio-card-shadow: 0 8px 20px rgba(106, 155, 231, 0.15);
+  --portfolio-card-border: rgba(
+    247,
+    148,
+    164,
+    0.4
+  ); /* Pink border to match theme */
+  --portfolio-title-color: #6a9be7;
+  --portfolio-text-color: #2e3a52;
+  --portfolio-category-color: #ffb88c;
 }
 
 /* Dark Theme - Night skies theme */
@@ -484,7 +489,7 @@ section.active {
   overflow: hidden;
   box-shadow: var(--portfolio-card-shadow);
   transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  background: var(--portfolio-card-bg);
+  background-color: var(--portfolio-card-bg);
   border: 2px solid var(--portfolio-card-border);
   display: flex;
   flex-direction: column;

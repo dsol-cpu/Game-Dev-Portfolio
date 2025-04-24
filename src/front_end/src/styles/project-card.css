@@ -1,0 +1,330 @@
+/* Project card component */
+.game-preview {
+  width: 360px;
+  height: 240px;
+  position: relative;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12), 0 4px 8px rgba(0, 0, 0, 0.06);
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+  background-color: white;
+}
+
+.game-preview:hover:not(.expanded) {
+  transform: translateY(-4px) scale(1.01);
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15), 0 5px 15px rgba(0, 0, 0, 0.08);
+}
+
+/* Expanded state */
+.game-preview.expanded {
+  width: 500px;
+  height: auto;
+  max-height: 80vh;
+  cursor: default;
+  z-index: 10;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.game-image-container {
+  width: 100%;
+  height: 240px;
+  position: relative;
+  overflow: hidden;
+  transition: height 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ThreeJS canvas styling */
+.threejs-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2;
+  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.game-preview:hover:not(.expanded) .threejs-canvas {
+  transform: scale(1.08);
+}
+
+/* Fallback image styling */
+.game-image {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: white;
+  font-weight: bold;
+  font-size: 18px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  background-size: cover;
+  background-position: center;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1; /* Behind the canvas */
+}
+
+.game-preview:hover:not(.expanded) .game-image {
+  transform: scale(1.08);
+}
+
+/* Overlay styles */
+.game-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 20px;
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.85) 0%,
+    rgba(0, 0, 0, 0.7) 40%,
+    rgba(0, 0, 0, 0.4) 70%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  color: white;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 3; /* Above the canvas */
+}
+
+.game-preview:hover:not(.expanded) .game-overlay {
+  opacity: 1;
+}
+
+.game-preview.expanded .game-overlay {
+  display: none;
+}
+
+.game-title {
+  margin: 0;
+  user-select: none;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  transform: translateY(8px);
+  opacity: 0;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) 0.05s;
+}
+
+.game-preview:hover:not(.expanded) .game-title {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.overlay-buttons {
+  display: flex;
+  gap: 10px;
+  transform: translateY(8px);
+  opacity: 0;
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) 0.15s;
+}
+
+.game-preview:hover:not(.expanded) .overlay-buttons {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.btn {
+  user-select: none;
+  padding: 10px 18px;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-play {
+  background: linear-gradient(140deg, #ff6b8b 0%, #ff8fab 100%);
+  color: white;
+  flex-grow: 1;
+}
+
+.btn-play:hover {
+  background: linear-gradient(140deg, #ff5a7d 0%, #ff7d9d 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(255, 107, 139, 0.3);
+}
+
+.btn-play:active {
+  transform: translateY(0);
+}
+
+.btn-play::before {
+  content: "▶ ";
+  font-size: 10px;
+}
+
+.btn-details {
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.btn-details:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.btn-details:active {
+  transform: translateY(0);
+}
+
+/* Expanded content styles */
+.expanded-content {
+  height: 0;
+  overflow: hidden;
+  transition: height 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  background: white;
+}
+
+.game-preview.expanded .expanded-content {
+  height: auto;
+  max-height: calc(80vh - 240px);
+  overflow-y: auto;
+}
+
+.expanded-content-inner {
+  padding: 24px;
+  opacity: 0;
+  transform: translateY(20px);
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.2s;
+}
+
+.game-preview.expanded .expanded-content-inner {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.card-title {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0 0 16px 0;
+  color: #222;
+  letter-spacing: -0.5px;
+}
+
+.project-description {
+  font-size: 15px;
+  line-height: 1.6;
+  color: #555;
+  margin: 0 0 20px 0;
+}
+
+.project-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.project-tag {
+  background-color: #f0eeff;
+  color: #6859ff;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.btn-full-details {
+  background: linear-gradient(140deg, #6859ff 0%, #9682ff 100%);
+  color: white;
+  flex-grow: 1;
+  box-shadow: 0 4px 12px rgba(104, 89, 255, 0.25);
+}
+
+.btn-full-details:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(104, 89, 255, 0.35);
+}
+
+.btn-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: rgba(0, 0, 0, 0.2);
+  border: none;
+  color: white;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 18px;
+  line-height: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  transition: all 0.2s ease;
+  z-index: 5;
+  opacity: 0;
+  visibility: hidden;
+}
+
+.game-preview.expanded .btn-close {
+  opacity: 1;
+  visibility: visible;
+}
+
+.btn-close:hover {
+  background: rgba(0, 0, 0, 0.4);
+  transform: scale(1.1);
+}
+
+.btn-back {
+  background: #f5f5f7;
+  color: #555;
+  border: 1px solid #ddd;
+}
+
+.btn-back:hover {
+  background: #eee;
+  transform: translateY(-2px);
+}
+
+/* Additional styles for animation */
+.backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  z-index: 5;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease;
+}
+
+.backdrop.active {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* Ensure proper sizing for threejs in expanded state */
+.game-preview.expanded .threejs-canvas {
+  height: 240px;
+}
