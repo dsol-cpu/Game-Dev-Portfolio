@@ -9,10 +9,11 @@
   transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
   cursor: pointer;
   background-color: white;
+  user-select: none;
 }
 
 .game-preview:hover:not(.expanded) {
-  transform: translateY(-4px) scale(1.01);
+  transform: none !important;
   box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15), 0 5px 15px rgba(0, 0, 0, 0.08);
 }
 
@@ -24,6 +25,15 @@
   cursor: default;
   z-index: 10;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.game-preview.expanded.expand-left {
+  position: relative;
+  z-index: 20; /* Higher than standard expanded cards */
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .game-image-container {
@@ -32,6 +42,7 @@
   position: relative;
   overflow: hidden;
   transition: height 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
 }
 
 /* ThreeJS canvas styling */
@@ -43,6 +54,7 @@
   height: 100%;
   z-index: 2;
   transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
 }
 
 .game-preview:hover:not(.expanded) .threejs-canvas {
@@ -67,6 +79,7 @@
   top: 0;
   left: 0;
   z-index: 1; /* Behind the canvas */
+  user-select: none;
 }
 
 .game-preview:hover:not(.expanded) .game-image {
@@ -94,6 +107,7 @@
   flex-direction: column;
   gap: 12px;
   z-index: 3; /* Above the canvas */
+  user-select: none;
 }
 
 .game-preview:hover:not(.expanded) .game-overlay {
@@ -126,6 +140,7 @@
   transform: translateY(8px);
   opacity: 0;
   transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) 0.15s;
+  user-select: none;
 }
 
 .game-preview:hover:not(.expanded) .overlay-buttons {
@@ -189,6 +204,7 @@
   overflow: hidden;
   transition: height 0.5s cubic-bezier(0.16, 1, 0.3, 1);
   background: white;
+  user-select: none;
 }
 
 .game-preview.expanded .expanded-content {
@@ -202,6 +218,7 @@
   opacity: 0;
   transform: translateY(20px);
   transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.2s;
+  user-select: none;
 }
 
 .game-preview.expanded .expanded-content-inner {
@@ -215,6 +232,7 @@
   margin: 0 0 16px 0;
   color: #222;
   letter-spacing: -0.5px;
+  user-select: none;
 }
 
 .project-description {
@@ -222,6 +240,7 @@
   line-height: 1.6;
   color: #555;
   margin: 0 0 20px 0;
+  user-select: none;
 }
 
 .project-tags {
@@ -229,6 +248,7 @@
   flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 24px;
+  user-select: none;
 }
 
 .project-tag {
@@ -238,12 +258,14 @@
   border-radius: 8px;
   font-size: 13px;
   font-weight: 500;
+  user-select: none;
 }
 
 .action-buttons {
   display: flex;
   gap: 12px;
   margin-top: 24px;
+  user-select: none;
 }
 
 .btn-full-details {
@@ -280,6 +302,7 @@
   z-index: 5;
   opacity: 0;
   visibility: hidden;
+  user-select: none;
 }
 
 .game-preview.expanded .btn-close {
@@ -317,6 +340,7 @@
   opacity: 0;
   visibility: hidden;
   transition: opacity 0.3s ease;
+  user-select: none;
 }
 
 .backdrop.active {

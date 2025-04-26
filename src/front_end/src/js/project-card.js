@@ -174,7 +174,6 @@ function createProjectCard(project) {
 
   return cardElement;
 }
-
 /**
  * Toggle expanded state of a card
  * @param {Event} event - The triggering event
@@ -208,6 +207,34 @@ function toggleExpand(event, projectId) {
         card.classList.remove("expanded");
       }
     });
+
+    // Check if card is near the right edge of the viewport
+    const cardRect = projectCard.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const expandedWidth = 500; // Match the CSS width for expanded cards
+
+    // Calculate if there's enough space to the right
+    const spaceToRight = viewportWidth - cardRect.right;
+
+    if (spaceToRight < expandedWidth - cardRect.width) {
+      // Not enough space to the right, adjust position
+      // Add a class to handle this case
+      projectCard.classList.add("expand-left");
+
+      // Calculate how much to adjust
+      const overflowAmount = expandedWidth - cardRect.width - spaceToRight;
+
+      // Apply inline style to shift left
+      projectCard.style.transform = `translateX(-${overflowAmount}px)`;
+    } else {
+      // Enough space to right, expand normally
+      projectCard.classList.remove("expand-left");
+      projectCard.style.transform = "";
+    }
+  } else {
+    // When closing, reset any positioning
+    projectCard.classList.remove("expand-left");
+    projectCard.style.transform = "";
   }
 
   // Toggle expanded class
