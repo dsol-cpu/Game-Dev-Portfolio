@@ -1,18 +1,29 @@
 /**
  * @fileoverview Project card creation and management functionality.
  * Handles creation, display, and interaction with project cards.
- * @author Portfolio Developer
- * @version 1.0.0
+ * @version 1.1.0
  */
 
-// Create elements efficiently with a helper function
+// DOM element cache
+const domCache = {
+  portfolioGrid: null,
+  backdrop: null,
+};
+
+/**
+ * @param {string} tag - HTML tag name
+ * @param {string} className - CSS class names
+ * @param {Object} attributes - HTML attributes
+ * @returns {HTMLElement} The created element
+ */
 function createElement(tag, className, attributes = {}) {
   const element = document.createElement(tag);
+
   if (className) element.className = className;
 
-  for (const [key, value] of Object.entries(attributes)) {
-    if (value !== null && value !== undefined) {
-      element.setAttribute(key, value);
+  for (const key in attributes) {
+    if (attributes[key] != null) {
+      element.setAttribute(key, attributes[key]);
     }
   }
 
@@ -27,10 +38,14 @@ function createElement(tag, className, attributes = {}) {
 function createProjectCard(project) {
   if (!project?.id) return null;
 
-  // Create main wrapper with BOTH classes to maintain compatibility
+  // Use the project's hardcoded ID
+  const cardId = project.id;
+
+  // Create the card element with the project's ID
   const cardElement = createElement("div", "game-preview portfolio-item", {
-    id: project.id,
-    "data-category": project.category || project.tags?.[0]?.toLowerCase() || "",
+    id: cardId,
+    "data-category":
+      project.category || (project.tags?.[0] || "").toLowerCase(),
     "data-model": project.modelName || "",
   });
 
@@ -40,46 +55,42 @@ function createProjectCard(project) {
     "game-image-container portfolio-canvas"
   );
 
-  // Add Three.js canvas - make sure it has the right dimensions and cursor styles
+  // Create canvas with fixed dimensions
   const canvasElement = createElement("canvas", "threejs-canvas", {
     width: 300,
     height: 200,
   });
 
-  // Add cursor styles to canvas element
-  canvasElement.style.cursor = "grab"; // Default to grab cursor on hover
+  // Add cursor styles directly to canvas element
+  canvasElement.style.cursor = "grab";
 
-  // Add event listeners for cursor changes
-  canvasElement.addEventListener("mousedown", () => {
-    canvasElement.style.cursor = "grabbing"; // Change to grabbing when clicking
-  });
+  // Use event delegation for cursor interaction
+  const handleMouseDown = () => (canvasElement.style.cursor = "grabbing");
+  const handleMouseUp = () => (canvasElement.style.cursor = "grab");
 
-  canvasElement.addEventListener("mouseup", () => {
-    canvasElement.style.cursor = "grab"; // Change back to grab when releasing
-  });
+  canvasElement.addEventListener("mousedown", handleMouseDown);
+  canvasElement.addEventListener("mouseup", handleMouseUp);
+  canvasElement.addEventListener("mouseleave", handleMouseUp);
 
-  canvasElement.addEventListener("mouseleave", () => {
-    canvasElement.style.cursor = "grab"; // Ensure it resets if mouse leaves while down
-  });
-
-  // The rest of your function remains the same...
   // Create image element
   const imageElement = createElement("div", "game-image");
-  if (project.imageUrl)
+  if (project.imageUrl) {
     imageElement.style.backgroundImage = `url(${project.imageUrl})`;
+  }
 
   // Create close button
   const closeButton = createElement("button", "btn-close");
   closeButton.textContent = "×";
-  closeButton.addEventListener("click", (e) => toggleExpand(e, project.id));
+  closeButton.addEventListener("click", (e) => toggleExpand(e, cardId));
 
-  // Build overlay elements - appears on hover
+  // Create overlay
   const overlayElement = createElement("div", "game-overlay");
 
+  // Create title
   const titleElement = createElement("h3", "game-title");
-  titleElement.textContent = project.title;
+  titleElement.textContent = project.title || "Untitled Project";
 
-  // Create overlay buttons
+  // Create buttons container
   const overlayButtons = createElement("div", "overlay-buttons");
 
   // Create play button
@@ -94,54 +105,62 @@ function createProjectCard(project) {
   // Create details button
   const detailsButton = createElement("button", "btn btn-details");
   detailsButton.textContent = "Details";
-  detailsButton.addEventListener("click", (e) => toggleExpand(e, project.id));
+  detailsButton.addEventListener("click", (e) => toggleExpand(e, cardId));
 
-  // Build expanded content - appears when Details is clicked
+  // Create expanded content
   const expandedContent = createElement("div", "expanded-content");
   const expandedContentInner = createElement("div", "expanded-content-inner");
 
+  // Create card title
   const cardTitle = createElement("h2", "card-title");
-  cardTitle.textContent = project.title;
+  cardTitle.textContent = project.title || "Untitled Project";
 
   // Create tags container
   const tagsContainer = createElement("div", "project-tags");
+
+  // Add tags if available
   if (project.tags?.length) {
+    // Create all tags at once with a document fragment
     const tagsFragment = document.createDocumentFragment();
-    project.tags.forEach((tag) => {
+    for (let i = 0; i < project.tags.length; i++) {
       const tagElement = createElement("span", "project-tag");
-      tagElement.textContent = tag;
+      tagElement.textContent = project.tags[i];
       tagsFragment.appendChild(tagElement);
-    });
+    }
     tagsContainer.appendChild(tagsFragment);
   }
 
-  // Create description paragraphs
+  // Create description fragment
   const descFragment = document.createDocumentFragment();
 
-  // Add short description as first paragraph
+  // Add short description if available
   if (project.shortDescription) {
     const p = createElement("p", "project-description");
     p.textContent = project.shortDescription;
     descFragment.appendChild(p);
   }
 
-  // Add additional paragraphs from full description
+  // Add full description paragraphs if available
   if (project.fullDescription?.length) {
-    project.fullDescription.forEach((paragraph) => {
-      if (!paragraph) return;
+    for (let i = 0; i < project.fullDescription.length; i++) {
+      const paragraph = project.fullDescription[i];
+      if (!paragraph) continue;
+
       const p = createElement("p", "project-description");
       p.textContent = paragraph;
       descFragment.appendChild(p);
-    });
+    }
   }
 
-  // Action buttons
+  // Create action buttons
   const actionButtons = createElement("div", "action-buttons");
 
+  // Create back button
   const backButton = createElement("button", "btn btn-back");
   backButton.textContent = "Close";
-  backButton.addEventListener("click", (e) => toggleExpand(e, project.id));
+  backButton.addEventListener("click", (e) => toggleExpand(e, cardId));
 
+  // Create view project button
   const viewProjectButton = createElement("button", "btn btn-full-details");
   viewProjectButton.textContent = "View Project";
   if (project.githubUrl) {
@@ -150,104 +169,103 @@ function createProjectCard(project) {
     );
   }
 
-  // Add Three.js canvas and image element to image container
+  // Assemble components
   imageContainer.append(canvasElement, imageElement, closeButton);
 
-  // Add title and buttons to overlay
   overlayButtons.append(playButton, detailsButton);
   overlayElement.append(titleElement, overlayButtons);
 
-  // Add all elements to expanded content inner
   expandedContentInner.appendChild(cardTitle);
   expandedContentInner.appendChild(tagsContainer);
   expandedContentInner.appendChild(descFragment);
 
-  // Add buttons to action buttons container
   actionButtons.append(backButton, viewProjectButton);
   expandedContentInner.appendChild(actionButtons);
 
-  // Add inner content to expanded content
   expandedContent.appendChild(expandedContentInner);
 
-  // Add all main sections to card element in order
   cardElement.append(imageContainer, overlayElement, expandedContent);
+
+  // Store original project data for reference
+  cardElement.projectData = project;
 
   return cardElement;
 }
+
 /**
  * Toggle expanded state of a card
  * @param {Event} event - The triggering event
  * @param {string} projectId - ID of the project card to toggle
  */
 function toggleExpand(event, projectId) {
-  // Early returns
   if (!projectId) return;
 
-  // Stop event propagation if it exists
+  // Stop event propagation
   if (event) {
     event.stopPropagation();
     event.preventDefault();
   }
 
-  // Find the card element
+  // Get project card element
   const projectCard = document.getElementById(projectId);
-  if (!projectCard) {
-    console.warn(`Card with ID ${projectId} not found`);
-    return;
-  }
+  if (!projectCard) return;
 
-  // Use classList.toggle for better performance
+  // Check if we're expanding
   const isExpanding = !projectCard.classList.contains("expanded");
 
-  // If expanding, first close any other expanded cards
+  // Collapse other expanded cards
   if (isExpanding) {
     const expandedCards = document.querySelectorAll(".game-preview.expanded");
-    expandedCards.forEach((card) => {
-      if (card.id !== projectId) {
-        card.classList.remove("expanded");
+    for (let i = 0; i < expandedCards.length; i++) {
+      if (expandedCards[i].id !== projectId) {
+        expandedCards[i].classList.remove("expanded");
       }
-    });
-
-    // Check if card is near the right edge of the viewport
-    const cardRect = projectCard.getBoundingClientRect();
-    const viewportWidth = window.innerWidth;
-    const expandedWidth = 500; // Match the CSS width for expanded cards
-
-    // Calculate if there's enough space to the right
-    const spaceToRight = viewportWidth - cardRect.right;
-
-    if (spaceToRight < expandedWidth - cardRect.width) {
-      // Not enough space to the right, adjust position
-      // Add a class to handle this case
-      projectCard.classList.add("expand-left");
-
-      // Calculate how much to adjust
-      const overflowAmount = expandedWidth - cardRect.width - spaceToRight;
-
-      // Apply inline style to shift left
-      projectCard.style.transform = `translateX(-${overflowAmount}px)`;
-    } else {
-      // Enough space to right, expand normally
-      projectCard.classList.remove("expand-left");
-      projectCard.style.transform = "";
     }
+
+    // Add expand-left class
+    projectCard.classList.add("expand-left");
   } else {
-    // When closing, reset any positioning
+    // Remove expand-left class when collapsing
     projectCard.classList.remove("expand-left");
-    projectCard.style.transform = "";
   }
 
   // Toggle expanded class
-  projectCard.classList.toggle("expanded");
+  projectCard.classList.toggle("expanded", isExpanding);
 
-  // Toggle backdrop
-  const backdrop = document.querySelector(".backdrop");
+  // Handle backdrop
+  const backdrop = getBackdrop();
   if (backdrop) {
     backdrop.classList.toggle("active", isExpanding);
   }
 
-  // Set overflow on body
-  document.body.style.overflow = isExpanding ? "hidden" : "";
+  // Toggle body overflow
+  document.body.classList.toggle("overflow-hidden", isExpanding);
+}
+
+/**
+ * Get or create the backdrop element
+ * @returns {HTMLElement} The backdrop element
+ */
+function getBackdrop() {
+  // Use cached element if available
+  if (domCache.backdrop) {
+    return domCache.backdrop;
+  }
+
+  // Check if backdrop exists in DOM
+  let backdrop = document.querySelector(".backdrop");
+
+  // Create backdrop if needed
+  if (!backdrop) {
+    backdrop = createElement("div", "backdrop");
+    backdrop.addEventListener("click", closeOnBackdropClick);
+    document.body.appendChild(backdrop);
+  }
+
+  // Cache for future use
+  domCache.backdrop = backdrop;
+
+  return backdrop;
 }
 
 /**
@@ -256,24 +274,31 @@ function toggleExpand(event, projectId) {
  */
 function closeOnBackdropClick(event) {
   const expandedCard = document.querySelector(".game-preview.expanded");
-  if (expandedCard) toggleExpand(event, expandedCard.id);
+  if (expandedCard) {
+    toggleExpand(event, expandedCard.id);
+  }
 }
 
 /**
- * Setup backdrop listener for closing expanded cards
+ * Get the portfolio grid element
+ * @returns {HTMLElement} The portfolio grid element
  */
-function setupBackdropListener() {
-  let backdrop = document.querySelector(".backdrop");
-  if (!backdrop) {
-    // Create backdrop if it doesn't exist
-    backdrop = createElement("div", "backdrop");
-    backdrop.addEventListener("click", closeOnBackdropClick);
-    document.body.appendChild(backdrop);
-  } else {
-    // Ensure event listener is attached
-    backdrop.removeEventListener("click", closeOnBackdropClick);
-    backdrop.addEventListener("click", closeOnBackdropClick);
+function getPortfolioGrid() {
+  // Use cached element if available
+  if (domCache.portfolioGrid) {
+    return domCache.portfolioGrid;
   }
+
+  // Get element from DOM
+  const grid = document.querySelector(".portfolio-grid");
+
+  // Cache for future use
+  if (grid) {
+    domCache.portfolioGrid = grid;
+  }
+  console.warn("Portfolio grid not found");
+
+  return grid;
 }
 
 /**
@@ -281,14 +306,15 @@ function setupBackdropListener() {
  * @param {Array} projectsData - Array of project data objects
  */
 function renderProjectsGrid(projectsData) {
-  if (!projectsData || !Array.isArray(projectsData)) {
-    console.warn("No valid project data provided");
+  if (!Array.isArray(projectsData)) {
+    console.warn("Invalid projects data format");
     return;
   }
 
-  const portfolioGrid = document.querySelector(".portfolio-grid");
+  // Get portfolio grid
+  const portfolioGrid = getPortfolioGrid();
   if (!portfolioGrid) {
-    console.warn("Portfolio grid container not found");
+    console.warn("Portfolio grid not found");
     return;
   }
 
@@ -296,20 +322,43 @@ function renderProjectsGrid(projectsData) {
   portfolioGrid.innerHTML = "";
 
   // Ensure backdrop exists
-  setupBackdropListener();
+  getBackdrop();
 
   // Use DocumentFragment for batch DOM operations
   const fragment = document.createDocumentFragment();
 
-  projectsData.forEach((project) => {
-    const cardElement = createProjectCard(project);
+  // Create card elements
+  for (let i = 0; i < projectsData.length; i++) {
+    const cardElement = createProjectCard(projectsData[i]);
     if (cardElement) {
       fragment.appendChild(cardElement);
     }
-  });
+  }
 
   // Single DOM operation to add all cards
   portfolioGrid.appendChild(fragment);
+
+  // Initialize Three.js for all cards
+  initializeAllCanvases(portfolioGrid);
+}
+
+/**
+ * Initialize all canvas elements in container
+ * @param {HTMLElement} container - Container element
+ */
+function initializeAllCanvases(container) {
+  if (!container) return;
+
+  const canvases = container.querySelectorAll(".threejs-canvas");
+
+  for (let i = 0; i < canvases.length; i++) {
+    const canvas = canvases[i];
+    const card = canvas.closest(".portfolio-item");
+
+    if (card?.projectData) {
+      initThreeJsCanvas(canvas, card.projectData);
+    }
+  }
 }
 
 /**
@@ -319,64 +368,61 @@ function renderProjectsGrid(projectsData) {
  */
 function initThreeJsCanvas(canvas, projectData) {
   if (!canvas || !(canvas instanceof HTMLCanvasElement)) {
-    console.warn("Invalid canvas element provided");
     return;
   }
 
-  // Set initial canvas dimensions
-  canvas.width = 300;
-  canvas.height = 200;
-
-  // Signal to main.js that this canvas needs initialization
+  // Set data attributes for initialization
   canvas.setAttribute("data-needs-init", "true");
+  canvas.setAttribute("data-project-id", projectData.id || "");
 
-  // Dispatch an event that main.js can listen for
+  // Dispatch event for main.js to handle
   const event = new CustomEvent("canvasCreated", {
-    detail: { canvasId: canvas.id, projectId: projectData.id },
+    detail: {
+      canvasId: canvas.id || canvas.parentElement?.id || "",
+      projectId: projectData.id || "",
+    },
   });
+
   document.dispatchEvent(event);
 }
 
 /**
  * Add a new project card dynamically to the grid
  * @param {Object} projectData - Project data object
+ * @returns {string|null} The project ID or null if failed
  */
 function addNewProject(projectData) {
   if (!projectData?.id) {
-    console.warn("Invalid project data provided");
-    return;
+    console.warn("Invalid project data - must include ID");
+    return null;
   }
 
-  // Ensure backdrop exists
-  setupBackdropListener();
+  // Get portfolio grid
+  const portfolioGrid = getPortfolioGrid();
+  if (!portfolioGrid) return null;
 
-  // Append the new card
-  const portfolioGrid = document.querySelector(".portfolio-grid");
-  if (!portfolioGrid) {
-    console.warn("Portfolio grid container not found");
-    return;
-  }
-
+  // Create card element
   const cardElement = createProjectCard(projectData);
-  if (cardElement) {
-    portfolioGrid.appendChild(cardElement);
+  if (!cardElement) return null;
 
-    const cardElement = createElement("div", "game-preview portfolio-item", {
-      id: project.id,
-      "data-category": project.tags?.[0]?.toLowerCase() || "",
-      "data-model": project.modelName || "",
-    });
+  // Add card to grid
+  portfolioGrid.appendChild(cardElement);
 
-    // Get the canvas element from the new card
-    const canvas = cardElement.querySelector(".threejs-canvas");
-    if (canvas) {
-      // Initialize Three.js scene on the canvas
-      initThreeJsCanvas(canvas, projectData);
-    }
-  }
+  // Get the canvas element
+  const canvas = cardElement.querySelector(".threejs-canvas");
+  if (canvas) initThreeJsCanvas(canvas, projectData);
+
+  return projectData.id;
 }
 
-// Export functions for use in main.js
+/**
+ * Setup backdrop listener for closing expanded cards
+ */
+function setupBackdropListener() {
+  getBackdrop();
+}
+
+// Export functions
 export {
   createProjectCard,
   toggleExpand,

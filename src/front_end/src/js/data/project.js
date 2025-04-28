@@ -7,6 +7,7 @@
 export const PortfolioCategory = Object.freeze({
   UNITY: "unity",
   WEB: "web",
+  GODOT: "godot",
   MOBILE: "mobile",
   GAME: "game",
 });
@@ -24,15 +25,15 @@ export const TechTags = Object.freeze({
 export const projectCardData = [
   {
     id: "geospatial-visualizer",
-    category: PortfolioCategory.UNITY,
+    category: PortfolioCategory.GODOT,
     title: "Geospatial Visualizer",
-    tags: [TechTags.UNITY, TechTags.CSHARP],
+    tags: [TechTags.GODOT, TechTags.CSHARP],
     shortDescription: "A visualization of geospatial information.",
     demoUrl: "https://dsol-cpu.github.io/GeospatialDataVisualization-Aug2024/",
     githubUrl:
       "https://github.com/dsol-cpu/GeospatialDataVisualization-Aug2024",
     modelName: "babyTurtle",
-    imageUrl: "", // Set if available
+    imageUrl: "",
     imageAlt: "Geospatial Visualizer",
     fullDescription: [
       "A detailed visualization of geospatial information using Unity and C#.",
@@ -49,7 +50,7 @@ export const projectCardData = [
     githubUrl:
       "https://github.com/dsol-cpu/GeospatialDataVisualization-Aug2024",
     modelName: "babyTurtle",
-    imageUrl: "", // Set if available
+    imageUrl: "",
     imageAlt: "Geospatial Visualizer",
     fullDescription: [
       "A detailed visualization of geospatial information using Unity and C#.",
@@ -66,7 +67,7 @@ export const projectCardData = [
     githubUrl:
       "https://github.com/dsol-cpu/GeospatialDataVisualization-Aug2024",
     modelName: "babyTurtle",
-    imageUrl: "", // Set if available
+    imageUrl: "",
     imageAlt: "Geospatial Visualizer",
     fullDescription: [
       "A detailed visualization of geospatial information using Unity and C#.",
@@ -83,7 +84,7 @@ export const projectCardData = [
     githubUrl:
       "https://github.com/dsol-cpu/GeospatialDataVisualization-Aug2024",
     modelName: "babyTurtle",
-    imageUrl: "", // Set if available
+    imageUrl: "",
     imageAlt: "Geospatial Visualizer",
     fullDescription: [
       "A detailed visualization of geospatial information using Unity and C#.",

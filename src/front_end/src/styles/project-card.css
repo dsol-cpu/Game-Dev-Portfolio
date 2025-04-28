@@ -1,4 +1,16 @@
 /* Project card component */
+:root {
+  --portfolio-card-bg: #fcf2ff; /* Soft lavender card background */
+  --portfolio-card-shadow: 0 8px 20px rgba(106, 155, 231, 0.15);
+  --portfolio-card-border: #f794a466; /* Pink border to match theme */
+}
+
+[data-theme="dark"] {
+  --portfolio-card-bg: #2a3442;
+  --portfolio-card-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+  --portfolio-card-border: rgba(116, 179, 255, 0.7);
+}
+
 .game-preview {
   width: 360px;
   height: 240px;

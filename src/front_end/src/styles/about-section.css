@@ -1,0 +1,79 @@
+.about-container {
+  display: flex;
+  flex-direction: column; /* Stack text + images vertically */
+  gap: 2rem;
+  margin-bottom: 3rem;
+  background: var(--card-bg);
+  border-radius: 10px;
+  padding: 2rem;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+.about-container::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 5px;
+  background: linear-gradient(
+    90deg,
+    var(--primary-color),
+    var(--secondary-color)
+  );
+}
+
+.about-canvas-container {
+  display: flex;
+  justify-content: center;
+  margin-top: 2rem;
+}
+
+.about-canvas-container canvas {
+  border-radius: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.about-text {
+  flex: 1;
+  line-height: 1.6;
+  text-align: center; /* Center text for better flow */
+  max-width: 700px;
+  margin: 0 auto;
+}
+
+.about-images {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1.5rem;
+}
+
+.image-card {
+  width: 200px;
+  background: var(--background-color, #fff);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  text-align: center;
+}
+
+.image-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+}
+
+.image-card img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.image-card p {
+  padding: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--text-color);
+}

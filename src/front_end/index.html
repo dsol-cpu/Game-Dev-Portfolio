@@ -15,6 +15,9 @@
 
     <!-- CSS files -->
     <link rel="stylesheet" href="src/styles/project-card.css" />
+    <link rel="stylesheet" href="src/styles/sidebar.css" />
+    <link rel="stylesheet" href="src/styles/about-section.css" />
+    <link rel="stylesheet" href="src/styles/blog.css" />
     <link rel="stylesheet" href="src/styles/main.css" />
     <link rel="stylesheet" href="src/styles/responsive.css" />
     <script>
@@ -220,6 +223,14 @@
       <!-- About Section -->
       <section id="about" class="active">
         <div class="about-container">
+          <div class="about-canvas-container">
+            <canvas
+              id="about-threejs-canvas"
+              width="300"
+              height="200"
+              class="threejs-canvas"
+            ></canvas>
+          </div>
           <div class="about-text">
             <p>I'm a game developer.</p>
             <br />
@@ -227,14 +238,34 @@
               I have worked in Unity and Godot with a strong focus on gameplay
               programming, procedural generation, and shader development. My
               experience includes working as a software engineer in the
-              government and fintech space for the past 3-4 years.
+              government and fintech space for the past 3–4 years.
             </p>
             <br />
             <p>
               When I'm not coding, I enjoy experimenting with 3D modeling,
-              learning about game design principles, and playing Fields of
-              Mistria or Enshrouded with my friends.
+              learning about game design principles, and playing
+              <i>Fields of Mistria</i> or <i>Enshrouded</i> with my friends.
             </p>
+            <br />
+            <p>I'm currently playing: <i>Oblivion Remastered</i>.</p>
+          </div>
+
+          <div class="about-images">
+            <div class="image-card">
+              <img
+                src="path-to-unity-screenshot.jpg"
+                alt="Unity project screenshot"
+              />
+              <p>Gameplay programming & procedural generation</p>
+            </div>
+            <div class="image-card">
+              <img src="/images/me.pn" alt="3D modeling artwork" />
+              <p>Exploring 3D modeling & game art</p>
+            </div>
+            <div class="image-card">
+              <img src="path-to-friends-gaming.jpg" alt="Gaming with friends" />
+              <p>Gaming with friends in my downtime</p>
+            </div>
           </div>
         </div>
       </section>

@@ -1,19 +1,22 @@
+import fallback from "/images/me.png";
+
 const BlogTag = Object.freeze({
-  GENERAL: "general",
+  GENERAL: "General",
 });
+
 // Blog post data
 const blogPostsData = [
   {
     tags: [BlogTag.GENERAL],
     title: "Lorem",
     description: "Of the ipsumums",
-    thumbnail: "",
+    thumbnail: fallback,
   },
   {
     tags: [BlogTag.GENERAL],
     title: "Interactive Dashboard",
     description: "A dashboard showing dynamic financial data.",
-    thumbnail: "",
+    thumbnail: fallback,
   },
 ];
 
@@ -23,16 +26,17 @@ const blogPostsData = [
 function createBlogPost(item) {
   const wrapper = document.createElement("div");
   wrapper.className = "blog-post";
-  wrapper.setAttribute("data-category", item.category);
-  wrapper.setAttribute("data-model", item.modelName || "");
 
   wrapper.innerHTML = `
-      <div class="blog-post-info">
-        <h3 class="blog-post-title">${item.title}</h3>
-        <p class="blog-post-category">${item.tags.join(", ")}</p>
-        <p class="blog-post-desc">${item.description}</p>
-      </div>
-    `;
+    <div class="blog-post-thumbnail">
+      <img src="${item.thumbnail}" alt="${item.title}" />
+    </div>
+    <div class="blog-post-content">
+      <h3 class="blog-post-title">${item.title}</h3>
+      <p class="blog-post-tags">${item.tags.join(", ")}</p>
+      <p class="blog-post-description">${item.description}</p>
+    </div>
+  `;
   return wrapper;
 }
 
