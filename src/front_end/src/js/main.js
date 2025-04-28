@@ -22,6 +22,7 @@ import {
   LinearFilter,
 } from "./extern/three/three.module.min.js";
 
+import { detectLowEndDevice } from "./utils/device.js";
 import { initBlogPosts } from "./blog.js";
 import { setupBackdropListener, renderProjectsGrid } from "./project-card.js";
 import { projectCardData } from "./data/project.js";
@@ -33,7 +34,7 @@ import {
   updateActiveControls,
   renderActiveCameras,
   setIdleFunction,
-} from "./camera-registry.js";
+} from "./three/camera-registry.js";
 
 // Constants
 const TARGET_FRAMERATE = 60;
@@ -65,6 +66,7 @@ let portfolioItems;
 
 // Three.js variables
 let renderer = null;
+let info = null;
 let thirdPersonCamera = null;
 let gameScene = null;
 let projectCardScene = null;
@@ -905,6 +907,8 @@ function initThreeJS() {
     failIfMajorPerformanceCaveat: true, // Force fail if bad performance
   });
 
+  info = renderer.info;
+
   renderer.domElement.addEventListener(
     "webglcontextlost",
     (event) => {
@@ -957,18 +961,6 @@ function initThreeJS() {
   }
 }
 
-function detectLowEndDevice() {
-  const hasLowMemory = navigator.deviceMemory && navigator.deviceMemory <= 4;
-  const hasLowCPUs =
-    navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4;
-  const isMobile = /Mobi|Android/i.test(navigator.userAgent);
-  const hasLowEndGPU = /Adreno [3-4]\d{2}|Mali-[4-5]/i.test(
-    navigator.userAgent
-  );
-
-  return hasLowMemory || hasLowCPUs || isMobile || hasLowEndGPU;
-}
-
 /**
  * Initialize performance monitoring
  */
@@ -987,7 +979,7 @@ function initPerformanceMonitoring() {
 
   setInterval(() => {
     if (renderer) {
-      const info = renderer.info;
+      // const info = renderer.info;
       stats.textContent = `
         FPS: ${fpsValue.toFixed(0)}
         Draw calls: ${info.render.calls}

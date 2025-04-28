@@ -9,7 +9,7 @@ import {
   isBitSet,
   setBit,
   clearBit,
-} from "./utils/bit-array.js";
+} from "../utils/bit-array.js";
 
 // Pre-allocated empty arrays for type consistency
 const EMPTY_ARRAY = Object.freeze([]);
