@@ -11,6 +11,10 @@ import {
   clearBit,
 } from "../utils/bit-array.js";
 
+import { isIdle } from "../user-interaction.js";
+
+import { Vector3 } from "../extern/three/three.core.min.js";
+
 // Pre-allocated empty arrays for type consistency
 const EMPTY_ARRAY = Object.freeze([]);
 
@@ -24,18 +28,6 @@ const cameraRegistry = {
   count: 0,
   maxCameras: 0,
 };
-
-let _isIdle = () => false; // Default implementation
-
-/**
- * Set the isIdle function reference
- * @param {Function} isIdleFunc - Function that returns whether the app is in idle mode
- */
-export function setIdleFunction(isIdleFunc) {
-  if (typeof isIdleFunc === "function") {
-    _isIdle = isIdleFunc;
-  }
-}
 
 /**
  * Initialize the camera registry
@@ -108,7 +100,7 @@ export function setActiveCameras(indices) {
   const maskLength = cameraRegistry.activeCamBitmask.length;
   const newMask = createBitArray(maskLength);
 
-  if (indices && indices.length) {
+  if (indices?.length) {
     indices.forEach((index) => {
       if (index >= 0 && index < cameraRegistry.maxCameras) {
         setBit(newMask, index);
@@ -149,6 +141,62 @@ export function removeActiveCameras(indices) {
       clearBit(cameraRegistry.activeCamBitmask, index);
     }
   });
+}
+
+export function createSimpleAutorotation(
+  camera,
+  targetPosition,
+  cameraDistance,
+  index
+) {
+  if (!camera || !targetPosition) {
+    console.error("Invalid camera or target in createSimpleAutorotation");
+    return {
+      update: () => {},
+      dispose: () => {},
+    };
+  }
+
+  // Adjusted rotation speed to be more visible
+  const rotationSpeed = 0.003 + (index % 5) * 0.001;
+  let lastUpdate = 0;
+
+  // Store the initial target position
+  const target = new Vector3(
+    targetPosition.x || 0,
+    targetPosition.y || 0,
+    targetPosition.z || 0
+  );
+
+  return {
+    autoRotate: true,
+    update: (timestamp) => {
+      if (!camera) return;
+
+      timestamp = timestamp || performance.now();
+
+      // Skip updates during idle periods (less frequent)
+      if (isIdle() && timestamp - lastUpdate < 100) return;
+      lastUpdate = timestamp;
+
+      const currentAngle = Math.atan2(
+        camera.position.x - target.x,
+        camera.position.z - target.z
+      );
+      const newAngle = currentAngle + rotationSpeed;
+
+      camera.position.x = target.x + Math.sin(newAngle) * cameraDistance;
+      camera.position.z = target.z + Math.cos(newAngle) * cameraDistance;
+      camera.lookAt(target.x, target.y, target.z);
+
+      // Force matrix update
+      camera.updateMatrixWorld(true);
+    },
+    target: target,
+    dispose: () => {
+      // Clean up function
+    },
+  };
 }
 
 /**
@@ -197,7 +245,7 @@ export function updateActiveControls(timestamp) {
   }
 
   // In idle mode, only update auto-rotating controls at a lower rate
-  const updateNonDragging = !_isIdle() || timestamp % 3 === 0; // Every 3rd frame in idle
+  const updateNonDragging = !isIdle() || timestamp % 3 === 0; // Every 3rd frame in idle
 
   if (!updateNonDragging) return;
 
@@ -218,7 +266,18 @@ export function updateActiveControls(timestamp) {
 }
 
 /**
- * Render all active cameras to their canvas contexts
+ * Set all cameras as active
+ */
+export function activateAllCameras() {
+  if (!cameraRegistry.activeCamBitmask) return;
+
+  // Enable all bits in the bitmask
+  enableAllBits(cameraRegistry.activeCamBitmask);
+  console.log("Activated all cameras");
+}
+
+/**
+ * Optimized rendering of active cameras
  * @param {WebGLRenderer} renderer - Three.js renderer
  * @param {Scene} scene - The scene to render
  */
@@ -226,7 +285,7 @@ export function renderActiveCameras(renderer, scene) {
   if (!renderer || !scene || !cameraRegistry.activeCamBitmask) return;
 
   const domElement = renderer.domElement;
-  const { cameras, contexts, activeCamBitmask } = cameraRegistry;
+  const { cameras, contexts, controls, activeCamBitmask } = cameraRegistry;
 
   // Sort cameras to prioritize the actively dragged one first
   const activeCameras = [];
@@ -249,31 +308,38 @@ export function renderActiveCameras(renderer, scene) {
   for (const { index } of activeCameras) {
     const camera = cameras[index];
     const ctx = contexts[index];
+    const control = controls[index];
+
     if (!camera || !ctx?.canvas) continue;
 
     try {
-      // Get width and height from the appropriate canvas (original or offscreen)
+      // Get width and height from the appropriate canvas
       const canvas = ctx.canvas;
       const width = canvas.width || 300;
       const height = canvas.height || 200;
 
       if (width <= 0 || height <= 0) continue;
 
-      // Resize only when needed
-      renderer.setSize(width, height, false);
-
-      // Update camera aspect if needed
-      if (camera.isPerspectiveCamera) {
+      // Update camera aspect ratio if needed
+      if (camera.isPerspectiveCamera && camera.aspect !== width / height) {
         camera.aspect = width / height;
         camera.updateProjectionMatrix();
       }
 
-      // Set renderer to use the entire canvas
+      // Resize only when needed
+      renderer.setSize(width, height, false);
+
+      // Set viewport and scissor to match canvas dimensions
       renderer.setViewport(0, 0, width, height);
       renderer.setScissor(0, 0, width, height);
 
       // Clear the canvas before rendering
       renderer.clear();
+
+      // Ensure controls are up to date
+      if (control && typeof control.update === "function") {
+        control.update();
+      }
 
       // Render to this camera's canvas
       renderer.render(scene, camera);
@@ -293,10 +359,11 @@ export function renderActiveCameras(renderer, scene) {
       );
     } catch (error) {
       console.error(`Error rendering camera ${index}:`, error);
-      clearBit(activeCamBitmask, index);
+      // Don't disable the camera on error, just log it
     }
   }
 
+  // Restore renderer state
   renderer.scissorTest = originalScissorTest;
 }
 

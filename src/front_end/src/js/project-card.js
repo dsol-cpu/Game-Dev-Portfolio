@@ -4,11 +4,23 @@
  * @version 1.1.0
  */
 
+import { projectCardData } from "./data/project";
+import { detectLowEndDevice } from "./utils/device";
 // DOM element cache
 const domCache = {
   portfolioGrid: null,
   backdrop: null,
 };
+
+/**
+ * Initialize project cards
+ */
+function initProjectCards() {
+  const portfolioGrid = document.querySelector(".portfolio-grid");
+  if (!portfolioGrid) return;
+
+  renderProjectsGrid(projectCardData);
+}
 
 /**
  * @param {string} tag - HTML tag name
@@ -29,7 +41,6 @@ function createElement(tag, className, attributes = {}) {
 
   return element;
 }
-
 /**
  * Creates a project card element from project data
  * @param {Object} project - Project data object
@@ -55,22 +66,31 @@ function createProjectCard(project) {
     "game-image-container portfolio-canvas"
   );
 
-  // Create canvas with fixed dimensions
-  const canvasElement = createElement("canvas", "threejs-canvas", {
-    width: 300,
-    height: 200,
-  });
+  // Check if the device is low-end
+  const isLowEndDevice = detectLowEndDevice();
 
-  // Add cursor styles directly to canvas element
-  canvasElement.style.cursor = "grab";
+  // Only create canvas if not a low-end device
+  if (!isLowEndDevice) {
+    // Create canvas with fixed dimensions
+    const canvasElement = createElement("canvas", "threejs-canvas", {
+      width: 300,
+      height: 200,
+    });
 
-  // Use event delegation for cursor interaction
-  const handleMouseDown = () => (canvasElement.style.cursor = "grabbing");
-  const handleMouseUp = () => (canvasElement.style.cursor = "grab");
+    // Add cursor styles directly to canvas element
+    canvasElement.style.cursor = "grab";
 
-  canvasElement.addEventListener("mousedown", handleMouseDown);
-  canvasElement.addEventListener("mouseup", handleMouseUp);
-  canvasElement.addEventListener("mouseleave", handleMouseUp);
+    // Use event delegation for cursor interaction
+    const handleMouseDown = () => (canvasElement.style.cursor = "grabbing");
+    const handleMouseUp = () => (canvasElement.style.cursor = "grab");
+
+    canvasElement.addEventListener("mousedown", handleMouseDown);
+    canvasElement.addEventListener("mouseup", handleMouseUp);
+    canvasElement.addEventListener("mouseleave", handleMouseUp);
+
+    // Add canvas to image container
+    imageContainer.appendChild(canvasElement);
+  }
 
   // Create image element
   const imageElement = createElement("div", "game-image");
@@ -170,7 +190,7 @@ function createProjectCard(project) {
   }
 
   // Assemble components
-  imageContainer.append(canvasElement, imageElement, closeButton);
+  imageContainer.append(imageElement, closeButton);
 
   overlayButtons.append(playButton, detailsButton);
   overlayElement.append(titleElement, overlayButtons);
@@ -422,13 +442,4 @@ function setupBackdropListener() {
   getBackdrop();
 }
 
-// Export functions
-export {
-  createProjectCard,
-  toggleExpand,
-  closeOnBackdropClick,
-  setupBackdropListener,
-  addNewProject,
-  renderProjectsGrid,
-  initThreeJsCanvas,
-};
+export { initProjectCards, setupBackdropListener };

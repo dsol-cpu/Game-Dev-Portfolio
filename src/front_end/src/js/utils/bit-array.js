@@ -155,7 +155,7 @@ function logBitArray(bitArray) {
   return `BitArray [${len} bits]: ${bits.join("")}`;
 }
 
-// Get the number of bits set to 1 (optimized popcount)
+// Get the number of bits set to 1
 function popCount(bitArray) {
   let count = 0;
   const len = bitArray.data.length;
