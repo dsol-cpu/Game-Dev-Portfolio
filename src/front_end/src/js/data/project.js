@@ -5,9 +5,10 @@
 
 // Enums
 export const PortfolioCategory = Object.freeze({
+  GODOT: "godot",
+  UNREAL: "unreal",
   UNITY: "unity",
   WEB: "web",
-  GODOT: "godot",
   MOBILE: "mobile",
   GAME: "game",
 });
@@ -15,6 +16,7 @@ export const PortfolioCategory = Object.freeze({
 export const TechTags = Object.freeze({
   UNITY: "Unity",
   CSHARP: "C#",
+  CPP: "C++",
   PROCEDURAL: "Procedural Generation",
   REACT: "React",
   D3: "D3.js",
@@ -42,9 +44,9 @@ export const projectCardData = [
   },
   {
     id: "geospatial-visualizer-2",
-    category: PortfolioCategory.UNITY,
+    category: PortfolioCategory.GODOT,
     title: "Geospatial Visualizer",
-    tags: [TechTags.UNITY, TechTags.CSHARP],
+    tags: [TechTags.GODOT, TechTags.CPP],
     shortDescription: "A visualization of geospatial information.",
     demoUrl: "https://dsol-cpu.github.io/GeospatialDataVisualization-Aug2024/",
     githubUrl:
