@@ -3,6 +3,13 @@
  * with efficient bit manipulation operations.
  */
 
+// Define operation enum as numbers for faster comparison
+const BitOperation = {
+  OR: 0,
+  AND: 1,
+  XOR: 2,
+};
+
 // Create a bit array with specified length
 function createBitArray(length) {
   // Validate input
@@ -111,25 +118,23 @@ function createBitmask(length, indices = []) {
 }
 
 // Apply a bitmask with a bitwise operation
-function applyBitmask(targetArray, maskArray, operation = "OR") {
+function applyBitmask(targetArray, maskArray, operation = BitOperation.OR) {
   if (targetArray.length !== maskArray.length) {
     throw new Error("Bit arrays must have the same length");
   }
 
-  // Get operation once before loop
-  const op = operation.toUpperCase();
   const len = targetArray.data.length;
 
-  // Optimize common cases with dedicated loops
-  if (op === "OR") {
+  // Direct numeric comparison is faster than string comparison
+  if (operation === BitOperation.OR) {
     for (let i = 0; i < len; i++) {
       targetArray.data[i] |= maskArray.data[i];
     }
-  } else if (op === "AND") {
+  } else if (operation === BitOperation.AND) {
     for (let i = 0; i < len; i++) {
       targetArray.data[i] &= maskArray.data[i];
     }
-  } else if (op === "XOR") {
+  } else if (operation === BitOperation.XOR) {
     for (let i = 0; i < len; i++) {
       targetArray.data[i] ^= maskArray.data[i];
     }
@@ -183,6 +188,7 @@ function copyBitArray(bitArray) {
 }
 
 export {
+  BitOperation,
   createBitArray,
   setBit,
   clearBit,
