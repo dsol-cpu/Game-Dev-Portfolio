@@ -193,9 +193,48 @@ export function createSimpleAutorotation(
     targetPosition.z || 0
   );
 
+  // Create a proper controller object with required event properties
   return {
     autoRotate: true,
     target,
+    // Add event handling properties to prevent null reference errors
+    _listeners: {},
+    addEventListener: function (type, listener) {
+      if (this._listeners === undefined) this._listeners = {};
+      const listeners = this._listeners;
+      if (listeners[type] === undefined) listeners[type] = [];
+      if (listeners[type].indexOf(listener) === -1)
+        listeners[type].push(listener);
+    },
+    hasEventListener: function (type, listener) {
+      if (this._listeners === undefined) return false;
+      const listeners = this._listeners;
+      return (
+        listeners[type] !== undefined &&
+        listeners[type].indexOf(listener) !== -1
+      );
+    },
+    removeEventListener: function (type, listener) {
+      if (this._listeners === undefined) return;
+      const listeners = this._listeners;
+      const listenerArray = listeners[type];
+      if (listenerArray !== undefined) {
+        const index = listenerArray.indexOf(listener);
+        if (index !== -1) listenerArray.splice(index, 1);
+      }
+    },
+    dispatchEvent: function (event) {
+      if (this._listeners === undefined) return;
+      const listeners = this._listeners;
+      const listenerArray = listeners[event.type];
+      if (listenerArray !== undefined) {
+        event.target = this;
+        const array = listenerArray.slice(0);
+        for (let i = 0, l = array.length; i < l; i++) {
+          array[i].call(this, event);
+        }
+      }
+    },
     update: (timestamp = performance.now()) => {
       if (!camera) return;
 
@@ -222,7 +261,48 @@ export function createSimpleAutorotation(
  * @private
  */
 function createEmptyController() {
-  return { update: () => {}, dispose: () => {} };
+  return {
+    // Add event handling properties to prevent null reference errors
+    _listeners: {},
+    addEventListener: function (type, listener) {
+      if (this._listeners === undefined) this._listeners = {};
+      const listeners = this._listeners;
+      if (listeners[type] === undefined) listeners[type] = [];
+      if (listeners[type].indexOf(listener) === -1)
+        listeners[type].push(listener);
+    },
+    hasEventListener: function (type, listener) {
+      if (this._listeners === undefined) return false;
+      const listeners = this._listeners;
+      return (
+        listeners[type] !== undefined &&
+        listeners[type].indexOf(listener) !== -1
+      );
+    },
+    removeEventListener: function (type, listener) {
+      if (this._listeners === undefined) return;
+      const listeners = this._listeners;
+      const listenerArray = listeners[type];
+      if (listenerArray !== undefined) {
+        const index = listenerArray.indexOf(listener);
+        if (index !== -1) listenerArray.splice(index, 1);
+      }
+    },
+    dispatchEvent: function (event) {
+      if (this._listeners === undefined) return;
+      const listeners = this._listeners;
+      const listenerArray = listeners[event.type];
+      if (listenerArray !== undefined) {
+        event.target = this;
+        const array = listenerArray.slice(0);
+        for (let i = 0, l = array.length; i < l; i++) {
+          array[i].call(this, event);
+        }
+      }
+    },
+    update: () => {},
+    dispose: () => {},
+  };
 }
 
 /**
