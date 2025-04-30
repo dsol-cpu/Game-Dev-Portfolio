@@ -163,27 +163,12 @@ export function initThreeJS() {
     return;
   }
 
-  const isCloudflarePages = window.location.hostname.includes("pages.dev");
-  console.log(
-    `Initializing Three.js in ${
-      isCloudflarePages ? "Cloudflare Pages" : "standard"
-    } environment`
-  );
-
-  // Set up error tracking for Cloudflare
-  if (isCloudflarePages) {
-    window.addEventListener("error", function (event) {
-      console.error("Global error caught:", event.error);
-    });
-  }
-
   try {
     // Try creating the renderer with robust error handling
     const rendererOptions = {
-      powerPreference:
-        isCloudflarePages || isLowEndDevice ? "low-power" : "high-performance",
-      precision: isCloudflarePages || isLowEndDevice ? "lowp" : "mediump",
-      antialias: !(isCloudflarePages || isLowEndDevice),
+      powerPreference: isLowEndDevice ? "low-power" : "high-performance",
+      precision: isLowEndDevice ? "lowp" : "mediump",
+      antialias: !isLowEndDevice,
       alpha: true,
       preserveDrawingBuffer: true,
       premultipliedAlpha: true,
@@ -232,16 +217,14 @@ export function initThreeJS() {
     // Configure renderer
     renderer.setClearColor(0x000000, 0);
     renderer.setPixelRatio(
-      isCloudflarePages || isLowEndDevice
-        ? 1
-        : Math.min(window.devicePixelRatio, 2)
+      isLowEndDevice ? 1 : Math.min(window.devicePixelRatio, 2)
     );
     renderer.setSize(
       CONSTANTS.DEFAULT_CANVAS_WIDTH,
       CONSTANTS.DEFAULT_CANVAS_HEIGHT,
       false
     );
-    renderer.shadowMap.enabled = !(isCloudflarePages || isLowEndDevice);
+    renderer.shadowMap.enabled = !isLowEndDevice;
     renderer.shadowMap.type = PCFSoftShadowMap;
     renderer.info.autoReset = false;
 
@@ -268,10 +251,6 @@ export function initThreeJS() {
     let visibleProjects = [];
     try {
       visibleProjects = getVisibleProjectModels();
-      if (isCloudflarePages) {
-        // Limit initial models on Cloudflare to improve performance
-        visibleProjects = visibleProjects.slice(0, 3);
-      }
       console.log(`Found ${visibleProjects.length} visible projects`);
     } catch (error) {
       console.error("Error getting visible projects:", error);
@@ -284,7 +263,7 @@ export function initThreeJS() {
         // Start with a small batch
         console.log("Loading initial models");
         await preloadProjectModels(
-          visibleProjects.slice(0, isCloudflarePages ? 2 : 3),
+          visibleProjects.slice(0, 3),
           visibleProjects
         );
 
@@ -300,21 +279,8 @@ export function initThreeJS() {
         isAnimating = true;
         requestAnimationFrame(animate);
 
-        // Load remaining models with delay on Cloudflare
-        if (isCloudflarePages) {
-          console.log("Scheduling delayed loading of remaining models");
-          setTimeout(() => {
-            preloadProjectModels(visibleProjects.slice(2)).catch((error) =>
-              console.warn("Delayed model loading error:", error)
-            );
-          }, 2000);
-        } else {
-          // Load remaining models immediately
-          return preloadProjectModels(
-            visibleProjects.slice(3),
-            visibleProjects
-          );
-        }
+        // Load remaining models immediately
+        return preloadProjectModels(visibleProjects.slice(3), visibleProjects);
       } catch (error) {
         console.error("Error in initialization sequence:", error);
       }
@@ -458,7 +424,6 @@ function initGameScene() {
  * Initialize project card scene
  */
 function initProjectCardScene() {
-  const isCloudflarePages = window.location.hostname.includes("pages.dev");
   console.log("Initializing project card scene");
 
   const portfolioItems = document.querySelectorAll(".portfolio-item");
@@ -468,20 +433,17 @@ function initProjectCardScene() {
   // Add lighting using shared lights with adjusted intensity for Cloudflare
   projectCardScene.add(
     getClonedLight("ambientLight", {
-      intensity: isCloudflarePages ? 0.9 : 0.8,
+      intensity: 0.8,
     })
   );
 
   projectCardScene.add(
     getClonedLight("directionalLight1", {
-      intensity: isCloudflarePages ? 0.7 : 0.6,
+      intensity: 0.6,
     })
   );
 
-  // Only add second light if not on Cloudflare (for performance)
-  if (!isCloudflarePages) {
-    projectCardScene.add(getClonedLight("directionalLight2"));
-  }
+  projectCardScene.add(getClonedLight("directionalLight2"));
 
   // Add fallback cube
   projectCardScene.add(getFallbackCube());
@@ -584,13 +546,6 @@ function initPortfolioCanvases() {
 function setupVisibleProjectCameras(portfolioItems) {
   if (!portfolioItems.length) return;
 
-  const isCloudflarePages = window.location.hostname.includes("pages.dev");
-  console.log(
-    `Setting up visible project cameras (${portfolioItems.length} items)${
-      isCloudflarePages ? " on Cloudflare" : ""
-    }`
-  );
-
   // Define a wrapper for requestIdleCallback
   const safeRequestIdleCallback = (callback) => {
     if ("requestIdleCallback" in window) {
@@ -639,9 +594,7 @@ function setupVisibleProjectCameras(portfolioItems) {
   // Process items - immediately setup visible ones, observe others
   let visibleCount = 0;
   const setupPromises = [];
-  const maxVisiblePriority = isCloudflarePages
-    ? 2
-    : CONSTANTS.VISIBLE_PRIORITY_COUNT;
+  const maxVisiblePriority = CONSTANTS.VISIBLE_PRIORITY_COUNT;
 
   console.log(`Setting up ${maxVisiblePriority} priority cameras`);
 
@@ -724,13 +677,6 @@ const sharedCanvasContextOptions = {
 async function setupProjectCamera(item, index) {
   if (!item) return null;
 
-  const isCloudflarePages = window.location.hostname.includes("pages.dev");
-  console.log(
-    `Setting up project camera ${index}${
-      isCloudflarePages ? " on Cloudflare" : ""
-    }`
-  );
-
   // Get canvas element
   const canvas = item.querySelector(".threejs-canvas");
   if (!canvas) {
@@ -751,7 +697,7 @@ async function setupProjectCamera(item, index) {
 
   try {
     // Avoid OffscreenCanvas on Cloudflare Pages
-    if (!isCloudflarePages && "transferControlToOffscreen" in canvas) {
+    if ("transferControlToOffscreen" in canvas) {
       try {
         console.log(`Using OffscreenCanvas for project ${index}`);
         offscreenCanvas = canvas.transferControlToOffscreen();
@@ -841,47 +787,57 @@ async function setupProjectCamera(item, index) {
 
   console.log(`Creating controls for project ${index}`);
 
-  // For Cloudflare Pages, start with simpler setup
-  if (isCloudflarePages) {
-    try {
-      console.log("Using simplified controls setup for Cloudflare");
-      const SimpleOrbitControls = await import(
-        "../extern/three/OrbitControls.js"
-      )
-        .then((module) => module.OrbitControls)
-        .catch((error) => {
-          console.error("Failed to import OrbitControls directly:", error);
-          return null;
-        });
+  // Standard environment - use patched controls
+  try {
+    if (!OrbitControls) {
+      OrbitControls = await loadAndPatchOrbitControls();
+    }
 
-      if (SimpleOrbitControls) {
-        controls = new SimpleOrbitControls(camera, canvas);
+    if (OrbitControls) {
+      controls = new OrbitControls(camera, canvas);
 
-        // Apply basic configuration
-        controls.enableDamping = true;
-        controls.dampingFactor = 0.05;
-        controls.autoRotate = true;
-        controls.autoRotateSpeed = CONSTANTS.AUTO_ROTATE_SPEED;
-        controls.enableZoom = true;
-        controls.minDistance = CONSTANTS.MIN_CAMERA_DISTANCE;
-        controls.maxDistance = CONSTANTS.MAX_CAMERA_DISTANCE;
-        controls.target.copy(target);
+      // Apply configuration safely
+      Object.assign(controls, orbitControlsConfig);
+      controls.target.copy(target);
 
-        // Add basic listeners
-        canvas.style.cursor = "grab";
-        controls.addEventListener("start", () => {
+      const usePassive = { passive: true };
+
+      // Safe event listener adding
+      try {
+        // Add robust event listeners with try/catch
+        const addEventSafely = (type, handler) => {
+          try {
+            controls.addEventListener(type, handler, usePassive);
+          } catch (err) {
+            console.warn(`Failed to add ${type} listener:`, err);
+          }
+        };
+
+        addEventSafely("start", () => {
           canvas.style.cursor = "grabbing";
           handleUserInteraction();
         });
-        controls.addEventListener("end", () => {
+
+        addEventSafely("end", () => {
           canvas.style.cursor = "grab";
         });
+      } catch (eventError) {
+        console.warn("Error adding control event listeners:", eventError);
+      }
 
+      try {
+        controls.update();
+      } catch (updateError) {
+        console.warn("Error in initial controls update:", updateError);
+        // Try one more time after ensuring listeners exist
+        if (!controls._listeners) {
+          controls._initListeners();
+        }
         try {
           controls.update();
-          console.log("Controls setup successful for Cloudflare");
-        } catch (updateError) {
-          console.warn("Controls update failed:", updateError);
+        } catch (retryError) {
+          console.warn("Retry controls update failed:", retryError);
+          // Fall back to simple rotation if all else fails
           controls = createSimpleAutorotation(
             camera,
             target,
@@ -889,20 +845,9 @@ async function setupProjectCamera(item, index) {
             index
           );
         }
-      } else {
-        console.warn("SimpleOrbitControls not available, using fallback");
-        controls = createSimpleAutorotation(
-          camera,
-          target,
-          cameraDistance,
-          index
-        );
       }
-    } catch (cloudflareError) {
-      console.error(
-        "Cloudflare controls setup failed completely:",
-        cloudflareError
-      );
+    } else {
+      // Fallback to simple rotation
       controls = createSimpleAutorotation(
         camera,
         target,
@@ -910,85 +855,10 @@ async function setupProjectCamera(item, index) {
         index
       );
     }
-  } else {
-    // Standard environment - use patched controls
-    try {
-      if (!OrbitControls) {
-        OrbitControls = await loadAndPatchOrbitControls();
-      }
-
-      if (OrbitControls) {
-        controls = new OrbitControls(camera, canvas);
-
-        // Apply configuration safely
-        Object.assign(controls, orbitControlsConfig);
-        controls.target.copy(target);
-
-        const usePassive = { passive: true };
-
-        // Safe event listener adding
-        try {
-          // Add robust event listeners with try/catch
-          const addEventSafely = (type, handler) => {
-            try {
-              controls.addEventListener(type, handler, usePassive);
-            } catch (err) {
-              console.warn(`Failed to add ${type} listener:`, err);
-            }
-          };
-
-          addEventSafely("start", () => {
-            canvas.style.cursor = "grabbing";
-            handleUserInteraction();
-          });
-
-          addEventSafely("end", () => {
-            canvas.style.cursor = "grab";
-          });
-        } catch (eventError) {
-          console.warn("Error adding control event listeners:", eventError);
-        }
-
-        try {
-          controls.update();
-        } catch (updateError) {
-          console.warn("Error in initial controls update:", updateError);
-          // Try one more time after ensuring listeners exist
-          if (!controls._listeners) {
-            controls._initListeners();
-          }
-          try {
-            controls.update();
-          } catch (retryError) {
-            console.warn("Retry controls update failed:", retryError);
-            // Fall back to simple rotation if all else fails
-            controls = createSimpleAutorotation(
-              camera,
-              target,
-              cameraDistance,
-              index
-            );
-          }
-        }
-      } else {
-        // Fallback to simple rotation
-        controls = createSimpleAutorotation(
-          camera,
-          target,
-          cameraDistance,
-          index
-        );
-      }
-    } catch (controlsError) {
-      console.error("Failed to create controls:", controlsError);
-      // Use simple autorotation as fallback
-      controls = createSimpleAutorotation(
-        camera,
-        target,
-        cameraDistance,
-        index
-      );
-    }
+  } catch (controlsError) {
+    console.error("Failed to create controls:", controlsError);
+    // Use simple autorotation as fallback
+    controls = createSimpleAutorotation(camera, target, cameraDistance, index);
   }
 
   // Get portfolio section details
@@ -1058,12 +928,9 @@ function animate(timestamp) {
   if (!isAnimating) return;
 
   try {
-    const isCloudflarePages = window.location.hostname.includes("pages.dev");
     const deltaTime = timestamp - lastRenderTime;
     const frameDelay = isIdle()
       ? CONSTANTS.IDLE_FRAME_INTERVAL
-      : isCloudflarePages
-      ? CONSTANTS.FRAME_INTERVAL * 1.5
       : CONSTANTS.FRAME_INTERVAL;
 
     if (deltaTime >= frameDelay) {
@@ -1085,10 +952,7 @@ function animate(timestamp) {
           console.warn("WebGL context lost or invalid, skipping render");
 
           // Try to recover renderer
-          if (
-            isCloudflarePages &&
-            (!renderer || renderer.getContext().isContextLost())
-          ) {
+          if (!renderer || renderer.getContext().isContextLost()) {
             console.log("Attempting to recover lost WebGL context");
             try {
               renderer = new WebGLRenderer({
@@ -1157,19 +1021,12 @@ let orbitControlsPromise = null;
 async function loadAndPatchOrbitControls() {
   if (OrbitControls) return OrbitControls;
 
-  const isCloudflarePages = window.location.hostname.includes("pages.dev");
-  console.log(
-    "Loading OrbitControls in environment:",
-    isCloudflarePages ? "Cloudflare Pages" : "Standard"
-  );
+  console.log("Loading OrbitControls");
 
   if (!orbitControlsPromise) {
     // Use more reliable path resolution
-    const controlsPath = isCloudflarePages
-      ? "/extern/three/OrbitControls.js"
-      : "../extern/three/OrbitControls.js";
 
-    orbitControlsPromise = import(controlsPath)
+    orbitControlsPromise = await import("../extern/three/OrbitControls.js")
       .then(({ OrbitControls: OC }) => {
         console.log("OrbitControls module loaded successfully");
 

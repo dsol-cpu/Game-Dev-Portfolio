@@ -464,8 +464,7 @@ function getActiveCamerasWithPriority() {
         const control = cameraRegistry.controls[i];
         activeCameras.push({
           index: i,
-          priority:
-            control && control._dragging ? HIGH_PRIORITY : NORMAL_PRIORITY,
+          priority: control?._dragging ? HIGH_PRIORITY : NORMAL_PRIORITY,
         });
       }
     }
