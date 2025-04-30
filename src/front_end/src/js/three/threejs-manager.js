@@ -738,6 +738,15 @@ async function setupProjectCamera(item, index) {
     if (OrbitControls) {
       controls = new OrbitControls(camera, canvas);
 
+      // Make sure the controls instance has listeners before continuing
+      if (!controls._listeners) {
+        controls._listeners = {};
+        const eventTypes = ["start", "end", "change", "control"];
+        eventTypes.forEach((type) => {
+          controls._listeners[type] = new Set();
+        });
+      }
+
       // Apply configuration safely
       Object.assign(controls, orbitControlsConfig);
       controls.target.copy(target);
@@ -746,22 +755,23 @@ async function setupProjectCamera(item, index) {
 
       // Safe event listener adding
       try {
-        controls.addEventListener(
-          "start",
-          () => {
-            canvas.style.cursor = "grabbing";
-            handleUserInteraction();
-          },
-          usePassive
-        );
+        // Add robust event listeners with try/catch
+        const addEventSafely = (type, handler) => {
+          try {
+            controls.addEventListener(type, handler, usePassive);
+          } catch (err) {
+            console.warn(`Failed to add ${type} listener:`, err);
+          }
+        };
 
-        controls.addEventListener(
-          "end",
-          () => {
-            canvas.style.cursor = "grab";
-          },
-          usePassive
-        );
+        addEventSafely("start", () => {
+          canvas.style.cursor = "grabbing";
+          handleUserInteraction();
+        });
+
+        addEventSafely("end", () => {
+          canvas.style.cursor = "grab";
+        });
       } catch (eventError) {
         console.warn("Error adding control event listeners:", eventError);
       }
@@ -770,6 +780,26 @@ async function setupProjectCamera(item, index) {
         controls.update();
       } catch (updateError) {
         console.warn("Error in initial controls update:", updateError);
+        // Try one more time after ensuring listeners exist
+        if (!controls._listeners) {
+          controls._listeners = {};
+          const eventTypes = ["start", "end", "change", "control"];
+          eventTypes.forEach((type) => {
+            controls._listeners[type] = new Set();
+          });
+        }
+        try {
+          controls.update();
+        } catch (retryError) {
+          console.warn("Retry controls update failed:", retryError);
+          // Fall back to simple rotation if all else fails
+          controls = createSimpleAutorotation(
+            camera,
+            target,
+            cameraDistance,
+            index
+          );
+        }
       }
     } else {
       // Fallback to simple rotation
@@ -934,14 +964,21 @@ async function loadAndPatchOrbitControls() {
           OC.prototype._patched = true;
 
           // Initialize _listeners object (important to do this here)
-          OC.prototype._listeners = {};
+          const originalConstructor = OC;
+          OC = function (...args) {
+            const instance = new originalConstructor(...args);
+            // Initialize listeners for each instance
+            instance._listeners = {};
+            const eventTypes = ["start", "end", "change", "control"];
+            eventTypes.forEach((type) => {
+              instance._listeners[type] = new Set();
+            });
+            return instance;
+          };
 
-          const eventTypes = ["start", "end", "change", "control"];
-
-          // Safe initialization of event listeners
-          eventTypes.forEach((type) => {
-            OC.prototype._listeners[type] = new Set();
-          });
+          // Copy prototype and constructor properties
+          OC.prototype = originalConstructor.prototype;
+          OC.prototype.constructor = OC;
 
           const originalOnMouseDown = OC.prototype.onMouseDown;
           OC.prototype.onMouseDown = function (event) {
@@ -949,9 +986,10 @@ async function loadAndPatchOrbitControls() {
             this._lastDragTime = performance.now();
             handleUserInteraction();
 
-            // Make sure this instance has its own listeners object
+            // Ensure listeners exist for this instance
             if (!this._listeners) {
               this._listeners = {};
+              const eventTypes = ["start", "end", "change", "control"];
               eventTypes.forEach((type) => {
                 this._listeners[type] = new Set();
               });
@@ -1006,6 +1044,10 @@ async function loadAndPatchOrbitControls() {
           OC.prototype.addEventListener = function (type, listener) {
             if (!this._listeners) {
               this._listeners = {};
+              const eventTypes = ["start", "end", "change", "control"];
+              eventTypes.forEach((typeKey) => {
+                this._listeners[typeKey] = new Set();
+              });
             }
 
             if (!this._listeners[type]) {
@@ -1024,12 +1066,17 @@ async function loadAndPatchOrbitControls() {
           OC.prototype.dispatchEvent = function (e) {
             if (!e || !e.type) return false;
 
-            // Make sure we have listeners for this type
+            // Safety check - ensure we have listeners object
             if (!this._listeners) {
               this._listeners = {};
+              const eventTypes = ["start", "end", "change", "control"];
+              eventTypes.forEach((typeKey) => {
+                this._listeners[typeKey] = new Set();
+              });
               return false;
             }
 
+            // Safety check - ensure we have a set for this event type
             if (!this._listeners[e.type]) {
               this._listeners[e.type] = new Set();
               return false;
@@ -1041,7 +1088,11 @@ async function loadAndPatchOrbitControls() {
             const listeners = Array.from(this._listeners[e.type]);
             listeners.forEach((fn) => {
               if (typeof fn === "function") {
-                fn.call(this, e);
+                try {
+                  fn.call(this, e);
+                } catch (error) {
+                  console.warn(`Error in ${e.type} event handler:`, error);
+                }
               }
             });
 
