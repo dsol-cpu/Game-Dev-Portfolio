@@ -156,89 +156,156 @@ export function initThreeJS() {
 
   console.log("Initializing Three.js");
 
-  renderer = new WebGLRenderer({
-    powerPreference: isLowEndDevice ? "low-power" : "high-performance",
-    precision: isLowEndDevice ? "lowp" : "mediump",
-    antialias: !isLowEndDevice,
-    alpha: true,
-    preserveDrawingBuffer: true,
-    premultipliedAlpha: true,
-    stencil: false,
-    depth: true,
-    failIfMajorPerformanceCaveat: false,
-  });
+  try {
+    // Try creating the renderer with robust error handling
+    renderer = new WebGLRenderer({
+      powerPreference: isLowEndDevice ? "low-power" : "high-performance",
+      precision: isLowEndDevice ? "lowp" : "mediump",
+      antialias: !isLowEndDevice,
+      alpha: true,
+      preserveDrawingBuffer: true,
+      premultipliedAlpha: true,
+      stencil: false,
+      depth: true,
+      failIfMajorPerformanceCaveat: false,
+    });
 
-  // Set up WebGL context event listeners
-  renderer.domElement.addEventListener(
-    "webglcontextlost",
-    (event) => {
-      event.preventDefault();
-      isAnimating = false;
-      console.warn("WebGL context lost. Attempting to restore...");
-    },
-    false
-  );
-
-  renderer.domElement.addEventListener(
-    "webglcontextrestored",
-    () => {
-      console.log("WebGL context restored.");
-      isAnimating = true;
-      requestAnimationFrame(animate);
-    },
-    false
-  );
-
-  // Configure renderer
-  renderer.setClearColor(0x000000, 0);
-  renderer.setPixelRatio(
-    isLowEndDevice ? 1 : Math.min(window.devicePixelRatio, 2)
-  );
-  renderer.setSize(
-    CONSTANTS.DEFAULT_CANVAS_WIDTH,
-    CONSTANTS.DEFAULT_CANVAS_HEIGHT,
-    false
-  );
-  renderer.shadowMap.enabled = !isLowEndDevice;
-  renderer.shadowMap.type = PCFSoftShadowMap;
-  renderer.info.autoReset = false;
-
-  // Initialize shared resources
-  initSharedLights();
-
-  // Initialize systems
-  initUserInteraction();
-  onUserInteraction(() => {
-    if (!isAnimating) {
-      isAnimating = true;
-      requestAnimationFrame(animate);
+    // Check if renderer was created successfully
+    if (!renderer) {
+      throw new Error("Failed to create WebGLRenderer");
     }
-  });
-  initCameraRegistry();
-  initModelManager();
-  initGameScene();
-  initProjectCardScene();
 
-  // Get visible project models
-  const visibleProjects = getVisibleProjectModels();
+    // Test WebGL capability before proceeding
+    const gl = renderer.getContext();
+    if (!gl) {
+      throw new Error("WebGL context not available");
+    }
 
-  // Create a loading sequence
-  const initSequence = async () => {
+    // Set up WebGL context event listeners
+    renderer.domElement.addEventListener(
+      "webglcontextlost",
+      (event) => {
+        event.preventDefault();
+        isAnimating = false;
+        console.warn("WebGL context lost. Attempting to restore...");
+      },
+      false
+    );
+
+    renderer.domElement.addEventListener(
+      "webglcontextrestored",
+      () => {
+        console.log("WebGL context restored.");
+        isAnimating = true;
+        requestAnimationFrame(animate);
+      },
+      false
+    );
+
+    // Configure renderer
+    renderer.setClearColor(0x000000, 0);
+    renderer.setPixelRatio(
+      isLowEndDevice ? 1 : Math.min(window.devicePixelRatio, 2)
+    );
+    renderer.setSize(
+      CONSTANTS.DEFAULT_CANVAS_WIDTH,
+      CONSTANTS.DEFAULT_CANVAS_HEIGHT,
+      false
+    );
+    renderer.shadowMap.enabled = !isLowEndDevice;
+    renderer.shadowMap.type = PCFSoftShadowMap;
+    renderer.info.autoReset = false;
+
+    // Initialize shared resources
+    initSharedLights();
+
+    // Initialize systems
+    initUserInteraction();
+    onUserInteraction(() => {
+      if (!isAnimating) {
+        isAnimating = true;
+        requestAnimationFrame(animate);
+      }
+    });
+    initCameraRegistry();
+    initModelManager();
+    initGameScene();
+    initProjectCardScene();
+
+    // Get visible project models with error handling
+    let visibleProjects = [];
     try {
-      await preloadProjectModels(visibleProjects.slice(0, 3), visibleProjects);
-      initAboutCanvas();
-      initPortfolioCanvases();
-      activateAllCameras();
+      visibleProjects = getVisibleProjectModels();
+    } catch (error) {
+      console.error("Error getting visible projects:", error);
+      visibleProjects = [];
+    }
+
+    // Create a loading sequence
+    const initSequence = async () => {
+      try {
+        // Start with a small batch
+        await preloadProjectModels(
+          visibleProjects.slice(0, 3),
+          visibleProjects
+        );
+
+        initAboutCanvas();
+        initPortfolioCanvases();
+        activateAllCameras();
+
+        isAnimating = true;
+        requestAnimationFrame(animate);
+
+        // Load remaining models
+        return preloadProjectModels(visibleProjects.slice(3), visibleProjects);
+      } catch (error) {
+        console.error("Error in initialization sequence:", error);
+      }
+    };
+
+    initSequence();
+    if (process.env.NODE_ENV === "development") initPerformanceMonitoring();
+  } catch (error) {
+    console.error("Critical error initializing Three.js:", error);
+
+    // Fallback to a simpler renderer if possible
+    try {
+      console.log("Attempting fallback renderer initialization...");
+      renderer = new WebGLRenderer({
+        antialias: false,
+        alpha: true,
+        precision: "lowp",
+        powerPreference: "low-power",
+      });
+
+      // Minimal setup for fallback
+      renderer.setClearColor(0x000000, 0);
+      renderer.setPixelRatio(1);
+      renderer.setSize(
+        CONSTANTS.DEFAULT_CANVAS_WIDTH,
+        CONSTANTS.DEFAULT_CANVAS_HEIGHT,
+        false
+      );
+
+      // Continue with essential initialization only
+      initCameraRegistry();
+      initModelManager();
+
       isAnimating = true;
       requestAnimationFrame(animate);
-      return preloadProjectModels(visibleProjects.slice(3), visibleProjects);
-    } catch (error) {
-      console.error("Error in initialization sequence:", error);
-    }
-  };
+    } catch (fallbackError) {
+      console.error("Fallback renderer also failed:", fallbackError);
 
-  initSequence();
-  if (process.env.NODE_ENV === "development") initPerformanceMonitoring();
+      // Display error message to user
+      const errorMsg = document.createElement("div");
+      errorMsg.style.color = "red";
+      errorMsg.style.padding = "20px";
+      errorMsg.textContent =
+        "WebGL rendering not supported in your browser. Please try a different browser.";
+      document.body.prepend(errorMsg);
+    }
+  }
 }
 
 /**
@@ -555,35 +622,65 @@ const sharedCanvasContextOptions = {
  * Set up camera and controls for a project card
  */
 async function setupProjectCamera(item, index) {
-  if (!item) return;
+  if (!item) return null;
 
+  // Get canvas element
   const canvas = item.querySelector(".threejs-canvas");
-  if (canvas?._offscreenTransferred) return;
+  if (!canvas) {
+    console.warn(`Canvas not found for project item ${index}`);
+    return null;
+  }
+
+  // Skip if already processed
+  if (canvas?._offscreenTransferred) {
+    return null;
+  }
 
   let ctx;
   let offscreenCanvas = null;
 
   try {
-    if (!("transferControlToOffscreen" in canvas)) {
-      ctx = canvas.getContext("2d", sharedCanvasContextOptions);
+    // Try to use OffscreenCanvas when available
+    if ("transferControlToOffscreen" in canvas) {
+      try {
+        offscreenCanvas = canvas.transferControlToOffscreen();
+        ctx = offscreenCanvas.getContext("2d", sharedCanvasContextOptions);
+        canvas._offscreenTransferred = true;
+        canvas._offscreen = offscreenCanvas;
+      } catch (offscreenError) {
+        console.warn("Failed to use OffscreenCanvas:", offscreenError);
+        ctx = canvas.getContext("2d", sharedCanvasContextOptions);
+      }
     } else {
-      offscreenCanvas = canvas.transferControlToOffscreen();
-      ctx = offscreenCanvas.getContext("2d", sharedCanvasContextOptions);
-      canvas._offscreenTransferred = true;
-      canvas._offscreen = offscreenCanvas;
+      ctx = canvas.getContext("2d", sharedCanvasContextOptions);
     }
-  } catch (e) {
-    console.log(e);
-    ctx = canvas.getContext("2d", sharedCanvasContextOptions);
+  } catch (contextError) {
+    console.error("Failed to get canvas context:", contextError);
+    // Fallback to basic options
+    try {
+      ctx = canvas.getContext("2d", { alpha: true });
+    } catch (fallbackError) {
+      console.error(
+        "Canvas context creation failed completely:",
+        fallbackError
+      );
+      return null;
+    }
   }
 
-  if (!ctx) return;
+  if (!ctx) {
+    console.error("Could not get 2D context for canvas");
+    return null;
+  }
 
+  // Add hardware acceleration hint
   canvas.style.transform = "translateZ(0)";
 
+  // Set dimensions
   const width = canvas.clientWidth || CONSTANTS.DEFAULT_CANVAS_WIDTH;
   const height = canvas.clientHeight || CONSTANTS.DEFAULT_CANVAS_HEIGHT;
 
+  // Set canvas dimensions based on mode
   if (offscreenCanvas) {
     offscreenCanvas.width = width;
     offscreenCanvas.height = height;
@@ -592,10 +689,22 @@ async function setupProjectCamera(item, index) {
     canvas.height = height;
   }
 
+  // Get model safely
   const modelName = item.getAttribute("data-model") || FALLBACK_CUBE_NAME;
-  const model = await ensureModelInScene(modelName, projectCardScene);
+  let model;
+
+  try {
+    model = await ensureModelInScene(modelName, projectCardScene);
+  } catch (modelError) {
+    console.error(`Error loading model ${modelName}:`, modelError);
+    // Use fallback cube
+    model = getFallbackCube();
+    if (!model.parent) projectCardScene.add(model);
+  }
+
   const target = model.position.clone();
 
+  // Create camera
   const camera = new PerspectiveCamera(
     CONSTANTS.DEFAULT_CAMERA_FOV,
     width / height,
@@ -613,44 +722,57 @@ async function setupProjectCamera(item, index) {
   );
   camera.lookAt(target);
 
-  // Load OrbitControls only once
+  // Create controls - with safe loading
+  let controls = null;
+
+  // Load OrbitControls safely
   if (!OrbitControls) {
     try {
       OrbitControls = await loadAndPatchOrbitControls();
-    } catch (e) {
-      console.error("Failed to load OrbitControls:", e);
+    } catch (error) {
+      console.error("Failed to load OrbitControls:", error);
     }
   }
 
-  let controls;
   try {
     if (OrbitControls) {
       controls = new OrbitControls(camera, canvas);
 
-      // Apply shared configuration
+      // Apply configuration safely
       Object.assign(controls, orbitControlsConfig);
       controls.target.copy(target);
 
       const usePassive = { passive: true };
-      controls.addEventListener(
-        "start",
-        () => {
-          canvas.style.cursor = "grabbing";
-          handleUserInteraction();
-        },
-        usePassive
-      );
 
-      controls.addEventListener(
-        "end",
-        () => {
-          canvas.style.cursor = "grab";
-        },
-        usePassive
-      );
+      // Safe event listener adding
+      try {
+        controls.addEventListener(
+          "start",
+          () => {
+            canvas.style.cursor = "grabbing";
+            handleUserInteraction();
+          },
+          usePassive
+        );
 
-      controls.update();
+        controls.addEventListener(
+          "end",
+          () => {
+            canvas.style.cursor = "grab";
+          },
+          usePassive
+        );
+      } catch (eventError) {
+        console.warn("Error adding control event listeners:", eventError);
+      }
+
+      try {
+        controls.update();
+      } catch (updateError) {
+        console.warn("Error in initial controls update:", updateError);
+      }
     } else {
+      // Fallback to simple rotation
       controls = createSimpleAutorotation(
         camera,
         target,
@@ -658,56 +780,69 @@ async function setupProjectCamera(item, index) {
         index
       );
     }
-  } catch (e) {
-    console.log(e);
+  } catch (controlsError) {
+    console.error("Failed to create controls:", controlsError);
+    // Use simple autorotation as fallback
     controls = createSimpleAutorotation(camera, target, cameraDistance, index);
   }
 
+  // Get portfolio section details
   const portfolioSection = item.closest("section");
   const sectionId = portfolioSection?.id || "portfolio";
 
-  const cameraIndex = registerCamera(
-    camera,
-    controls,
-    ctx,
-    {
-      type: CAMERA_TYPES.PROJECT,
-      section: sectionId,
-      modelName,
-      elementId: item.id || `portfolio-item-${index}`,
-      index,
-      visible: isElementInViewport(item),
-    },
-    true
-  );
-
-  if (renderer) {
-    renderer.setSize(width, height, false);
-    renderer.setViewport(0, 0, width, height);
-    renderer.setScissor(0, 0, width, height);
-    renderer.scissorTest = true;
-
-    camera.aspect = width / height;
-    camera.updateProjectionMatrix();
-
-    renderer.clear();
-    renderer.render(projectCardScene, camera);
-
-    ctx.clearRect(0, 0, width, height);
-    ctx.drawImage(
-      renderer.domElement,
-      0,
-      0,
-      renderer.domElement.width,
-      renderer.domElement.height,
-      0,
-      0,
-      width,
-      height
+  // Register camera
+  try {
+    const cameraIndex = registerCamera(
+      camera,
+      controls,
+      ctx,
+      {
+        type: CAMERA_TYPES.PROJECT,
+        section: sectionId,
+        modelName,
+        elementId: item.id || `portfolio-item-${index}`,
+        index,
+        visible: isElementInViewport(item),
+      },
+      true
     );
-  }
 
-  return cameraIndex;
+    // Initial render if possible
+    if (renderer) {
+      try {
+        renderer.setSize(width, height, false);
+        renderer.setViewport(0, 0, width, height);
+        renderer.setScissor(0, 0, width, height);
+        renderer.scissorTest = true;
+
+        camera.aspect = width / height;
+        camera.updateProjectionMatrix();
+
+        renderer.clear();
+        renderer.render(projectCardScene, camera);
+
+        ctx.clearRect(0, 0, width, height);
+        ctx.drawImage(
+          renderer.domElement,
+          0,
+          0,
+          renderer.domElement.width,
+          renderer.domElement.height,
+          0,
+          0,
+          width,
+          height
+        );
+      } catch (renderError) {
+        console.warn("Initial render failed:", renderError);
+      }
+    }
+
+    return cameraIndex;
+  } catch (registryError) {
+    console.error("Failed to register camera:", registryError);
+    return null;
+  }
 }
 
 /**
@@ -716,23 +851,72 @@ async function setupProjectCamera(item, index) {
 function animate(timestamp) {
   if (!isAnimating) return;
 
-  const deltaTime = timestamp - lastRenderTime;
-  const frameDelay = isIdle()
-    ? CONSTANTS.IDLE_FRAME_INTERVAL
-    : CONSTANTS.FRAME_INTERVAL;
+  try {
+    const deltaTime = timestamp - lastRenderTime;
+    const frameDelay = isIdle()
+      ? CONSTANTS.IDLE_FRAME_INTERVAL
+      : CONSTANTS.FRAME_INTERVAL;
 
-  if (deltaTime >= frameDelay) {
-    lastRenderTime = timestamp;
-    updateActiveControls(timestamp);
-    renderActiveCameras(renderer, projectCardScene);
+    if (deltaTime >= frameDelay) {
+      lastRenderTime = timestamp;
 
-    if (process.env.NODE_ENV === "development") {
-      updateFPS(timestamp);
-      renderer?.info?.reset();
+      // Update controls first (this affects camera positioning)
+      try {
+        updateActiveControls(timestamp);
+      } catch (controlsError) {
+        console.error("Error updating controls:", controlsError);
+      }
+
+      // Then render cameras
+      try {
+        // Check if WebGL context is still valid
+        if (
+          renderer &&
+          renderer.getContext() &&
+          !renderer.getContext().isContextLost()
+        ) {
+          renderActiveCameras(renderer, projectCardScene);
+        } else {
+          console.warn("WebGL context lost or invalid, skipping render");
+        }
+      } catch (renderError) {
+        console.error("Error in render cycle:", renderError);
+      }
+
+      // Update performance metrics in development
+      if (process.env.NODE_ENV === "development") {
+        try {
+          updateFPS(timestamp);
+          renderer?.info?.reset();
+        } catch (statsError) {
+          // Non-critical, ignore silently
+        }
+      }
     }
-  }
 
-  requestAnimationFrame(animate);
+    // Request next frame with error handling
+    try {
+      requestAnimationFrame(animate);
+    } catch (rafError) {
+      console.error("Error in requestAnimationFrame:", rafError);
+      // Try again after a delay
+      setTimeout(() => {
+        if (isAnimating) {
+          requestAnimationFrame(animate);
+        }
+      }, CONSTANTS.FRAME_INTERVAL);
+    }
+  } catch (error) {
+    console.error("Fatal error in animation loop:", error);
+
+    // Try to recover after a delay
+    setTimeout(() => {
+      if (isAnimating) {
+        console.log("Attempting to recover animation loop...");
+        requestAnimationFrame(animate);
+      }
+    }, CONSTANTS.MS_IN_SECOND);
+  }
 }
 
 /**
@@ -748,13 +932,31 @@ async function loadAndPatchOrbitControls() {
       ({ OrbitControls: OC }) => {
         if (!OC.prototype._patched) {
           OC.prototype._patched = true;
-          OC.prototype._listeners = OC.prototype._listeners || {};
+
+          // Initialize _listeners object (important to do this here)
+          OC.prototype._listeners = {};
+
+          const eventTypes = ["start", "end", "change", "control"];
+
+          // Safe initialization of event listeners
+          eventTypes.forEach((type) => {
+            OC.prototype._listeners[type] = new Set();
+          });
 
           const originalOnMouseDown = OC.prototype.onMouseDown;
           OC.prototype.onMouseDown = function (event) {
             this._dragging = true;
             this._lastDragTime = performance.now();
             handleUserInteraction();
+
+            // Make sure this instance has its own listeners object
+            if (!this._listeners) {
+              this._listeners = {};
+              eventTypes.forEach((type) => {
+                this._listeners[type] = new Set();
+              });
+            }
+
             if (originalOnMouseDown) originalOnMouseDown.call(this, event);
           };
 
@@ -800,26 +1002,62 @@ async function loadAndPatchOrbitControls() {
             }
           };
 
+          // Safer event handling methods
           OC.prototype.addEventListener = function (type, listener) {
-            if (!this._listeners[type]) this._listeners[type] = new Set();
+            if (!this._listeners) {
+              this._listeners = {};
+            }
+
+            if (!this._listeners[type]) {
+              this._listeners[type] = new Set();
+            }
+
             this._listeners[type].add(listener);
           };
 
           OC.prototype.removeEventListener = function (type, listener) {
-            if (this._listeners[type]) this._listeners[type].delete(listener);
+            if (this._listeners && this._listeners[type]) {
+              this._listeners[type].delete(listener);
+            }
           };
 
           OC.prototype.dispatchEvent = function (e) {
-            if (!this._listeners?.[e?.type]) return false;
+            if (!e || !e.type) return false;
+
+            // Make sure we have listeners for this type
+            if (!this._listeners) {
+              this._listeners = {};
+              return false;
+            }
+
+            if (!this._listeners[e.type]) {
+              this._listeners[e.type] = new Set();
+              return false;
+            }
+
             e.target = this;
-            this._listeners[e.type].forEach((fn) => fn.call(this, e));
+
+            // Convert to array before iteration to avoid issues with modification during iteration
+            const listeners = Array.from(this._listeners[e.type]);
+            listeners.forEach((fn) => {
+              if (typeof fn === "function") {
+                fn.call(this, e);
+              }
+            });
+
             return true;
           };
 
           const originalDispose = OC.prototype.dispose || function () {};
           OC.prototype.dispose = function () {
             originalDispose.call(this);
-            this._listeners = {};
+            if (this._listeners) {
+              // Clear all listeners
+              Object.keys(this._listeners).forEach((type) => {
+                this._listeners[type].clear();
+              });
+              this._listeners = null;
+            }
           };
         }
         return OC;

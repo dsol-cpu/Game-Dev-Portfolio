@@ -281,32 +281,51 @@ export function updateActiveControls(timestamp) {
   // First update any controls that are currently being dragged
   let foundActiveDrag = false;
 
-  for (let i = 0; i < cameraRegistry.count; i++) {
-    if (!isBitSet(cameraRegistry.activeCamBitmask, i)) continue;
+  try {
+    // Process dragging controls first (highest priority)
+    for (let i = 0; i < cameraRegistry.count; i++) {
+      if (!isBitSet(cameraRegistry.activeCamBitmask, i)) continue;
 
-    const control = cameraRegistry.controls[i];
-    if (control?._dragging) {
-      control.update();
-      foundActiveDrag = true;
+      const control = cameraRegistry.controls[i];
+
+      if (!control) continue;
+
+      if (control._dragging) {
+        try {
+          control.update();
+          foundActiveDrag = true;
+        } catch (controlError) {
+          console.warn(`Error updating dragging control ${i}:`, controlError);
+        }
+      }
     }
-  }
 
-  // In idle mode, only update auto-rotating controls at a lower rate
-  const updateNonDragging = !isIdle() || timestamp % IDLE_UPDATE_MODULO === 0;
-  if (!updateNonDragging) return;
+    // In idle mode, only update auto-rotating controls at a lower rate
+    const updateNonDragging = !isIdle() || timestamp % IDLE_UPDATE_MODULO === 0;
+    if (!updateNonDragging) return;
 
-  // Then update the rest
-  for (let i = 0; i < cameraRegistry.count; i++) {
-    if (!isBitSet(cameraRegistry.activeCamBitmask, i)) continue;
+    // Then update the rest
+    for (let i = 0; i < cameraRegistry.count; i++) {
+      if (!isBitSet(cameraRegistry.activeCamBitmask, i)) continue;
 
-    const control = cameraRegistry.controls[i];
-    if (
-      control &&
-      !control._dragging &&
-      (!foundActiveDrag || control.autoRotate)
-    ) {
-      control.update();
+      const control = cameraRegistry.controls[i];
+
+      if (!control) continue;
+
+      // Check if we should update this non-dragging control
+      if (!control._dragging && (!foundActiveDrag || control.autoRotate)) {
+        try {
+          control.update();
+        } catch (controlError) {
+          console.warn(
+            `Error updating non-dragging control ${i}:`,
+            controlError
+          );
+        }
+      }
     }
+  } catch (error) {
+    console.error("Error in updateActiveControls:", error);
   }
 }
 
@@ -325,20 +344,29 @@ export function activateAllCameras() {
 export function renderActiveCameras(renderer, scene) {
   if (!renderer || !scene || !cameraRegistry.activeCamBitmask) return;
 
-  const activeCameras = getActiveCamerasWithPriority();
-  if (activeCameras.length === 0) return;
+  try {
+    const activeCameras = getActiveCamerasWithPriority();
+    if (activeCameras.length === 0) return;
 
-  // Setup renderer once
-  const originalScissorTest = renderer.scissorTest;
-  renderer.scissorTest = true;
-  const domElement = renderer.domElement;
+    // Setup renderer once
+    const originalScissorTest = renderer.scissorTest;
+    renderer.scissorTest = true;
+    const domElement = renderer.domElement;
 
-  // Process cameras in priority order
-  for (const { index } of activeCameras) {
-    renderSingleCamera(index, renderer, scene, domElement);
+    // Process cameras in priority order
+    for (const { index } of activeCameras) {
+      try {
+        renderSingleCamera(index, renderer, scene, domElement);
+      } catch (cameraError) {
+        console.error(`Error rendering camera ${index}:`, cameraError);
+        // Continue with other cameras even if one fails
+      }
+    }
+
+    renderer.scissorTest = originalScissorTest;
+  } catch (error) {
+    console.error("Fatal error in renderActiveCameras:", error);
   }
-
-  renderer.scissorTest = originalScissorTest;
 }
 
 /**
@@ -346,31 +374,52 @@ export function renderActiveCameras(renderer, scene) {
  * @private
  */
 function getActiveCamerasWithPriority() {
+  if (!cameraRegistry.activeCamBitmask) return [];
+
   const activeCameras = [];
 
-  for (let i = 0; i < cameraRegistry.count; i++) {
-    if (isBitSet(cameraRegistry.activeCamBitmask, i)) {
-      const control = cameraRegistry.controls[i];
-      activeCameras.push({
-        index: i,
-        priority: control?._dragging ? HIGH_PRIORITY : NORMAL_PRIORITY,
-      });
+  try {
+    for (let i = 0; i < cameraRegistry.count; i++) {
+      if (isBitSet(cameraRegistry.activeCamBitmask, i)) {
+        const control = cameraRegistry.controls[i];
+        activeCameras.push({
+          index: i,
+          priority:
+            control && control._dragging ? HIGH_PRIORITY : NORMAL_PRIORITY,
+        });
+      }
     }
-  }
 
-  return activeCameras.sort((a, b) => b.priority - a.priority);
+    return activeCameras.sort((a, b) => b.priority - a.priority);
+  } catch (error) {
+    console.error("Error getting active cameras:", error);
+    return [];
+  }
 }
 
 /**
- * Render a single camera
+ * Render a single camera with comprehensive error handling
  * @private
  */
 function renderSingleCamera(index, renderer, scene, domElement) {
+  if (index < 0 || index >= cameraRegistry.count) return;
+
   const camera = cameraRegistry.cameras[index];
   const ctx = cameraRegistry.contexts[index];
   const control = cameraRegistry.controls[index];
 
+  // Guard against null objects
   if (!camera || !ctx?.canvas) return;
+
+  // Extra validation for WebGL context loss scenarios
+  if (
+    renderer.context &&
+    renderer.context.isContextLost &&
+    renderer.context.isContextLost()
+  ) {
+    console.warn("Skipping render - WebGL context is lost");
+    return;
+  }
 
   try {
     // Get dimensions from the canvas
@@ -387,43 +436,81 @@ function renderSingleCamera(index, renderer, scene, domElement) {
     }
 
     setupRendererForCamera(renderer, width, height);
-    if (control?.update) control.update();
 
+    // Safe control update
+    if (control?.update && typeof control.update === "function") {
+      try {
+        control.update();
+      } catch (controlError) {
+        console.warn(`Control update error for camera ${index}:`, controlError);
+        // Continue rendering even if control update fails
+      }
+    }
+
+    // Render scene
     renderer.render(scene, camera);
+
+    // Draw to 2D context
     drawToContext(ctx, domElement, width, height);
   } catch (error) {
-    console.error(ERROR_RENDERING(index), error);
+    console.error(`Error rendering camera ${index}:`, error);
+    // Mark camera as problematic? Maybe disable temporarily?
   }
 }
 
 /**
- * Setup renderer for a specific camera
+ * Setup renderer for a specific camera with error handling
  * @private
  */
 function setupRendererForCamera(renderer, width, height) {
-  renderer.setSize(width, height, false);
-  renderer.setViewport(0, 0, width, height);
-  renderer.setScissor(0, 0, width, height);
-  renderer.clear();
+  try {
+    renderer.setSize(width, height, false);
+    renderer.setViewport(0, 0, width, height);
+    renderer.setScissor(0, 0, width, height);
+    renderer.clear();
+  } catch (error) {
+    console.error("Error setting up renderer:", error);
+    // Try minimal setup as fallback
+    try {
+      renderer.setViewport(0, 0, width, height);
+      renderer.setScissor(0, 0, width, height);
+    } catch (fallbackError) {
+      console.error("Critical renderer setup error:", fallbackError);
+    }
+  }
 }
 
 /**
- * Draw rendered content to context
+ * Draw rendered content to context with error handling
  * @private
  */
 function drawToContext(ctx, domElement, width, height) {
-  ctx.clearRect(0, 0, width, height);
-  ctx.drawImage(
-    domElement,
-    0,
-    0,
-    domElement.width,
-    domElement.height,
-    0,
-    0,
-    width,
-    height
-  );
+  if (!ctx || !domElement) return;
+
+  try {
+    ctx.clearRect(0, 0, width, height);
+    ctx.drawImage(
+      domElement,
+      0,
+      0,
+      domElement.width,
+      domElement.height,
+      0,
+      0,
+      width,
+      height
+    );
+  } catch (error) {
+    console.error("Error drawing to 2D context:", error);
+
+    // Fallback to basic clear
+    try {
+      ctx.clearRect(0, 0, width, height);
+    } catch (fallbackError) {
+      // At this point, we can't do much else
+      console.error("Critical context drawing error:", fallbackError);
+    }
+  }
 }
 
 /**
