@@ -11,6 +11,7 @@ import { initPortfolioFilters } from "./portfolio-filters.js";
 import { initGameView } from "./game-view.js";
 import { initUserInteraction } from "./user-interaction.js";
 import { detectLowEndDevice } from "./utils/device.js";
+import { initThreeJS } from "./three/threejs-manager.js";
 
 // Initialize on DOM load
 document.addEventListener("DOMContentLoaded", initializeApp);
@@ -27,13 +28,8 @@ function initializeApp() {
 
   initProjectCards();
   // Only initialize the ThreeJS scenes and models if you don't have a doodoo computer
-  if (!detectLowEndDevice()) {
-    requestIdleCallback(() => {
-      import("./three/threejs-manager.js").then(({ initThreeJS }) => {
-        initThreeJS();
-      });
-    });
-  }
+  if (!detectLowEndDevice()) initThreeJS();
+
   initPortfolioFilters();
   setupBackdropListener();
 

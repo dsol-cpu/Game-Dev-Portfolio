@@ -12,6 +12,8 @@ import {
   Vector3,
 } from "../extern/three/three.module.min.js";
 
+import { OrbitControls } from "../extern/three/OrbitControls.js";
+
 import {
   CAMERA_TYPES,
   initCameraRegistry,
@@ -22,7 +24,6 @@ import {
   createSimpleAutorotation,
   activateAllCameras,
 } from "./camera-registry.js";
-
 import {
   initUserInteraction,
   handleUserInteraction,
@@ -82,8 +83,7 @@ let renderer = null,
   gameScene = null,
   projectCardScene = null,
   thirdPersonCamera = null;
-let OrbitControls = null,
-  mainGameCanvas = null,
+let mainGameCanvas = null,
   mainGameCanvasContext = null,
   gameAnimationFrameId = null;
 
@@ -782,78 +782,66 @@ async function setupProjectCamera(item, index) {
   );
   camera.lookAt(target);
 
-  // Create controls - with safe loading
+  // Create controls - with safe patching
   let controls = null;
 
   console.log(`Creating controls for project ${index}`);
 
-  // Standard environment - use patched controls
   try {
-    if (!OrbitControls) {
-      OrbitControls = await loadAndPatchOrbitControls();
+    // Patch OrbitControls if not already patched
+    patchOrbitControls();
+
+    controls = new OrbitControls(camera, canvas);
+
+    // Apply configuration safely
+    Object.assign(controls, orbitControlsConfig);
+    controls.target.copy(target);
+
+    const usePassive = { passive: true };
+
+    // Safe event listener adding
+    try {
+      // Add robust event listeners with try/catch
+      const addEventSafely = (type, handler) => {
+        try {
+          controls.addEventListener(type, handler, usePassive);
+        } catch (err) {
+          console.warn(`Failed to add ${type} listener:`, err);
+        }
+      };
+
+      addEventSafely("start", () => {
+        canvas.style.cursor = "grabbing";
+        handleUserInteraction();
+      });
+
+      addEventSafely("end", () => {
+        canvas.style.cursor = "grab";
+      });
+    } catch (eventError) {
+      console.warn("Error adding control event listeners:", eventError);
     }
 
-    if (OrbitControls) {
-      controls = new OrbitControls(camera, canvas);
-
-      // Apply configuration safely
-      Object.assign(controls, orbitControlsConfig);
-      controls.target.copy(target);
-
-      const usePassive = { passive: true };
-
-      // Safe event listener adding
-      try {
-        // Add robust event listeners with try/catch
-        const addEventSafely = (type, handler) => {
-          try {
-            controls.addEventListener(type, handler, usePassive);
-          } catch (err) {
-            console.warn(`Failed to add ${type} listener:`, err);
-          }
-        };
-
-        addEventSafely("start", () => {
-          canvas.style.cursor = "grabbing";
-          handleUserInteraction();
-        });
-
-        addEventSafely("end", () => {
-          canvas.style.cursor = "grab";
-        });
-      } catch (eventError) {
-        console.warn("Error adding control event listeners:", eventError);
+    try {
+      controls.update();
+    } catch (updateError) {
+      console.warn("Error in initial controls update:", updateError);
+      // Try one more time after ensuring listeners exist
+      if (!controls._listeners) {
+        controls._initListeners();
       }
-
       try {
         controls.update();
-      } catch (updateError) {
-        console.warn("Error in initial controls update:", updateError);
-        // Try one more time after ensuring listeners exist
-        if (!controls._listeners) {
-          controls._initListeners();
-        }
-        try {
-          controls.update();
-        } catch (retryError) {
-          console.warn("Retry controls update failed:", retryError);
-          // Fall back to simple rotation if all else fails
-          controls = createSimpleAutorotation(
-            camera,
-            target,
-            cameraDistance,
-            index
-          );
-        }
+      } catch (retryError) {
+        console.warn("Retry controls update failed:", retryError);
+        // Fall back to simple rotation if all else fails
+        controls = createSimpleAutorotation(
+          camera,
+          target,
+          cameraDistance,
+          index
+        );
       }
-    } else {
-      // Fallback to simple rotation
-      controls = createSimpleAutorotation(
-        camera,
-        target,
-        cameraDistance,
-        index
-      );
     }
   } catch (controlsError) {
     console.error("Failed to create controls:", controlsError);
@@ -1014,197 +1002,139 @@ function animate(timestamp) {
 }
 
 /**
- * Load and patch OrbitControls with memory management
+ * Patches the OrbitControls class with enhanced functionality
+ * Assumes OrbitControls is already imported at the top of the file
  */
-let orbitControlsPromise = null;
-
-async function loadAndPatchOrbitControls() {
-  if (OrbitControls) return OrbitControls;
-
-  console.log("Loading OrbitControls");
-
-  if (!orbitControlsPromise) {
-    // Use more reliable path resolution
-
-    orbitControlsPromise = await import("../extern/three/OrbitControls.js")
-      .then(({ OrbitControls: OC }) => {
-        console.log("OrbitControls module loaded successfully");
-
-        if (!OC.prototype._patched) {
-          console.log("Patching OrbitControls prototype");
-          OC.prototype._patched = true;
-
-          // Add _initListeners helper method
-          OC.prototype._initListeners = function () {
-            this._listeners = {};
-            const eventTypes = ["start", "end", "change", "control"];
-            eventTypes.forEach((type) => {
-              this._listeners[type] = new Set();
-            });
-          };
-
-          // Patch methods with safer versions
-          const originalOnMouseDown = OC.prototype.onMouseDown;
-          OC.prototype.onMouseDown = function (event) {
-            if (!this._listeners) this._initListeners();
-            this._dragging = true;
-            this._lastDragTime = performance.now();
-            handleUserInteraction();
-            if (originalOnMouseDown) originalOnMouseDown.call(this, event);
-          };
-
-          const originalOnMouseUp = OC.prototype.onMouseUp;
-          OC.prototype.onMouseUp = function (event) {
-            this._dragging = false;
-            if (originalOnMouseUp) originalOnMouseUp.call(this, event);
-          };
-
-          const originalOnMouseMove = OC.prototype.onMouseMove;
-          OC.prototype.onMouseMove = function (event) {
-            const now = performance.now();
-            if (this._lastMoveTime && now - this._lastMoveTime <= 16)
-              event.preventDefault();
-            this._lastMoveTime = now;
-            if (this._dragging) this._lastDragTime = now;
-            if (originalOnMouseMove) originalOnMouseMove.call(this, event);
-          };
-
-          const originalOnTouchStart = OC.prototype.onTouchStart;
-          OC.prototype.onTouchStart = function (event) {
-            if (!this._listeners) this._initListeners();
-            this._dragging = true;
-            this._lastDragTime = performance.now();
-            handleUserInteraction();
-            if (originalOnTouchStart) originalOnTouchStart.call(this, event);
-          };
-
-          const originalOnTouchEnd = OC.prototype.onTouchEnd;
-          OC.prototype.onTouchEnd = function (event) {
-            this._dragging = false;
-            if (originalOnTouchEnd) originalOnTouchEnd.call(this, event);
-          };
-
-          const originalOnTouchMove = OC.prototype.onTouchMove;
-          OC.prototype.onTouchMove = function (event) {
-            const now = performance.now();
-            if (!this._lastMoveTime || now - this._lastMoveTime > 16) {
-              this._lastMoveTime = now;
-              this._lastDragTime = now;
-              if (originalOnTouchMove) originalOnTouchMove.call(this, event);
-            } else {
-              event.preventDefault();
-            }
-          };
-
-          // Safer event handling methods
-          OC.prototype.addEventListener = function (type, listener) {
-            if (!this._listeners) this._initListeners();
-
-            if (!this._listeners[type]) {
-              this._listeners[type] = new Set();
-            }
-
-            this._listeners[type].add(listener);
-          };
-
-          OC.prototype.removeEventListener = function (type, listener) {
-            if (this._listeners && this._listeners[type]) {
-              this._listeners[type].delete(listener);
-            }
-          };
-
-          OC.prototype.dispatchEvent = function (e) {
-            if (!e?.type) return false;
-
-            // Safety check - ensure we have listeners object
-            if (!this._listeners) this._initListeners();
-
-            // Safety check - ensure we have a set for this event type
-            if (!this._listeners[e.type]) {
-              this._listeners[e.type] = new Set();
-              return false;
-            }
-
-            e.target = this;
-
-            // Convert to array before iteration to avoid issues with modification during iteration
-            const listeners = Array.from(this._listeners[e.type]);
-            listeners.forEach((fn) => {
-              if (typeof fn === "function") {
-                try {
-                  fn.call(this, e);
-                } catch (error) {
-                  console.warn(`Error in ${e.type} event handler:`, error);
-                }
-              }
-            });
-
-            return true;
-          };
-
-          const originalDispose = OC.prototype.dispose || function () {};
-          OC.prototype.dispose = function () {
-            originalDispose.call(this);
-            if (this._listeners) {
-              // Clear all listeners
-              Object.keys(this._listeners).forEach((type) => {
-                this._listeners[type].clear();
-              });
-              this._listeners = null;
-            }
-          };
-
-          // Enhance constructor to initialize listeners
-          const originalConstructor = OC;
-          function EnhancedOrbitControls(...args) {
-            const instance = new originalConstructor(...args);
-            instance._initListeners();
-            return instance;
-          }
-
-          // Copy prototype and constructor properties
-          EnhancedOrbitControls.prototype = originalConstructor.prototype;
-          EnhancedOrbitControls.prototype.constructor = EnhancedOrbitControls;
-
-          // Replace original with enhanced version
-          OC = EnhancedOrbitControls;
-        }
-        return OC;
-      })
-      .catch((error) => {
-        console.error("Failed to load OrbitControls:", error);
-        // Return a minimal fallback that won't crash
-        return class MinimalOrbitControls {
-          constructor(camera, domElement) {
-            this.camera = camera;
-            this.domElement = domElement;
-            this._initListeners();
-            this.target = new Vector3(0, 0, 0);
-            console.warn("Using minimal OrbitControls fallback");
-          }
-          _initListeners() {
-            this._listeners = {};
-            ["start", "end", "change", "control"].forEach((type) => {
-              this._listeners[type] = new Set();
-            });
-          }
-          update() {}
-          dispose() {}
-          addEventListener(type, listener) {
-            if (!this._listeners[type]) this._listeners[type] = new Set();
-            this._listeners[type].add(listener);
-          }
-          removeEventListener(type, listener) {
-            if (this._listeners[type]) this._listeners[type].delete(listener);
-          }
-          dispatchEvent() {
-            return true;
-          }
-        };
-      });
+function patchOrbitControls() {
+  if (OrbitControls.prototype._patched) {
+    console.log("OrbitControls already patched");
+    return OrbitControls;
   }
 
-  return orbitControlsPromise;
+  console.log("Patching OrbitControls prototype");
+  OrbitControls.prototype._patched = true;
+
+  // Add _initListeners helper method
+  OrbitControls.prototype._initListeners = function () {
+    this._listeners = {};
+    const eventTypes = ["start", "end", "change", "control"];
+    eventTypes.forEach((type) => {
+      this._listeners[type] = new Set();
+    });
+  };
+
+  // Patch methods with safer versions
+  const originalOnMouseDown = OrbitControls.prototype.onMouseDown;
+  OrbitControls.prototype.onMouseDown = function (event) {
+    if (!this._listeners) this._initListeners();
+    this._dragging = true;
+    this._lastDragTime = performance.now();
+    handleUserInteraction();
+    if (originalOnMouseDown) originalOnMouseDown.call(this, event);
+  };
+
+  const originalOnMouseUp = OrbitControls.prototype.onMouseUp;
+  OrbitControls.prototype.onMouseUp = function (event) {
+    this._dragging = false;
+    if (originalOnMouseUp) originalOnMouseUp.call(this, event);
+  };
+
+  const originalOnMouseMove = OrbitControls.prototype.onMouseMove;
+  OrbitControls.prototype.onMouseMove = function (event) {
+    const now = performance.now();
+    if (this._lastMoveTime && now - this._lastMoveTime <= 16)
+      event.preventDefault();
+    this._lastMoveTime = now;
+    if (this._dragging) this._lastDragTime = now;
+    if (originalOnMouseMove) originalOnMouseMove.call(this, event);
+  };
+
+  const originalOnTouchStart = OrbitControls.prototype.onTouchStart;
+  OrbitControls.prototype.onTouchStart = function (event) {
+    if (!this._listeners) this._initListeners();
+    this._dragging = true;
+    this._lastDragTime = performance.now();
+    handleUserInteraction();
+    if (originalOnTouchStart) originalOnTouchStart.call(this, event);
+  };
+
+  const originalOnTouchEnd = OrbitControls.prototype.onTouchEnd;
+  OrbitControls.prototype.onTouchEnd = function (event) {
+    this._dragging = false;
+    if (originalOnTouchEnd) originalOnTouchEnd.call(this, event);
+  };
+
+  const originalOnTouchMove = OrbitControls.prototype.onTouchMove;
+  OrbitControls.prototype.onTouchMove = function (event) {
+    const now = performance.now();
+    if (!this._lastMoveTime || now - this._lastMoveTime > 16) {
+      this._lastMoveTime = now;
+      this._lastDragTime = now;
+      if (originalOnTouchMove) originalOnTouchMove.call(this, event);
+    } else {
+      event.preventDefault();
+    }
+  };
+
+  // Safer event handling methods
+  OrbitControls.prototype.addEventListener = function (type, listener) {
+    if (!this._listeners) this._initListeners();
+
+    if (!this._listeners[type]) {
+      this._listeners[type] = new Set();
+    }
+
+    this._listeners[type].add(listener);
+  };
+
+  OrbitControls.prototype.removeEventListener = function (type, listener) {
+    if (this._listeners && this._listeners[type]) {
+      this._listeners[type].delete(listener);
+    }
+  };
+
+  OrbitControls.prototype.dispatchEvent = function (e) {
+    if (!e?.type) return false;
+
+    // Safety check - ensure we have listeners object
+    if (!this._listeners) this._initListeners();
+
+    // Safety check - ensure we have a set for this event type
+    if (!this._listeners[e.type]) {
+      this._listeners[e.type] = new Set();
+      return false;
+    }
+
+    e.target = this;
+
+    // Convert to array before iteration to avoid issues with modification during iteration
+    const listeners = Array.from(this._listeners[e.type]);
+    listeners.forEach((fn) => {
+      if (typeof fn === "function") {
+        try {
+          fn.call(this, e);
+        } catch (error) {
+          console.warn(`Error in ${e.type} event handler:`, error);
+        }
+      }
+    });
+
+    return true;
+  };
+
+  const originalDispose = OrbitControls.prototype.dispose || function () {};
+  OrbitControls.prototype.dispose = function () {
+    originalDispose.call(this);
+    if (this._listeners) {
+      // Clear all listeners
+      Object.keys(this._listeners).forEach((type) => {
+        this._listeners[type].clear();
+      });
+      this._listeners = null;
+    }
+  };
+
+  return OrbitControls;
 }
 
 /**

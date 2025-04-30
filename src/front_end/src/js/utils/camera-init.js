@@ -1,15 +1,13 @@
 import { isBitSet } from "../utils/bit-array.js";
 import { detectLowEndDevice } from "../utils/device.js";
-
+import {
+  getCamerasByType,
+  setActiveCameras,
+  getCameraRegistry,
+  CAMERA_TYPES,
+} from "../three/camera-registry.js";
 export async function initializeProjectCameras() {
   if (detectLowEndDevice()) return;
-
-  const {
-    getCamerasByType,
-    setActiveCameras,
-    getCameraRegistry,
-    CAMERA_TYPES,
-  } = await import("../three/camera-registry.js");
 
   const reg = getCameraRegistry();
   const projCams = reg?.activeCamBitmask
@@ -35,18 +33,10 @@ export async function initializeProjectCameras() {
 }
 
 /**
- * Dynamically loads camera modules and updates based on visible items
  * @returns {boolean} success
  */
 export async function updateCameras(state) {
   if (detectLowEndDevice()) return false;
-
-  const {
-    getCamerasByType,
-    setActiveCameras,
-    getCameraRegistry,
-    CAMERA_TYPES,
-  } = await import("../three/camera-registry.js");
 
   const pfs = window.portfolioFilterState;
   if (!pfs?.needsCameraUpdate) return false;

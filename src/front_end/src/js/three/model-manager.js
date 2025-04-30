@@ -12,6 +12,8 @@ import {
   LinearFilter,
 } from "../extern/three/three.module.min.js";
 
+import { GLTFLoader } from "../extern/three/GLTFLoader.js";
+
 // Constants
 const BATCH_SIZE = 3;
 const GRID_SIZE = 512;
@@ -23,7 +25,6 @@ const MODEL_LOAD_TIMEOUT = 10000; // ms
 const sharedFallbackGeometry = new BoxGeometry(1, 1, 1);
 const sharedFallbackMaterial = new MeshNormalMaterial();
 let sharedFallbackCube = null;
-let GLTFLoader = null;
 
 // State
 const models = {};
@@ -113,17 +114,6 @@ async function loadModel(modelName) {
   // Return cached model if available
   if (models[modelName]) return models[modelName];
   if (modelLoadPromises[modelName]) return modelLoadPromises[modelName];
-
-  // Load the GLTFLoader if not already loaded
-  if (!GLTFLoader) {
-    try {
-      const module = await import("../extern/three/GLTFLoader.js");
-      GLTFLoader = module.GLTFLoader;
-    } catch (error) {
-      console.error("Failed to load GLTFLoader:", error);
-      return createFallbackCube(modelName);
-    }
-  }
 
   // Create loading promise with timeout
   const modelUrl = `/models/${modelName}.glb`;
