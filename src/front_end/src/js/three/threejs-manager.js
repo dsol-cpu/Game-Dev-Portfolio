@@ -900,11 +900,7 @@ function animate(timestamp) {
       // Then render cameras
       try {
         // Check if WebGL context is still valid
-        if (
-          renderer &&
-          renderer.getContext() &&
-          !renderer.getContext().isContextLost()
-        ) {
+        if (renderer?.getContext() && !renderer.getContext().isContextLost()) {
           renderActiveCameras(renderer, projectCardScene);
         } else {
           console.warn("WebGL context lost or invalid, skipping render");
@@ -958,162 +954,162 @@ async function loadAndPatchOrbitControls() {
   if (OrbitControls) return OrbitControls;
 
   if (!orbitControlsPromise) {
-    orbitControlsPromise = import("../extern/three/OrbitControls.js").then(
-      ({ OrbitControls: OC }) => {
-        if (!OC.prototype._patched) {
-          OC.prototype._patched = true;
+    orbitControlsPromise = await import(
+      "../extern/three/OrbitControls.js"
+    ).then(({ OrbitControls: OC }) => {
+      if (!OC.prototype._patched) {
+        OC.prototype._patched = true;
 
-          // Initialize _listeners object (important to do this here)
-          const originalConstructor = OC;
-          OC = function (...args) {
-            const instance = new originalConstructor(...args);
-            // Initialize listeners for each instance
-            instance._listeners = {};
+        // Initialize _listeners object (important to do this here)
+        const originalConstructor = OC;
+        OC = function (...args) {
+          const instance = new originalConstructor(...args);
+          // Initialize listeners for each instance
+          instance._listeners = {};
+          const eventTypes = ["start", "end", "change", "control"];
+          eventTypes.forEach((type) => {
+            instance._listeners[type] = new Set();
+          });
+          return instance;
+        };
+
+        // Copy prototype and constructor properties
+        OC.prototype = originalConstructor.prototype;
+        OC.prototype.constructor = OC;
+
+        const originalOnMouseDown = OC.prototype.onMouseDown;
+        OC.prototype.onMouseDown = function (event) {
+          this._dragging = true;
+          this._lastDragTime = performance.now();
+          handleUserInteraction();
+
+          // Ensure listeners exist for this instance
+          if (!this._listeners) {
+            this._listeners = {};
             const eventTypes = ["start", "end", "change", "control"];
             eventTypes.forEach((type) => {
-              instance._listeners[type] = new Set();
-            });
-            return instance;
-          };
-
-          // Copy prototype and constructor properties
-          OC.prototype = originalConstructor.prototype;
-          OC.prototype.constructor = OC;
-
-          const originalOnMouseDown = OC.prototype.onMouseDown;
-          OC.prototype.onMouseDown = function (event) {
-            this._dragging = true;
-            this._lastDragTime = performance.now();
-            handleUserInteraction();
-
-            // Ensure listeners exist for this instance
-            if (!this._listeners) {
-              this._listeners = {};
-              const eventTypes = ["start", "end", "change", "control"];
-              eventTypes.forEach((type) => {
-                this._listeners[type] = new Set();
-              });
-            }
-
-            if (originalOnMouseDown) originalOnMouseDown.call(this, event);
-          };
-
-          const originalOnMouseUp = OC.prototype.onMouseUp;
-          OC.prototype.onMouseUp = function (event) {
-            this._dragging = false;
-            if (originalOnMouseUp) originalOnMouseUp.call(this, event);
-          };
-
-          const originalOnMouseMove = OC.prototype.onMouseMove;
-          OC.prototype.onMouseMove = function (event) {
-            const now = performance.now();
-            if (this._lastMoveTime && now - this._lastMoveTime <= 16)
-              event.preventDefault();
-            this._lastMoveTime = now;
-            if (this._dragging) this._lastDragTime = now;
-            if (originalOnMouseMove) originalOnMouseMove.call(this, event);
-          };
-
-          const originalOnTouchStart = OC.prototype.onTouchStart;
-          OC.prototype.onTouchStart = function (event) {
-            this._dragging = true;
-            this._lastDragTime = performance.now();
-            handleUserInteraction();
-            if (originalOnTouchStart) originalOnTouchStart.call(this, event);
-          };
-
-          const originalOnTouchEnd = OC.prototype.onTouchEnd;
-          OC.prototype.onTouchEnd = function (event) {
-            this._dragging = false;
-            if (originalOnTouchEnd) originalOnTouchEnd.call(this, event);
-          };
-
-          const originalOnTouchMove = OC.prototype.onTouchMove;
-          OC.prototype.onTouchMove = function (event) {
-            const now = performance.now();
-            if (!this._lastMoveTime || now - this._lastMoveTime > 16) {
-              this._lastMoveTime = now;
-              this._lastDragTime = now;
-              if (originalOnTouchMove) originalOnTouchMove.call(this, event);
-            } else {
-              event.preventDefault();
-            }
-          };
-
-          // Safer event handling methods
-          OC.prototype.addEventListener = function (type, listener) {
-            if (!this._listeners) {
-              this._listeners = {};
-              const eventTypes = ["start", "end", "change", "control"];
-              eventTypes.forEach((typeKey) => {
-                this._listeners[typeKey] = new Set();
-              });
-            }
-
-            if (!this._listeners[type]) {
               this._listeners[type] = new Set();
-            }
-
-            this._listeners[type].add(listener);
-          };
-
-          OC.prototype.removeEventListener = function (type, listener) {
-            if (this._listeners && this._listeners[type]) {
-              this._listeners[type].delete(listener);
-            }
-          };
-
-          OC.prototype.dispatchEvent = function (e) {
-            if (!e || !e.type) return false;
-
-            // Safety check - ensure we have listeners object
-            if (!this._listeners) {
-              this._listeners = {};
-              const eventTypes = ["start", "end", "change", "control"];
-              eventTypes.forEach((typeKey) => {
-                this._listeners[typeKey] = new Set();
-              });
-              return false;
-            }
-
-            // Safety check - ensure we have a set for this event type
-            if (!this._listeners[e.type]) {
-              this._listeners[e.type] = new Set();
-              return false;
-            }
-
-            e.target = this;
-
-            // Convert to array before iteration to avoid issues with modification during iteration
-            const listeners = Array.from(this._listeners[e.type]);
-            listeners.forEach((fn) => {
-              if (typeof fn === "function") {
-                try {
-                  fn.call(this, e);
-                } catch (error) {
-                  console.warn(`Error in ${e.type} event handler:`, error);
-                }
-              }
             });
+          }
 
-            return true;
-          };
+          if (originalOnMouseDown) originalOnMouseDown.call(this, event);
+        };
 
-          const originalDispose = OC.prototype.dispose || function () {};
-          OC.prototype.dispose = function () {
-            originalDispose.call(this);
-            if (this._listeners) {
-              // Clear all listeners
-              Object.keys(this._listeners).forEach((type) => {
-                this._listeners[type].clear();
-              });
-              this._listeners = null;
+        const originalOnMouseUp = OC.prototype.onMouseUp;
+        OC.prototype.onMouseUp = function (event) {
+          this._dragging = false;
+          if (originalOnMouseUp) originalOnMouseUp.call(this, event);
+        };
+
+        const originalOnMouseMove = OC.prototype.onMouseMove;
+        OC.prototype.onMouseMove = function (event) {
+          const now = performance.now();
+          if (this._lastMoveTime && now - this._lastMoveTime <= 16)
+            event.preventDefault();
+          this._lastMoveTime = now;
+          if (this._dragging) this._lastDragTime = now;
+          if (originalOnMouseMove) originalOnMouseMove.call(this, event);
+        };
+
+        const originalOnTouchStart = OC.prototype.onTouchStart;
+        OC.prototype.onTouchStart = function (event) {
+          this._dragging = true;
+          this._lastDragTime = performance.now();
+          handleUserInteraction();
+          if (originalOnTouchStart) originalOnTouchStart.call(this, event);
+        };
+
+        const originalOnTouchEnd = OC.prototype.onTouchEnd;
+        OC.prototype.onTouchEnd = function (event) {
+          this._dragging = false;
+          if (originalOnTouchEnd) originalOnTouchEnd.call(this, event);
+        };
+
+        const originalOnTouchMove = OC.prototype.onTouchMove;
+        OC.prototype.onTouchMove = function (event) {
+          const now = performance.now();
+          if (!this._lastMoveTime || now - this._lastMoveTime > 16) {
+            this._lastMoveTime = now;
+            this._lastDragTime = now;
+            if (originalOnTouchMove) originalOnTouchMove.call(this, event);
+          } else {
+            event.preventDefault();
+          }
+        };
+
+        // Safer event handling methods
+        OC.prototype.addEventListener = function (type, listener) {
+          if (!this._listeners) {
+            this._listeners = {};
+            const eventTypes = ["start", "end", "change", "control"];
+            eventTypes.forEach((typeKey) => {
+              this._listeners[typeKey] = new Set();
+            });
+          }
+
+          if (!this._listeners[type]) {
+            this._listeners[type] = new Set();
+          }
+
+          this._listeners[type].add(listener);
+        };
+
+        OC.prototype.removeEventListener = function (type, listener) {
+          if (this._listeners[type]) {
+            this._listeners[type].delete(listener);
+          }
+        };
+
+        OC.prototype.dispatchEvent = function (e) {
+          if (!e?.type) return false;
+
+          // Safety check - ensure we have listeners object
+          if (!this._listeners) {
+            this._listeners = {};
+            const eventTypes = ["start", "end", "change", "control"];
+            eventTypes.forEach((typeKey) => {
+              this._listeners[typeKey] = new Set();
+            });
+            return false;
+          }
+
+          // Safety check - ensure we have a set for this event type
+          if (!this._listeners[e.type]) {
+            this._listeners[e.type] = new Set();
+            return false;
+          }
+
+          e.target = this;
+
+          // Convert to array before iteration to avoid issues with modification during iteration
+          const listeners = Array.from(this._listeners[e.type]);
+          listeners.forEach((fn) => {
+            if (typeof fn === "function") {
+              try {
+                fn.call(this, e);
+              } catch (error) {
+                console.warn(`Error in ${e.type} event handler:`, error);
+              }
             }
-          };
-        }
-        return OC;
+          });
+
+          return true;
+        };
+
+        const originalDispose = OC.prototype.dispose || function () {};
+        OC.prototype.dispose = function () {
+          originalDispose.call(this);
+          if (this._listeners) {
+            // Clear all listeners
+            Object.keys(this._listeners).forEach((type) => {
+              this._listeners[type].clear();
+            });
+            this._listeners = null;
+          }
+        };
       }
-    );
+      return OC;
+    });
   }
 
   return orbitControlsPromise;
