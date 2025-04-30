@@ -96,20 +96,17 @@ function createProjectCard(project) {
     "div",
     "game-image-container portfolio-canvas"
   );
-  const imageElement = createElement("div", "game-image");
-  if (project.imageUrl)
-    imageElement.style.backgroundImage = `url(${project.imageUrl})`;
-
-  const closeBtn = createElement("button", "btn-close");
-  closeBtn.textContent = "×";
-  closeBtn.onclick = (e) => toggleExpand(e, project.id);
-
-  imageContainer.append(imageElement, closeBtn);
 
   const isLowEndDevice = detectLowEndDevice();
 
   if (isLowEndDevice) {
-    // Add an img element for low-end devices
+    // Add background image and img element for low-end devices
+    const imageElement = createElement("div", "game-image");
+    if (project.imageUrl)
+      imageElement.style.backgroundImage = `url(${project.imageUrl})`;
+
+    imageContainer.appendChild(imageElement);
+
     if (project.imageUrl) {
       const fallbackImg = createElement("img", "fallback-image", {
         src: project.imageUrl,
@@ -119,7 +116,7 @@ function createProjectCard(project) {
       imageContainer.appendChild(fallbackImg);
     }
   } else {
-    // Add canvas for 3D visualization for capable devices
+    // Add canvas for 3D visualization for capable devices - no image
     const canvas = createElement("canvas", "threejs-canvas", {
       width: 300,
       height: 200,
@@ -130,6 +127,12 @@ function createProjectCard(project) {
       (canvas.style.cursor = "grab");
     imageContainer.appendChild(canvas);
   }
+
+  const closeBtn = createElement("button", "btn-close");
+  closeBtn.textContent = "×";
+  closeBtn.onclick = (e) => toggleExpand(e, project.id);
+
+  imageContainer.appendChild(closeBtn);
 
   const overlay = createElement("div", "game-overlay");
   const title = createElement("h3", "game-title");
