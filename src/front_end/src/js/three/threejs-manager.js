@@ -110,6 +110,15 @@ const orbitControlsConfig = {
   maxDistance: CONSTANTS.MAX_CAMERA_DISTANCE,
 };
 
+function detectProblemBrowser() {
+  // Add detection for browsers with known issues
+  const userAgent = navigator.userAgent.toLowerCase();
+  return {
+    hasIssues: userAgent.includes("problematic-string"),
+    details: userAgent,
+  };
+}
+
 /**
  * Create shared lights that can be cloned for different scenes
  */
@@ -154,21 +163,37 @@ export function initThreeJS() {
     return;
   }
 
-  console.log("Initializing Three.js");
+  const isCloudflarePages = window.location.hostname.includes("pages.dev");
+  console.log(
+    `Initializing Three.js in ${
+      isCloudflarePages ? "Cloudflare Pages" : "standard"
+    } environment`
+  );
+
+  // Set up error tracking for Cloudflare
+  if (isCloudflarePages) {
+    window.addEventListener("error", function (event) {
+      console.error("Global error caught:", event.error);
+    });
+  }
 
   try {
     // Try creating the renderer with robust error handling
-    renderer = new WebGLRenderer({
-      powerPreference: isLowEndDevice ? "low-power" : "high-performance",
-      precision: isLowEndDevice ? "lowp" : "mediump",
-      antialias: !isLowEndDevice,
+    const rendererOptions = {
+      powerPreference:
+        isCloudflarePages || isLowEndDevice ? "low-power" : "high-performance",
+      precision: isCloudflarePages || isLowEndDevice ? "lowp" : "mediump",
+      antialias: !(isCloudflarePages || isLowEndDevice),
       alpha: true,
       preserveDrawingBuffer: true,
       premultipliedAlpha: true,
       stencil: false,
       depth: true,
       failIfMajorPerformanceCaveat: false,
-    });
+    };
+
+    console.log("Creating WebGLRenderer with options:", rendererOptions);
+    renderer = new WebGLRenderer(rendererOptions);
 
     // Check if renderer was created successfully
     if (!renderer) {
@@ -180,6 +205,8 @@ export function initThreeJS() {
     if (!gl) {
       throw new Error("WebGL context not available");
     }
+
+    console.log("WebGL context created successfully");
 
     // Set up WebGL context event listeners
     renderer.domElement.addEventListener(
@@ -205,21 +232,25 @@ export function initThreeJS() {
     // Configure renderer
     renderer.setClearColor(0x000000, 0);
     renderer.setPixelRatio(
-      isLowEndDevice ? 1 : Math.min(window.devicePixelRatio, 2)
+      isCloudflarePages || isLowEndDevice
+        ? 1
+        : Math.min(window.devicePixelRatio, 2)
     );
     renderer.setSize(
       CONSTANTS.DEFAULT_CANVAS_WIDTH,
       CONSTANTS.DEFAULT_CANVAS_HEIGHT,
       false
     );
-    renderer.shadowMap.enabled = !isLowEndDevice;
+    renderer.shadowMap.enabled = !(isCloudflarePages || isLowEndDevice);
     renderer.shadowMap.type = PCFSoftShadowMap;
     renderer.info.autoReset = false;
 
     // Initialize shared resources
+    console.log("Initializing shared resources");
     initSharedLights();
 
     // Initialize systems
+    console.log("Initializing subsystems");
     initUserInteraction();
     onUserInteraction(() => {
       if (!isAnimating) {
@@ -227,6 +258,7 @@ export function initThreeJS() {
         requestAnimationFrame(animate);
       }
     });
+
     initCameraRegistry();
     initModelManager();
     initGameScene();
@@ -236,6 +268,11 @@ export function initThreeJS() {
     let visibleProjects = [];
     try {
       visibleProjects = getVisibleProjectModels();
+      if (isCloudflarePages) {
+        // Limit initial models on Cloudflare to improve performance
+        visibleProjects = visibleProjects.slice(0, 3);
+      }
+      console.log(`Found ${visibleProjects.length} visible projects`);
     } catch (error) {
       console.error("Error getting visible projects:", error);
       visibleProjects = [];
@@ -245,20 +282,39 @@ export function initThreeJS() {
     const initSequence = async () => {
       try {
         // Start with a small batch
+        console.log("Loading initial models");
         await preloadProjectModels(
-          visibleProjects.slice(0, 3),
+          visibleProjects.slice(0, isCloudflarePages ? 2 : 3),
           visibleProjects
         );
 
+        console.log("Initializing canvases");
         initAboutCanvas();
+
+        console.log("Initializing portfolio canvases");
         initPortfolioCanvases();
+
+        console.log("Activating cameras");
         activateAllCameras();
 
         isAnimating = true;
         requestAnimationFrame(animate);
 
-        // Load remaining models
-        return preloadProjectModels(visibleProjects.slice(3), visibleProjects);
+        // Load remaining models with delay on Cloudflare
+        if (isCloudflarePages) {
+          console.log("Scheduling delayed loading of remaining models");
+          setTimeout(() => {
+            preloadProjectModels(visibleProjects.slice(2)).catch((error) =>
+              console.warn("Delayed model loading error:", error)
+            );
+          }, 2000);
+        } else {
+          // Load remaining models immediately
+          return preloadProjectModels(
+            visibleProjects.slice(3),
+            visibleProjects
+          );
+        }
       } catch (error) {
         console.error("Error in initialization sequence:", error);
       }
@@ -402,14 +458,30 @@ function initGameScene() {
  * Initialize project card scene
  */
 function initProjectCardScene() {
+  const isCloudflarePages = window.location.hostname.includes("pages.dev");
+  console.log("Initializing project card scene");
+
   const portfolioItems = document.querySelectorAll(".portfolio-item");
   projectCardScene = new Scene();
   projectCardScene.background = null;
 
-  // Add lighting using shared lights
-  projectCardScene.add(getClonedLight("ambientLight", { intensity: 0.8 }));
-  projectCardScene.add(getClonedLight("directionalLight1", { intensity: 0.6 }));
-  projectCardScene.add(getClonedLight("directionalLight2"));
+  // Add lighting using shared lights with adjusted intensity for Cloudflare
+  projectCardScene.add(
+    getClonedLight("ambientLight", {
+      intensity: isCloudflarePages ? 0.9 : 0.8,
+    })
+  );
+
+  projectCardScene.add(
+    getClonedLight("directionalLight1", {
+      intensity: isCloudflarePages ? 0.7 : 0.6,
+    })
+  );
+
+  // Only add second light if not on Cloudflare (for performance)
+  if (!isCloudflarePages) {
+    projectCardScene.add(getClonedLight("directionalLight2"));
+  }
 
   // Add fallback cube
   projectCardScene.add(getFallbackCube());
@@ -419,6 +491,7 @@ function initProjectCardScene() {
     .map((item) => item.getAttribute("data-model"))
     .filter(Boolean);
 
+  console.log(`Found ${modelNames.length} models for project cards`);
   calculateModelPositions(modelNames);
 }
 
@@ -511,6 +584,22 @@ function initPortfolioCanvases() {
 function setupVisibleProjectCameras(portfolioItems) {
   if (!portfolioItems.length) return;
 
+  const isCloudflarePages = window.location.hostname.includes("pages.dev");
+  console.log(
+    `Setting up visible project cameras (${portfolioItems.length} items)${
+      isCloudflarePages ? " on Cloudflare" : ""
+    }`
+  );
+
+  // Define a wrapper for requestIdleCallback
+  const safeRequestIdleCallback = (callback) => {
+    if ("requestIdleCallback" in window) {
+      return window.requestIdleCallback(callback);
+    } else {
+      return setTimeout(callback, 1);
+    }
+  };
+
   const observer = new IntersectionObserver(
     (entries) => {
       entries.forEach((entry) => {
@@ -527,11 +616,17 @@ function setupVisibleProjectCameras(portfolioItems) {
           });
 
           if (!existingCamera) {
-            requestIdleCallback(() => setupProjectCamera(item, index));
+            console.log(`Item ${index} is now visible, setting up camera`);
+            safeRequestIdleCallback(() => setupProjectCamera(item, index));
           }
         } else {
           const modelName = item.getAttribute("data-model");
-          if (modelName) markModelUnused(modelName);
+          if (modelName) {
+            console.log(
+              `Item ${index} is no longer visible, marking model unused`
+            );
+            markModelUnused(modelName);
+          }
         }
       });
     },
@@ -544,21 +639,26 @@ function setupVisibleProjectCameras(portfolioItems) {
   // Process items - immediately setup visible ones, observe others
   let visibleCount = 0;
   const setupPromises = [];
+  const maxVisiblePriority = isCloudflarePages
+    ? 2
+    : CONSTANTS.VISIBLE_PRIORITY_COUNT;
+
+  console.log(`Setting up ${maxVisiblePriority} priority cameras`);
 
   portfolioItems.forEach((item, index) => {
-    if (
-      isElementInViewport(item) &&
-      visibleCount < CONSTANTS.VISIBLE_PRIORITY_COUNT
-    ) {
+    if (isElementInViewport(item) && visibleCount < maxVisiblePriority) {
+      console.log(`Setting up priority camera ${index}`);
       setupPromises.push(setupProjectCamera(item, index));
       visibleCount++;
     }
     observer.observe(item);
   });
 
-  Promise.all(setupPromises).catch((err) =>
-    console.warn("Error setting up priority cameras:", err)
-  );
+  Promise.all(setupPromises)
+    .then(() =>
+      console.log(`${visibleCount} priority cameras set up successfully`)
+    )
+    .catch((err) => console.warn("Error setting up priority cameras:", err));
 }
 
 /**
@@ -624,6 +724,13 @@ const sharedCanvasContextOptions = {
 async function setupProjectCamera(item, index) {
   if (!item) return null;
 
+  const isCloudflarePages = window.location.hostname.includes("pages.dev");
+  console.log(
+    `Setting up project camera ${index}${
+      isCloudflarePages ? " on Cloudflare" : ""
+    }`
+  );
+
   // Get canvas element
   const canvas = item.querySelector(".threejs-canvas");
   if (!canvas) {
@@ -632,17 +739,21 @@ async function setupProjectCamera(item, index) {
   }
 
   // Skip if already processed
-  if (canvas?._offscreenTransferred) {
+  if (canvas?._processed) {
     return null;
   }
+
+  // Mark as processed to avoid duplicate setup
+  canvas._processed = true;
 
   let ctx;
   let offscreenCanvas = null;
 
   try {
-    // Try to use OffscreenCanvas when available
-    if ("transferControlToOffscreen" in canvas) {
+    // Avoid OffscreenCanvas on Cloudflare Pages
+    if (!isCloudflarePages && "transferControlToOffscreen" in canvas) {
       try {
+        console.log(`Using OffscreenCanvas for project ${index}`);
         offscreenCanvas = canvas.transferControlToOffscreen();
         ctx = offscreenCanvas.getContext("2d", sharedCanvasContextOptions);
         canvas._offscreenTransferred = true;
@@ -652,12 +763,14 @@ async function setupProjectCamera(item, index) {
         ctx = canvas.getContext("2d", sharedCanvasContextOptions);
       }
     } else {
+      console.log(`Using standard Canvas for project ${index}`);
       ctx = canvas.getContext("2d", sharedCanvasContextOptions);
     }
   } catch (contextError) {
     console.error("Failed to get canvas context:", contextError);
     // Fallback to basic options
     try {
+      console.log("Attempting fallback context creation");
       ctx = canvas.getContext("2d", { alpha: true });
     } catch (fallbackError) {
       console.error(
@@ -691,6 +804,7 @@ async function setupProjectCamera(item, index) {
 
   // Get model safely
   const modelName = item.getAttribute("data-model") || FALLBACK_CUBE_NAME;
+  console.log(`Loading model ${modelName} for project ${index}`);
   let model;
 
   try {
@@ -725,74 +839,49 @@ async function setupProjectCamera(item, index) {
   // Create controls - with safe loading
   let controls = null;
 
-  // Load OrbitControls safely
-  if (!OrbitControls) {
+  console.log(`Creating controls for project ${index}`);
+
+  // For Cloudflare Pages, start with simpler setup
+  if (isCloudflarePages) {
     try {
-      OrbitControls = await loadAndPatchOrbitControls();
-    } catch (error) {
-      console.error("Failed to load OrbitControls:", error);
-    }
-  }
-
-  try {
-    if (OrbitControls) {
-      controls = new OrbitControls(camera, canvas);
-
-      // Make sure the controls instance has listeners before continuing
-      if (!controls._listeners) {
-        controls._listeners = {};
-        const eventTypes = ["start", "end", "change", "control"];
-        eventTypes.forEach((type) => {
-          controls._listeners[type] = new Set();
+      console.log("Using simplified controls setup for Cloudflare");
+      const SimpleOrbitControls = await import(
+        "../extern/three/OrbitControls.js"
+      )
+        .then((module) => module.OrbitControls)
+        .catch((error) => {
+          console.error("Failed to import OrbitControls directly:", error);
+          return null;
         });
-      }
 
-      // Apply configuration safely
-      Object.assign(controls, orbitControlsConfig);
-      controls.target.copy(target);
+      if (SimpleOrbitControls) {
+        controls = new SimpleOrbitControls(camera, canvas);
 
-      const usePassive = { passive: true };
+        // Apply basic configuration
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.autoRotate = true;
+        controls.autoRotateSpeed = CONSTANTS.AUTO_ROTATE_SPEED;
+        controls.enableZoom = true;
+        controls.minDistance = CONSTANTS.MIN_CAMERA_DISTANCE;
+        controls.maxDistance = CONSTANTS.MAX_CAMERA_DISTANCE;
+        controls.target.copy(target);
 
-      // Safe event listener adding
-      try {
-        // Add robust event listeners with try/catch
-        const addEventSafely = (type, handler) => {
-          try {
-            controls.addEventListener(type, handler, usePassive);
-          } catch (err) {
-            console.warn(`Failed to add ${type} listener:`, err);
-          }
-        };
-
-        addEventSafely("start", () => {
+        // Add basic listeners
+        canvas.style.cursor = "grab";
+        controls.addEventListener("start", () => {
           canvas.style.cursor = "grabbing";
           handleUserInteraction();
         });
-
-        addEventSafely("end", () => {
+        controls.addEventListener("end", () => {
           canvas.style.cursor = "grab";
         });
-      } catch (eventError) {
-        console.warn("Error adding control event listeners:", eventError);
-      }
 
-      try {
-        controls.update();
-      } catch (updateError) {
-        console.warn("Error in initial controls update:", updateError);
-        // Try one more time after ensuring listeners exist
-        if (!controls._listeners) {
-          controls._listeners = {};
-          const eventTypes = ["start", "end", "change", "control"];
-          eventTypes.forEach((type) => {
-            controls._listeners[type] = new Set();
-          });
-        }
         try {
           controls.update();
-        } catch (retryError) {
-          console.warn("Retry controls update failed:", retryError);
-          // Fall back to simple rotation if all else fails
+          console.log("Controls setup successful for Cloudflare");
+        } catch (updateError) {
+          console.warn("Controls update failed:", updateError);
           controls = createSimpleAutorotation(
             camera,
             target,
@@ -800,9 +889,20 @@ async function setupProjectCamera(item, index) {
             index
           );
         }
+      } else {
+        console.warn("SimpleOrbitControls not available, using fallback");
+        controls = createSimpleAutorotation(
+          camera,
+          target,
+          cameraDistance,
+          index
+        );
       }
-    } else {
-      // Fallback to simple rotation
+    } catch (cloudflareError) {
+      console.error(
+        "Cloudflare controls setup failed completely:",
+        cloudflareError
+      );
       controls = createSimpleAutorotation(
         camera,
         target,
@@ -810,10 +910,85 @@ async function setupProjectCamera(item, index) {
         index
       );
     }
-  } catch (controlsError) {
-    console.error("Failed to create controls:", controlsError);
-    // Use simple autorotation as fallback
-    controls = createSimpleAutorotation(camera, target, cameraDistance, index);
+  } else {
+    // Standard environment - use patched controls
+    try {
+      if (!OrbitControls) {
+        OrbitControls = await loadAndPatchOrbitControls();
+      }
+
+      if (OrbitControls) {
+        controls = new OrbitControls(camera, canvas);
+
+        // Apply configuration safely
+        Object.assign(controls, orbitControlsConfig);
+        controls.target.copy(target);
+
+        const usePassive = { passive: true };
+
+        // Safe event listener adding
+        try {
+          // Add robust event listeners with try/catch
+          const addEventSafely = (type, handler) => {
+            try {
+              controls.addEventListener(type, handler, usePassive);
+            } catch (err) {
+              console.warn(`Failed to add ${type} listener:`, err);
+            }
+          };
+
+          addEventSafely("start", () => {
+            canvas.style.cursor = "grabbing";
+            handleUserInteraction();
+          });
+
+          addEventSafely("end", () => {
+            canvas.style.cursor = "grab";
+          });
+        } catch (eventError) {
+          console.warn("Error adding control event listeners:", eventError);
+        }
+
+        try {
+          controls.update();
+        } catch (updateError) {
+          console.warn("Error in initial controls update:", updateError);
+          // Try one more time after ensuring listeners exist
+          if (!controls._listeners) {
+            controls._initListeners();
+          }
+          try {
+            controls.update();
+          } catch (retryError) {
+            console.warn("Retry controls update failed:", retryError);
+            // Fall back to simple rotation if all else fails
+            controls = createSimpleAutorotation(
+              camera,
+              target,
+              cameraDistance,
+              index
+            );
+          }
+        }
+      } else {
+        // Fallback to simple rotation
+        controls = createSimpleAutorotation(
+          camera,
+          target,
+          cameraDistance,
+          index
+        );
+      }
+    } catch (controlsError) {
+      console.error("Failed to create controls:", controlsError);
+      // Use simple autorotation as fallback
+      controls = createSimpleAutorotation(
+        camera,
+        target,
+        cameraDistance,
+        index
+      );
+    }
   }
 
   // Get portfolio section details
@@ -868,6 +1043,7 @@ async function setupProjectCamera(item, index) {
       }
     }
 
+    console.log(`Project camera ${index} setup complete`);
     return cameraIndex;
   } catch (registryError) {
     console.error("Failed to register camera:", registryError);
@@ -882,9 +1058,12 @@ function animate(timestamp) {
   if (!isAnimating) return;
 
   try {
+    const isCloudflarePages = window.location.hostname.includes("pages.dev");
     const deltaTime = timestamp - lastRenderTime;
     const frameDelay = isIdle()
       ? CONSTANTS.IDLE_FRAME_INTERVAL
+      : isCloudflarePages
+      ? CONSTANTS.FRAME_INTERVAL * 1.5
       : CONSTANTS.FRAME_INTERVAL;
 
     if (deltaTime >= frameDelay) {
@@ -904,6 +1083,31 @@ function animate(timestamp) {
           renderActiveCameras(renderer, projectCardScene);
         } else {
           console.warn("WebGL context lost or invalid, skipping render");
+
+          // Try to recover renderer
+          if (
+            isCloudflarePages &&
+            (!renderer || renderer.getContext().isContextLost())
+          ) {
+            console.log("Attempting to recover lost WebGL context");
+            try {
+              renderer = new WebGLRenderer({
+                antialias: false,
+                alpha: true,
+                precision: "lowp",
+                powerPreference: "low-power",
+              });
+              renderer.setClearColor(0x000000, 0);
+              renderer.setPixelRatio(1);
+              renderer.setSize(
+                CONSTANTS.DEFAULT_CANVAS_WIDTH,
+                CONSTANTS.DEFAULT_CANVAS_HEIGHT,
+                false
+              );
+            } catch (recoveryError) {
+              console.error("Renderer recovery failed:", recoveryError);
+            }
+          }
         }
       } catch (renderError) {
         console.error("Error in render cycle:", renderError);
@@ -953,163 +1157,194 @@ let orbitControlsPromise = null;
 async function loadAndPatchOrbitControls() {
   if (OrbitControls) return OrbitControls;
 
+  const isCloudflarePages = window.location.hostname.includes("pages.dev");
+  console.log(
+    "Loading OrbitControls in environment:",
+    isCloudflarePages ? "Cloudflare Pages" : "Standard"
+  );
+
   if (!orbitControlsPromise) {
-    orbitControlsPromise = await import(
-      "../extern/three/OrbitControls.js"
-    ).then(({ OrbitControls: OC }) => {
-      if (!OC.prototype._patched) {
-        OC.prototype._patched = true;
+    // Use more reliable path resolution
+    const controlsPath = isCloudflarePages
+      ? "/extern/three/OrbitControls.js"
+      : "../extern/three/OrbitControls.js";
 
-        // Initialize _listeners object (important to do this here)
-        const originalConstructor = OC;
-        OC = function (...args) {
-          const instance = new originalConstructor(...args);
-          // Initialize listeners for each instance
-          instance._listeners = {};
-          const eventTypes = ["start", "end", "change", "control"];
-          eventTypes.forEach((type) => {
-            instance._listeners[type] = new Set();
-          });
-          return instance;
-        };
+    orbitControlsPromise = import(controlsPath)
+      .then(({ OrbitControls: OC }) => {
+        console.log("OrbitControls module loaded successfully");
 
-        // Copy prototype and constructor properties
-        OC.prototype = originalConstructor.prototype;
-        OC.prototype.constructor = OC;
+        if (!OC.prototype._patched) {
+          console.log("Patching OrbitControls prototype");
+          OC.prototype._patched = true;
 
-        const originalOnMouseDown = OC.prototype.onMouseDown;
-        OC.prototype.onMouseDown = function (event) {
-          this._dragging = true;
-          this._lastDragTime = performance.now();
-          handleUserInteraction();
-
-          // Ensure listeners exist for this instance
-          if (!this._listeners) {
+          // Add _initListeners helper method
+          OC.prototype._initListeners = function () {
             this._listeners = {};
             const eventTypes = ["start", "end", "change", "control"];
             eventTypes.forEach((type) => {
               this._listeners[type] = new Set();
             });
-          }
+          };
 
-          if (originalOnMouseDown) originalOnMouseDown.call(this, event);
-        };
+          // Patch methods with safer versions
+          const originalOnMouseDown = OC.prototype.onMouseDown;
+          OC.prototype.onMouseDown = function (event) {
+            if (!this._listeners) this._initListeners();
+            this._dragging = true;
+            this._lastDragTime = performance.now();
+            handleUserInteraction();
+            if (originalOnMouseDown) originalOnMouseDown.call(this, event);
+          };
 
-        const originalOnMouseUp = OC.prototype.onMouseUp;
-        OC.prototype.onMouseUp = function (event) {
-          this._dragging = false;
-          if (originalOnMouseUp) originalOnMouseUp.call(this, event);
-        };
+          const originalOnMouseUp = OC.prototype.onMouseUp;
+          OC.prototype.onMouseUp = function (event) {
+            this._dragging = false;
+            if (originalOnMouseUp) originalOnMouseUp.call(this, event);
+          };
 
-        const originalOnMouseMove = OC.prototype.onMouseMove;
-        OC.prototype.onMouseMove = function (event) {
-          const now = performance.now();
-          if (this._lastMoveTime && now - this._lastMoveTime <= 16)
-            event.preventDefault();
-          this._lastMoveTime = now;
-          if (this._dragging) this._lastDragTime = now;
-          if (originalOnMouseMove) originalOnMouseMove.call(this, event);
-        };
-
-        const originalOnTouchStart = OC.prototype.onTouchStart;
-        OC.prototype.onTouchStart = function (event) {
-          this._dragging = true;
-          this._lastDragTime = performance.now();
-          handleUserInteraction();
-          if (originalOnTouchStart) originalOnTouchStart.call(this, event);
-        };
-
-        const originalOnTouchEnd = OC.prototype.onTouchEnd;
-        OC.prototype.onTouchEnd = function (event) {
-          this._dragging = false;
-          if (originalOnTouchEnd) originalOnTouchEnd.call(this, event);
-        };
-
-        const originalOnTouchMove = OC.prototype.onTouchMove;
-        OC.prototype.onTouchMove = function (event) {
-          const now = performance.now();
-          if (!this._lastMoveTime || now - this._lastMoveTime > 16) {
+          const originalOnMouseMove = OC.prototype.onMouseMove;
+          OC.prototype.onMouseMove = function (event) {
+            const now = performance.now();
+            if (this._lastMoveTime && now - this._lastMoveTime <= 16)
+              event.preventDefault();
             this._lastMoveTime = now;
-            this._lastDragTime = now;
-            if (originalOnTouchMove) originalOnTouchMove.call(this, event);
-          } else {
-            event.preventDefault();
-          }
-        };
+            if (this._dragging) this._lastDragTime = now;
+            if (originalOnMouseMove) originalOnMouseMove.call(this, event);
+          };
 
-        // Safer event handling methods
-        OC.prototype.addEventListener = function (type, listener) {
-          if (!this._listeners) {
-            this._listeners = {};
-            const eventTypes = ["start", "end", "change", "control"];
-            eventTypes.forEach((typeKey) => {
-              this._listeners[typeKey] = new Set();
-            });
-          }
+          const originalOnTouchStart = OC.prototype.onTouchStart;
+          OC.prototype.onTouchStart = function (event) {
+            if (!this._listeners) this._initListeners();
+            this._dragging = true;
+            this._lastDragTime = performance.now();
+            handleUserInteraction();
+            if (originalOnTouchStart) originalOnTouchStart.call(this, event);
+          };
 
-          if (!this._listeners[type]) {
-            this._listeners[type] = new Set();
-          }
+          const originalOnTouchEnd = OC.prototype.onTouchEnd;
+          OC.prototype.onTouchEnd = function (event) {
+            this._dragging = false;
+            if (originalOnTouchEnd) originalOnTouchEnd.call(this, event);
+          };
 
-          this._listeners[type].add(listener);
-        };
-
-        OC.prototype.removeEventListener = function (type, listener) {
-          if (this._listeners[type]) {
-            this._listeners[type].delete(listener);
-          }
-        };
-
-        OC.prototype.dispatchEvent = function (e) {
-          if (!e?.type) return false;
-
-          // Safety check - ensure we have listeners object
-          if (!this._listeners) {
-            this._listeners = {};
-            const eventTypes = ["start", "end", "change", "control"];
-            eventTypes.forEach((typeKey) => {
-              this._listeners[typeKey] = new Set();
-            });
-            return false;
-          }
-
-          // Safety check - ensure we have a set for this event type
-          if (!this._listeners[e.type]) {
-            this._listeners[e.type] = new Set();
-            return false;
-          }
-
-          e.target = this;
-
-          // Convert to array before iteration to avoid issues with modification during iteration
-          const listeners = Array.from(this._listeners[e.type]);
-          listeners.forEach((fn) => {
-            if (typeof fn === "function") {
-              try {
-                fn.call(this, e);
-              } catch (error) {
-                console.warn(`Error in ${e.type} event handler:`, error);
-              }
+          const originalOnTouchMove = OC.prototype.onTouchMove;
+          OC.prototype.onTouchMove = function (event) {
+            const now = performance.now();
+            if (!this._lastMoveTime || now - this._lastMoveTime > 16) {
+              this._lastMoveTime = now;
+              this._lastDragTime = now;
+              if (originalOnTouchMove) originalOnTouchMove.call(this, event);
+            } else {
+              event.preventDefault();
             }
-          });
+          };
 
-          return true;
-        };
+          // Safer event handling methods
+          OC.prototype.addEventListener = function (type, listener) {
+            if (!this._listeners) this._initListeners();
 
-        const originalDispose = OC.prototype.dispose || function () {};
-        OC.prototype.dispose = function () {
-          originalDispose.call(this);
-          if (this._listeners) {
-            // Clear all listeners
-            Object.keys(this._listeners).forEach((type) => {
-              this._listeners[type].clear();
+            if (!this._listeners[type]) {
+              this._listeners[type] = new Set();
+            }
+
+            this._listeners[type].add(listener);
+          };
+
+          OC.prototype.removeEventListener = function (type, listener) {
+            if (this._listeners && this._listeners[type]) {
+              this._listeners[type].delete(listener);
+            }
+          };
+
+          OC.prototype.dispatchEvent = function (e) {
+            if (!e?.type) return false;
+
+            // Safety check - ensure we have listeners object
+            if (!this._listeners) this._initListeners();
+
+            // Safety check - ensure we have a set for this event type
+            if (!this._listeners[e.type]) {
+              this._listeners[e.type] = new Set();
+              return false;
+            }
+
+            e.target = this;
+
+            // Convert to array before iteration to avoid issues with modification during iteration
+            const listeners = Array.from(this._listeners[e.type]);
+            listeners.forEach((fn) => {
+              if (typeof fn === "function") {
+                try {
+                  fn.call(this, e);
+                } catch (error) {
+                  console.warn(`Error in ${e.type} event handler:`, error);
+                }
+              }
             });
-            this._listeners = null;
+
+            return true;
+          };
+
+          const originalDispose = OC.prototype.dispose || function () {};
+          OC.prototype.dispose = function () {
+            originalDispose.call(this);
+            if (this._listeners) {
+              // Clear all listeners
+              Object.keys(this._listeners).forEach((type) => {
+                this._listeners[type].clear();
+              });
+              this._listeners = null;
+            }
+          };
+
+          // Enhance constructor to initialize listeners
+          const originalConstructor = OC;
+          function EnhancedOrbitControls(...args) {
+            const instance = new originalConstructor(...args);
+            instance._initListeners();
+            return instance;
+          }
+
+          // Copy prototype and constructor properties
+          EnhancedOrbitControls.prototype = originalConstructor.prototype;
+          EnhancedOrbitControls.prototype.constructor = EnhancedOrbitControls;
+
+          // Replace original with enhanced version
+          OC = EnhancedOrbitControls;
+        }
+        return OC;
+      })
+      .catch((error) => {
+        console.error("Failed to load OrbitControls:", error);
+        // Return a minimal fallback that won't crash
+        return class MinimalOrbitControls {
+          constructor(camera, domElement) {
+            this.camera = camera;
+            this.domElement = domElement;
+            this._initListeners();
+            this.target = new Vector3(0, 0, 0);
+            console.warn("Using minimal OrbitControls fallback");
+          }
+          _initListeners() {
+            this._listeners = {};
+            ["start", "end", "change", "control"].forEach((type) => {
+              this._listeners[type] = new Set();
+            });
+          }
+          update() {}
+          dispose() {}
+          addEventListener(type, listener) {
+            if (!this._listeners[type]) this._listeners[type] = new Set();
+            this._listeners[type].add(listener);
+          }
+          removeEventListener(type, listener) {
+            if (this._listeners[type]) this._listeners[type].delete(listener);
+          }
+          dispatchEvent() {
+            return true;
           }
         };
-      }
-      return OC;
-    });
+      });
   }
 
   return orbitControlsPromise;

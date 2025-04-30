@@ -216,14 +216,14 @@ export default defineConfig({
       : '"development"',
   },
 
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
-      "@js": path.resolve(__dirname, "./src/js"),
-      "@css": path.resolve(__dirname, "./src/css"),
-      "@documents": path.resolve(__dirname, "./public/documents"),
-      "@models": path.resolve(__dirname, "./public/models"),
-      "@shaders": path.resolve(__dirname, "./public/shaders"),
-    },
-  },
+  //   resolve: {
+  //     alias: {
+  //       "@": path.resolve(__dirname, "./src"),
+  //       "@js": path.resolve(__dirname, "./src/js"),
+  //       "@css": path.resolve(__dirname, "./src/css"),
+  //       "@documents": path.resolve(__dirname, "./public/documents"),
+  //       "@models": path.resolve(__dirname, "./public/models"),
+  //       "@shaders": path.resolve(__dirname, "./public/shaders"),
+  //     },
+  //   },
 });
