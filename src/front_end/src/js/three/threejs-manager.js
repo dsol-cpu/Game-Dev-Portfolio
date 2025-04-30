@@ -170,6 +170,10 @@ export function initThreeJS() {
       await preloadProjectModels(visibleProjects.slice(0, 3), visibleProjects);
       console.log("Priority models loaded");
 
+      //Initialize About Me Section canvas
+      initAboutCanvas();
+      console.log("About section canvas initialized");
+
       // Then initialize portfolio canvases
       initPortfolioCanvases();
       console.log("Portfolio canvases initialized");
@@ -342,6 +346,19 @@ function getVisibleProjectModels() {
 }
 
 /**
+ * Initialize about me section canvas with lazy loading
+ */
+function initAboutCanvas() {
+  const aboutSection = document.querySelector(".about");
+  if (!aboutSection) {
+    console.warn("No about canvas found!");
+  }
+
+  console.log(`Setting up canvas for about me section`);
+  const camera = getCamerasBySection();
+}
+
+/**
  * Initialize portfolio canvases with lazy loading
  */
 function initPortfolioCanvases() {
@@ -378,7 +395,7 @@ function setupVisibleProjectCameras(portfolioItems) {
           // Check if camera already exists
           const existingCameras = getCamerasBySection(sectionId);
           const existingCamera = existingCameras.some(
-            (camera) => camera.metadata && camera.metadata.index === index
+            (camera) => camera.metadata?.index === index
           );
 
           if (!existingCamera) {
@@ -496,18 +513,15 @@ async function setupProjectCamera(item, index) {
   let offscreenCanvas = null;
 
   // Try to use offscreen canvas if supported
-  if (window.OffscreenCanvas) {
-    try {
-      offscreenCanvas = canvas.transferControlToOffscreen();
-      ctx = offscreenCanvas.getContext("2d", ctxOptions);
-      // Mark the original canvas as transferred
-      canvas._offscreenTransferred = true;
-      canvas._offscreen = offscreenCanvas;
-    } catch (e) {
-      console.warn("OffscreenCanvas failed, using regular canvas", e);
-      ctx = canvas.getContext("2d", ctxOptions);
-    }
-  } else {
+  if (!window.OffscreenCanvas) ctx = canvas.getContext("2d", ctxOptions);
+  try {
+    offscreenCanvas = canvas.transferControlToOffscreen();
+    ctx = offscreenCanvas.getContext("2d", ctxOptions);
+    // Mark the original canvas as transferred
+    canvas._offscreenTransferred = true;
+    canvas._offscreen = offscreenCanvas;
+  } catch (e) {
+    console.warn("OffscreenCanvas failed, using regular canvas", e);
     ctx = canvas.getContext("2d", ctxOptions);
   }
 
@@ -743,15 +757,14 @@ async function loadAndPatchOrbitControls() {
           OC.prototype.onMouseMove = function (event) {
             const now = performance.now();
             // Only process move events at most every 16ms when dragging
-            if (!this._lastMoveTime || now - this._lastMoveTime > 16) {
-              this._lastMoveTime = now;
-              if (this._dragging) {
-                this._lastDragTime = now;
-              }
-              if (originalOnMouseMove) originalOnMouseMove.call(this, event);
-            } else {
+            if (this._lastMoveTime && now - this._lastMoveTime <= 16)
               event.preventDefault();
+
+            this._lastMoveTime = now;
+            if (this._dragging) {
+              this._lastDragTime = now;
             }
+            if (originalOnMouseMove) originalOnMouseMove.call(this, event);
           };
 
           const originalOnTouchStart = OC.prototype.onTouchStart;

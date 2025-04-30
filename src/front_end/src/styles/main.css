@@ -79,6 +79,14 @@ section {
   display: block;
 }
 
+section .container {
+  min-height: 100vh;
+  background-color: var(--light-color);
+  margin: 3px;
+  border-width: 5px;
+  border-color: var(--accent-color);
+}
+
 .skill-bar {
   margin-bottom: 1.5rem;
 }
