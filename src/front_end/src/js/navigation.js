@@ -2,104 +2,99 @@
  * @fileoverview Handles site navigation with smooth scrolling to sections
  */
 
+// Constants at file scope for memory efficiency
+const NAV_LINKS_SELECTOR = ".nav-link";
+const SECTIONS_SELECTOR = "section";
+const DATA_TARGET = "data-target";
+const ACTIVE_CLASS = "active";
+
+// Cache DOM queries at file scope to avoid repeated lookups
+const navLinks = document.querySelectorAll(NAV_LINKS_SELECTOR);
+const sections = document.querySelectorAll(SECTIONS_SELECTOR);
+const navLinksLength = navLinks.length; // Store navLinks length for faster iteration
+
 /**
- * Initialize navigation with smooth scrolling
+ * Scroll to section - closes over cached navLinks for better performance
+ * @param {string} sectionId - ID of the section to scroll to
+ */
+function scrollToSection(sectionId) {
+  const targetSection = document.getElementById(sectionId);
+  if (!targetSection) return;
+
+  // Use native scroll behavior for smooth scrolling
+  targetSection.scrollIntoView({
+    behavior: "smooth",
+    block: "start",
+  });
+
+  // Update navigation active state efficiently
+  navLinks.forEach((link) => {
+    const isActive = link.getAttribute(DATA_TARGET) === sectionId;
+    link.classList.toggle(ACTIVE_CLASS, isActive);
+  });
+
+  // Direct function calls instead of window checks
+  window.setActiveCamerasBySection?.(sectionId);
+  window.handleUserInteraction?.();
+}
+
+/**
+ * Initialize navigation with event delegation and IntersectionObserver
  */
 function initNavigation() {
-  const navLinks = document.querySelectorAll(".nav-link");
-  const sections = document.querySelectorAll("section");
-
-  // Function to handle scrolling to a section
-  function scrollToSection(sectionId) {
-    const targetSection = document.getElementById(sectionId);
-    if (targetSection) {
-      // Scroll to the section with smooth behavior
-      targetSection.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-
-      // Update navigation active state
-      navLinks.forEach((link) => {
-        link.classList.toggle(
-          "active",
-          link.getAttribute("data-target") === sectionId
-        );
-      });
-
-      // Update URL hash without causing a page jump
-      //   history.pushState(null, null, `#${sectionId}`);
-
-      // Handle cameras and other section-specific initializations
-      if (window.setActiveCamerasBySection) {
-        window.setActiveCamerasBySection(sectionId);
-      }
-
-      // Handle user interaction if available
-      if (window.handleUserInteraction) {
-        window.handleUserInteraction();
-      }
-    }
-  }
-
-  // Add click handlers for navigation
-  navLinks.forEach((link) => {
-    link.addEventListener("click", function (e) {
+  // Single event listener for navigation links
+  const handleNavClick = (e) => {
+    const link = e.target.closest(NAV_LINKS_SELECTOR);
+    if (link) {
       e.preventDefault();
-      scrollToSection(this.getAttribute("data-target"));
-    });
-  });
-
-  // Set up intersection observer to update active nav link on scroll
-  const observerOptions = {
-    root: null,
-    rootMargin: "0px",
-    threshold: 0.5, // When 50% of the section is visible
+      scrollToSection(link.getAttribute(DATA_TARGET));
+    }
   };
 
-  const observer = new IntersectionObserver((entries) => {
-    entries.forEach((entry) => {
-      if (entry.isIntersecting) {
-        // Update the active nav link when a section comes into view
-        const sectionId = entry.target.id;
-        navLinks.forEach((link) => {
-          link.classList.toggle(
-            "active",
-            link.getAttribute("data-target") === sectionId
+  document.addEventListener("click", handleNavClick);
+
+  // Configure IntersectionObserver to update active links when sections are visible
+  const observer = new IntersectionObserver(
+    (entries) => {
+      // Loop through the intersecting entries and update active link
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          const sectionId = entry.target.id;
+
+          // Find the corresponding navLink and toggle active state
+          const activeLink = Array.from(navLinks).find(
+            (link) => link.getAttribute(DATA_TARGET) === sectionId
           );
-        });
+          if (activeLink) {
+            navLinks.forEach((link) => link.classList.remove(ACTIVE_CLASS));
+            activeLink.classList.add(ACTIVE_CLASS);
+          }
 
-        // Update URL without scrolling
-        // history.replaceState(null, null, `#${sectionId}`);
+          break; // Exit after first match for performance
+        }
       }
-    });
-  }, observerOptions);
+    },
+    {
+      threshold: 0.5, // Trigger when 50% of the section is visible
+    }
+  );
 
-  // Observe all sections
-  sections.forEach((section) => {
-    observer.observe(section);
-  });
+  sections.forEach((section) => observer.observe(section));
 
-  // Handle initial section based on URL hash or default to first section
+  // Handle initial section based on hash on page load or popstate
   function handleInitialSection() {
     const hash = window.location.hash.substring(1);
     if (hash && document.getElementById(hash)) {
-      // Small timeout to ensure the DOM is fully loaded
-      setTimeout(() => {
-        scrollToSection(hash);
-      }, 100);
+      requestAnimationFrame(() => scrollToSection(hash));
     }
   }
 
-  // Initialize on load
+  // Initialize on load and for popstate events
   handleInitialSection();
-
-  // Handle browser back/forward navigation
   window.addEventListener("popstate", handleInitialSection);
 
-  return {
-    scrollToSection,
-  };
+  // Return minimal API
+  return { scrollToSection };
 }
 
 export { initNavigation };

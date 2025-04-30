@@ -35,7 +35,7 @@ export const projectCardData = [
     githubUrl:
       "https://github.com/dsol-cpu/GeospatialDataVisualization-Aug2024",
     modelName: "babyTurtle",
-    imageUrl: "",
+    imageUrl: "/images/me.png",
     imageAlt: "Geospatial Visualizer",
     fullDescription: [
       "A detailed visualization of geospatial information using Unity and C#.",
@@ -52,7 +52,7 @@ export const projectCardData = [
     githubUrl:
       "https://github.com/dsol-cpu/GeospatialDataVisualization-Aug2024",
     modelName: "babyTurtle",
-    imageUrl: "",
+    imageUrl: "/images/me.png",
     imageAlt: "Geospatial Visualizer",
     fullDescription: [
       "A detailed visualization of geospatial information using Unity and C#.",
@@ -69,7 +69,7 @@ export const projectCardData = [
     githubUrl:
       "https://github.com/dsol-cpu/GeospatialDataVisualization-Aug2024",
     modelName: "babyTurtle",
-    imageUrl: "",
+    imageUrl: "/images/me.png",
     imageAlt: "Geospatial Visualizer",
     fullDescription: [
       "A detailed visualization of geospatial information using Unity and C#.",
@@ -86,7 +86,7 @@ export const projectCardData = [
     githubUrl:
       "https://github.com/dsol-cpu/GeospatialDataVisualization-Aug2024",
     modelName: "babyTurtle",
-    imageUrl: "",
+    imageUrl: "/images/me.png",
     imageAlt: "Geospatial Visualizer",
     fullDescription: [
       "A detailed visualization of geospatial information using Unity and C#.",

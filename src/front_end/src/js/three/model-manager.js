@@ -1,5 +1,5 @@
 /**
- * @fileoverview Model manager for Three.js applications.
+ * @fileoverview Optimized model manager for Three.js applications.
  * Handles model loading, caching, optimization, and memory management.
  */
 
@@ -16,7 +16,14 @@ import {
 const BATCH_SIZE = 3;
 const GRID_SIZE = 512;
 const FALLBACK_CUBE_NAME = "fallbackCube";
-const MODEL_CLEANUP_THRESHOLD = 10000; // ms to keep unused models in memory
+const MODEL_CLEANUP_THRESHOLD = 10000; // ms
+const MODEL_LOAD_TIMEOUT = 10000; // ms
+
+// Shared resources
+const sharedFallbackGeometry = new BoxGeometry(1, 1, 1);
+const sharedFallbackMaterial = new MeshNormalMaterial();
+let sharedFallbackCube = null;
+let GLTFLoader = null;
 
 // State
 const models = {};
@@ -25,18 +32,19 @@ const disposedModels = new Set();
 const unusedModelTimers = {};
 const modelPositions = {};
 const modelCache = new Map();
-let sharedFallbackCube = null;
-let GLTFLoader = null;
 
 /**
  * Create and return a shared fallback cube for failed model loads
  * @returns {Mesh} The fallback cube
  */
-function createSharedFallbackCube() {
-  const geometry = new BoxGeometry(1, 1, 1);
-  const material = new MeshNormalMaterial();
-  sharedFallbackCube = new Mesh(geometry, material);
-  sharedFallbackCube.name = FALLBACK_CUBE_NAME;
+function getFallbackCube() {
+  if (!sharedFallbackCube) {
+    sharedFallbackCube = new Mesh(
+      sharedFallbackGeometry,
+      sharedFallbackMaterial
+    );
+    sharedFallbackCube.name = FALLBACK_CUBE_NAME;
+  }
   return sharedFallbackCube;
 }
 
@@ -46,16 +54,10 @@ function createSharedFallbackCube() {
  * @returns {Mesh} A fallback cube for the model
  */
 function createFallbackCube(modelName) {
-  // Create a unique fallback cube for this model
-  const geometry = new BoxGeometry(1, 1, 1);
-  const material = new MeshNormalMaterial();
-  const cube = new Mesh(geometry, material);
+  const cube = new Mesh(sharedFallbackGeometry, sharedFallbackMaterial);
   cube.name = `${modelName}-fallback`;
-
-  // Position it based on the model grid
-  const position = getModelPosition(modelName);
+  const position = modelPositions[modelName] || new Vector3(0, 0, 0);
   cube.position.set(position.x, position.y, position.z);
-
   return cube;
 }
 
@@ -70,31 +72,32 @@ async function getModel(modelName) {
 
   // Return from cache if available
   if (modelCache.has(modelName)) {
-    // Clear unused timer if it exists
-    if (unusedModelTimers[modelName]) {
-      clearTimeout(unusedModelTimers[modelName]);
-      delete unusedModelTimers[modelName];
-    }
+    clearModelTimer(modelName);
     return modelCache.get(modelName);
   }
 
   try {
-    // Load the model
     const model = await loadModel(modelName);
 
     if (model) {
       modelCache.set(modelName, model);
-
-      // Clear unused timer if it exists
-      if (unusedModelTimers[modelName]) {
-        clearTimeout(unusedModelTimers[modelName]);
-        delete unusedModelTimers[modelName];
-      }
+      clearModelTimer(modelName);
     }
     return model;
   } catch (e) {
     console.warn(`Failed to load model: ${modelName}`, e);
     return getFallbackCube();
+  }
+}
+
+/**
+ * Clear unused model timer
+ * @param {string} modelName - The name of the model
+ */
+function clearModelTimer(modelName) {
+  if (unusedModelTimers[modelName]) {
+    clearTimeout(unusedModelTimers[modelName]);
+    delete unusedModelTimers[modelName];
   }
 }
 
@@ -105,9 +108,7 @@ async function getModel(modelName) {
  */
 async function loadModel(modelName) {
   // If model was disposed, remove from disposed list
-  if (disposedModels.has(modelName)) {
-    disposedModels.delete(modelName);
-  }
+  disposedModels.delete(modelName);
 
   // Return cached model if available
   if (models[modelName]) return models[modelName];
@@ -154,7 +155,7 @@ async function loadModel(modelName) {
           models[modelName] = fallback;
           resolve(fallback);
         }
-      }, 10000);
+      }, MODEL_LOAD_TIMEOUT);
     }),
   ]);
 
@@ -165,6 +166,7 @@ async function loadModel(modelName) {
 /**
  * Load models in batches with priority and scheduling
  * @param {Array<string>} priorityModels - Models to load first
+ * @param {Array<string>} allModelNames - All models to potentially load
  * @returns {Promise<void>} Promise that resolves when priorityModels are loaded
  */
 async function preloadProjectModels(priorityModels = [], allModelNames = []) {
@@ -176,8 +178,20 @@ async function preloadProjectModels(priorityModels = [], allModelNames = []) {
     ...allModelNames.filter((name) => !priorityModels.includes(name)),
   ];
 
-  // Load in batches using requestIdleCallback for background loading
-  const loadBatch = async (startIndex) => {
+  // Start loading priority models immediately
+  const priorityBatchSize = Math.min(BATCH_SIZE, priorityModels.length);
+  await loadBatch(0);
+
+  // Schedule remaining models for idle time
+  if (loadQueue.length > priorityBatchSize) {
+    scheduleIdleLoad(priorityBatchSize);
+  }
+
+  /**
+   * Load a batch of models
+   * @param {number} startIndex - Starting index in the load queue
+   */
+  async function loadBatch(startIndex) {
     const batch = loadQueue.slice(startIndex, startIndex + BATCH_SIZE);
     if (batch.length === 0) return;
 
@@ -186,27 +200,22 @@ async function preloadProjectModels(priorityModels = [], allModelNames = []) {
 
       // Schedule next batch during idle time
       if (startIndex + BATCH_SIZE < loadQueue.length) {
-        if (window.requestIdleCallback) {
-          requestIdleCallback(() => loadBatch(startIndex + BATCH_SIZE));
-        } else {
-          setTimeout(() => loadBatch(startIndex + BATCH_SIZE), 100);
-        }
+        scheduleIdleLoad(startIndex + BATCH_SIZE);
       }
     } catch (error) {
       console.error("Error loading model batch:", error);
     }
-  };
+  }
 
-  // Start loading priority models immediately
-  const priorityBatchSize = Math.min(BATCH_SIZE, priorityModels.length);
-  await loadBatch(0);
-
-  // Schedule remaining models for idle time
-  if (loadQueue.length > priorityBatchSize) {
+  /**
+   * Schedule a load during idle time
+   * @param {number} startIndex - Starting index in the load queue
+   */
+  function scheduleIdleLoad(startIndex) {
     if (window.requestIdleCallback) {
-      requestIdleCallback(() => loadBatch(priorityBatchSize));
+      requestIdleCallback(() => loadBatch(startIndex));
     } else {
-      setTimeout(() => loadBatch(priorityBatchSize), 100);
+      setTimeout(() => loadBatch(startIndex), 100);
     }
   }
 }
@@ -216,7 +225,10 @@ async function preloadProjectModels(priorityModels = [], allModelNames = []) {
  * @param {THREE.Object3D} model - The model to setup
  * @param {Object} options - Setup options
  */
-function setupModel(model, options = { randomRotation: true }) {
+function setupModel(
+  model,
+  options = { randomRotation: true, enableShadows: false }
+) {
   if (!model) return;
 
   // Optimize model geometry
@@ -270,61 +282,67 @@ function optimizeModel(model) {
   model.traverse((child) => {
     if (!child.isMesh) return;
 
-    // Optimize geometry
-    const geo = child.geometry;
-    if (geo) {
-      const geoKey = geo.uuid;
-      if (geometries[geoKey]) {
-        child.geometry = geometries[geoKey];
-      } else if (geo.attributes?.position) {
-        if (!geo.attributes?.normal) geo.computeVertexNormals();
-
-        // Optimize buffers
-        if (!geo.attributes.position.normalized) {
-          geo.attributes.position.normalized = true;
-        }
-
-        // Remove unused attributes to save memory
-        ["color", "uv2", "uv3"].forEach((attr) => {
-          if (geo.attributes[attr] && !child.material.map) {
-            geo.deleteAttribute(attr);
-          }
-        });
-
-        geometries[geoKey] = geo;
-      }
-    }
-
-    // Optimize material
-    const material = child.material;
-    if (material) {
-      if (Array.isArray(material)) {
-        child.material = material.map((mat) => {
-          const matKey = mat?.uuid;
-          if (!matKey) return mat;
-          if (!materials[matKey]) {
-            optimizeMaterial(mat);
-            materials[matKey] = mat;
-          }
-          return materials[matKey];
-        });
-      } else {
-        const matKey = material?.uuid;
-        if (matKey) {
-          if (!materials[matKey]) {
-            optimizeMaterial(material);
-            materials[matKey] = material;
-          }
-          child.material = materials[matKey];
-        }
-      }
-    }
-
-    // Optimize mesh
-    child.frustumCulled = true;
-    child.matrixAutoUpdate = true;
-    child.matrixWorldAutoUpdate = false;
+    optimizeMesh(child, geometries, materials);
   });
+}
+
+/**
+ * Optimize an individual mesh
+ * @param {THREE.Mesh} mesh - The mesh to optimize
+ * @param {Object} geometries - Shared geometries cache
+ * @param {Object} materials - Shared materials cache
+ */
+function optimizeMesh(mesh, geometries, materials) {
+  // Optimize geometry
+  const geo = mesh.geometry;
+  if (geo) {
+    const geoKey = geo.uuid;
+    if (geometries[geoKey]) {
+      mesh.geometry = geometries[geoKey];
+    } else if (geo.attributes?.position) {
+      if (!geo.attributes?.normal) geo.computeVertexNormals();
+
+      // Optimize buffers
+      geo.attributes.position.normalized = true;
+
+      // Remove unused attributes to save memory
+      ["color", "uv2", "uv3"].forEach((attr) => {
+        if (geo.attributes[attr] && !mesh.material?.map) {
+          geo.deleteAttribute(attr);
+        }
+      });
+
+      geometries[geoKey] = geo;
+    }
+  }
+
+  // Optimize material
+  const material = mesh.material;
+  if (!material) return;
+
+  if (Array.isArray(material)) {
+    mesh.material = material.map((mat) => {
+      const matKey = mat?.uuid;
+      if (!matKey) return mat;
+      if (!materials[matKey]) {
+        optimizeMaterial(mat);
+        materials[matKey] = mat;
+      }
+      return materials[matKey];
+    });
+  } else {
+    const matKey = material.uuid;
+    if (!materials[matKey]) {
+      optimizeMaterial(material);
+      materials[matKey] = material;
+    }
+    mesh.material = materials[matKey];
+  }
+
+  // Optimize mesh
+  mesh.frustumCulled = true;
+  mesh.matrixAutoUpdate = true;
+  mesh.matrixWorldAutoUpdate = false;
 }
 
 /**
@@ -351,10 +369,7 @@ function optimizeMaterial(material) {
  * @param {string} modelName - The name of the model to mark as unused
  */
 function markModelUnused(modelName) {
-  // Clear any existing timer
-  if (unusedModelTimers[modelName]) {
-    clearTimeout(unusedModelTimers[modelName]);
-  }
+  clearModelTimer(modelName);
 
   // Set timer to clean up model if it remains unused
   unusedModelTimers[modelName] = setTimeout(() => {
@@ -386,9 +401,7 @@ function disposeModel(modelName, scene = null) {
 
       if (child.material) {
         if (Array.isArray(child.material)) {
-          child.material.forEach((mat) => {
-            disposeMaterial(mat);
-          });
+          child.material.forEach(disposeMaterial);
         } else {
           disposeMaterial(child.material);
         }
@@ -472,8 +485,8 @@ function getModelPosition(modelName) {
  * @param {string} modelName - Optional specific model to update
  * @param {THREE.Scene} scene - Optional scene to update model in
  */
-function updateModelPosition(modelName = null, scene = null) {
-  // Early exit if only one model is being updated
+function updateModelPosition(modelName = null) {
+  // Update only specified model
   if (modelName && modelPositions[modelName]) {
     const model = models[modelName];
     if (model) {
@@ -484,31 +497,12 @@ function updateModelPosition(modelName = null, scene = null) {
   }
 
   // Update all models' positions
-  for (const [name, model] of Object.entries(models)) {
+  Object.entries(models).forEach(([name, model]) => {
     const position = modelPositions[name];
     if (model && position) {
       model.position.set(position.x, position.y, position.z);
     }
-  }
-}
-
-/**
- * Get all loaded models
- * @returns {Object} Object containing all loaded models
- */
-function getLoadedModels() {
-  return models;
-}
-
-/**
- * Get shared fallback cube
- * @returns {Mesh} The shared fallback cube
- */
-function getFallbackCube() {
-  if (!sharedFallbackCube) {
-    createSharedFallbackCube();
-  }
-  return sharedFallbackCube;
+  });
 }
 
 /**
@@ -527,10 +521,10 @@ function updateModelScale(modelName, scale) {
  * Initialize the model manager
  */
 function initModelManager() {
-  createSharedFallbackCube();
+  getFallbackCube();
   calculateModelPositions();
 }
-
+const getLoadedModels = () => models;
 export {
   initModelManager,
   getModel,
@@ -538,6 +532,9 @@ export {
   markModelUnused,
   calculateModelPositions,
   getModelPosition,
+  updateModelPosition,
+  updateModelScale,
   getFallbackCube,
+  getLoadedModels,
   FALLBACK_CUBE_NAME,
 };

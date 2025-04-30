@@ -1,72 +1,113 @@
 /**
- * @fileoverview Handles portfolio item filtering
+ * @fileoverview Ultra-compact portfolio filtering with camera management
  */
 
-import { isElementInViewport } from "./utils/helper";
+import { detectLowEndDevice } from "./utils/device.js";
+import {
+  initializeProjectCameras,
+  updateCameras,
+} from "./utils/camera-init.js";
 
-let filterButtons;
-let portfolioItems;
+// Constants & state
+const ALL = "all",
+  NONE = "none",
+  BLOCK = "block";
+
+const state = {
+  buttons: null,
+  items: null,
+  filter: ALL,
+  customFilter: null,
+};
 
 /**
- * Initialize portfolio filters with performance optimizations
+ * Initialize portfolio filters
+ * @returns {Object} API
  */
 function initPortfolioFilters() {
-  filterButtons = document.querySelectorAll(".filter-button");
-  portfolioItems = document.querySelectorAll(".portfolio-item");
+  state.buttons = document.querySelectorAll(".filter-button");
+  state.items = document.querySelectorAll(".portfolio-item");
 
-  filterButtons.forEach((button) => {
-    button.addEventListener("click", function () {
-      const filter = this.getAttribute("data-filter");
+  state.buttons.forEach((btn) =>
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      const filter = btn.getAttribute("data-filter");
+      if (filter === state.filter && !state.customFilter) return;
 
-      // Call the user interaction handler if available
-      if (window.handleUserInteraction) {
-        window.handleUserInteraction();
-      }
+      window.handleUserInteraction?.();
+      state.buttons.forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      applyFilter(filter);
+    })
+  );
 
-      // Update active button
-      filterButtons.forEach((btn) => btn.classList.remove("active"));
-      this.classList.add("active");
-
-      // Get visible indices based on filter
-      const visibleIndices = [];
-      portfolioItems.forEach((item, index) => {
-        const categories = item.getAttribute("data-category");
-        const match = filter === "all" || categories.includes(filter);
-
-        // Update display only if necessary
-        const currentDisplay = item.style.display;
-        if (
-          (match && currentDisplay === "none") ||
-          (!match && currentDisplay !== "none")
-        ) {
-          item.style.display = match ? "block" : "none";
-        }
-
-        if (match) visibleIndices.push(index);
-      });
-
-      // Batch DOM updates
-      requestAnimationFrame(() => {
-        // Update active cameras with visible indices
-        if (window.setActiveCamerasBySection) {
-          window.setActiveCamerasBySection("portfolio", visibleIndices);
-        }
-
-        // Free memory for hidden models
-        if (window.cleanupHiddenModels) {
-          window.cleanupHiddenModels();
-        }
-      });
-    });
-  });
+  const init = window.location.hash.substring(1) || ALL;
+  if (init !== ALL) {
+    const btn = Array.from(state.buttons).find(
+      (b) => b.getAttribute("data-filter") === init
+    );
+    if (btn) {
+      btn.classList.add("active");
+      applyFilter(init);
+    }
+  } else if (!detectLowEndDevice()) {
+    initializeProjectCameras();
+  }
 
   return {
     getFilteredItems: () =>
-      Array.from(portfolioItems).filter(
-        (item) => item.style.display !== "none"
-      ),
-    getAllItems: () => portfolioItems,
+      Array.from(state.items).filter((i) => i.style.display !== NONE),
+    getAllItems: () => state.items,
+    applyFilter,
+    applyCustomFilter: (fn) => {
+      state.customFilter = fn;
+      applyFilter(state.filter);
+    },
+    resetCustomFilter: () => {
+      state.customFilter = null;
+      applyFilter(state.filter);
+    },
+    getActiveFilter: () => state.filter,
   };
+}
+
+/**
+ * Apply filter and update cameras
+ * @param {string} filter - Filter to apply
+ */
+function applyFilter(filter) {
+  if (filter === state.filter && !state.customFilter) return;
+  state.filter = filter;
+
+  const visible = [],
+    visibleIds = new Set();
+
+  state.items.forEach((item, i) => {
+    const id = item.getAttribute("id") || `portfolio-item-${i}`;
+    let match =
+      filter === ALL ||
+      (item.getAttribute("data-category") || "").includes(filter);
+    if (state.customFilter && match) match = state.customFilter(item);
+
+    const newDisplay = match ? BLOCK : NONE;
+    if (item.style.display !== newDisplay) {
+      item.style.display = newDisplay;
+    }
+
+    if (match) {
+      visible.push(item);
+      visibleIds.add(id);
+    }
+  });
+
+  window.portfolioFilterState = {
+    visibleItems: visible,
+    visibleItemIds: visibleIds,
+    needsCameraUpdate: true,
+  };
+
+  window.cleanupHiddenModels?.();
+  updateCameras(filter, state.items);
 }
 
 export { initPortfolioFilters };

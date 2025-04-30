@@ -1,197 +1,106 @@
-/**
- * Optimized bit array implementation using typed arrays
- * with efficient bit manipulation operations.
- */
+const BITS_PER_ELEMENT = 32;
+const SHIFT = 5;
+const MASK = 31;
+const FULL_MASK = 0xffffffff;
 
-// Define operation enum as numbers for faster comparison
+// Precomputed popcount lookup
+const LOOKUP = (() => {
+  const table = new Uint8Array(256);
+  for (let i = 0; i < 256; i++) {
+    table[i] = (i & 1) + table[i >>> 1];
+  }
+  return table;
+})();
+
 const BitOperation = {
   OR: 0,
   AND: 1,
   XOR: 2,
 };
 
-// Create a bit array with specified length
 function createBitArray(length) {
-  // Validate input
-  if (length <= 0) {
-    throw new Error("Length must be positive");
-  }
-
-  // Use Uint32Array for optimal performance
+  if (length <= 0) throw new Error("Length must be positive");
   return {
     length,
-    // Store bit data in Uint32Array (32 bits per element)
-    data: new Uint32Array(Math.ceil(length / 32)),
-    // Constant to avoid recalculation
-    BITS_PER_ELEMENT: 32,
+    data: new Uint32Array((length + 31) >>> SHIFT), // faster ceil
+    BITS_PER_ELEMENT,
   };
 }
 
-// Set a specific bit (inline calculations for speed)
-function setBit(bitArray, index) {
-  if (index < 0 || index >= bitArray.length) {
-    throw new Error(`Index out of bounds: ${index}`);
-  }
+const enableBit = (a, i) => ((a.data[i >>> SHIFT] |= 1 << (i & MASK)), a);
+const disableBit = (a, i) => ((a.data[i >>> SHIFT] &= ~(1 << (i & MASK))), a);
+const toggleBit = (a, i) => ((a.data[i >>> SHIFT] ^= 1 << (i & MASK)), a);
+const isBitSet = (a, i) => (a.data[i >>> SHIFT] & (1 << (i & MASK))) !== 0;
 
-  const elementIndex = index >>> 5; // Fast division by 32
-  const bitPosition = index & 31; // Fast modulo 32
-  bitArray.data[elementIndex] |= 1 << bitPosition;
-  return bitArray;
+function enableAllBits(a) {
+  const { data, length } = a;
+  data.fill(FULL_MASK);
+  const rem = data.length * BITS_PER_ELEMENT - length;
+  if (rem) data[data.length - 1] &= FULL_MASK >>> rem;
+  return a;
 }
 
-// Clear a specific bit (inline calculations for speed)
-function clearBit(bitArray, index) {
-  if (index < 0 || index >= bitArray.length) {
-    throw new Error(`Index out of bounds: ${index}`);
-  }
+const disableAllBits = (a) => (a.data.fill(0), a);
 
-  const elementIndex = index >>> 5; // Fast division by 32
-  const bitPosition = index & 31; // Fast modulo 32
-  bitArray.data[elementIndex] &= ~(1 << bitPosition);
-  return bitArray;
-}
-
-// Toggle a bit value (inline calculations for speed)
-function toggleBit(bitArray, index) {
-  if (index < 0 || index >= bitArray.length) {
-    throw new Error(`Index out of bounds: ${index}`);
-  }
-
-  const elementIndex = index >>> 5; // Fast division by 32
-  const bitPosition = index & 31; // Fast modulo 32
-  bitArray.data[elementIndex] ^= 1 << bitPosition;
-  return bitArray;
-}
-
-// Check if a bit is set (inline calculations for speed)
-function isBitSet(bitArray, index) {
-  if (index < 0 || index >= bitArray.length) {
-    throw new Error(`Index out of bounds: ${index}`);
-  }
-
-  const elementIndex = index >>> 5; // Fast division by 32
-  const bitPosition = index & 31; // Fast modulo 32
-  return (bitArray.data[elementIndex] & (1 << bitPosition)) !== 0;
-}
-
-// Enable all bits (with optimization for trailing bits)
-function enableAllBits(bitArray) {
-  // Fill all elements with 1's
-  bitArray.data.fill(0xffffffff);
-
-  // Handle trailing bits that might extend beyond specified length
-  const lastElementIndex = bitArray.data.length - 1;
-  const extraBits = bitArray.data.length * 32 - bitArray.length;
-
-  if (extraBits > 0) {
-    // Create mask with only valid bits set (avoid setting bits beyond length)
-    const mask = 0xffffffff >>> extraBits;
-    bitArray.data[lastElementIndex] &= mask;
-  }
-
-  return bitArray;
-}
-
-// Disable all bits (simple and fast)
-function disableAllBits(bitArray) {
-  bitArray.data.fill(0);
-  return bitArray;
-}
-
-// Create a bitmask from an array of indices
 function createBitmask(length, indices = []) {
-  const bitArray = createBitArray(length);
-
-  // Use an optimized loop for setting bits
-  const len = indices.length;
-  for (let i = 0; i < len; i++) {
-    const index = indices[i];
-    if (index >= 0 && index < length) {
-      // Use bit shifts instead of division/modulo
-      const elementIndex = index >>> 5;
-      const bitPosition = index & 31;
-      bitArray.data[elementIndex] |= 1 << bitPosition;
-    }
+  const a = createBitArray(length);
+  const d = a.data;
+  for (let i = 0, n = indices.length; i < n; i++) {
+    const ix = indices[i];
+    if (ix >= 0 && ix < length) d[ix >>> SHIFT] |= 1 << (ix & MASK);
   }
-
-  return bitArray;
+  return a;
 }
 
-// Apply a bitmask with a bitwise operation
-function applyBitmask(targetArray, maskArray, operation = BitOperation.OR) {
-  if (targetArray.length !== maskArray.length) {
-    throw new Error("Bit arrays must have the same length");
+function applyBitmask(target, mask, op = BitOperation.OR) {
+  const a = target.data,
+    b = mask.data;
+  if (a.length !== b.length) throw new Error("Bit arrays must match in length");
+  const len = a.length;
+
+  switch (op) {
+    case BitOperation.OR:
+      for (let i = 0; i < len; i++) a[i] |= b[i];
+      break;
+    case BitOperation.AND:
+      for (let i = 0; i < len; i++) a[i] &= b[i];
+      break;
+    case BitOperation.XOR:
+      for (let i = 0; i < len; i++) a[i] ^= b[i];
+      break;
+    default:
+      throw new Error(`Unsupported op: ${op}`);
   }
-
-  const len = targetArray.data.length;
-
-  // Direct numeric comparison is faster than string comparison
-  if (operation === BitOperation.OR) {
-    for (let i = 0; i < len; i++) {
-      targetArray.data[i] |= maskArray.data[i];
-    }
-  } else if (operation === BitOperation.AND) {
-    for (let i = 0; i < len; i++) {
-      targetArray.data[i] &= maskArray.data[i];
-    }
-  } else if (operation === BitOperation.XOR) {
-    for (let i = 0; i < len; i++) {
-      targetArray.data[i] ^= maskArray.data[i];
-    }
-  } else {
-    throw new Error(`Unsupported operation: ${operation}`);
-  }
-
-  return targetArray;
+  return target;
 }
 
-// Generate a binary string representation (least significant bit first)
-function logBitArray(bitArray) {
-  const bits = [];
-  const len = bitArray.length;
-
-  for (let i = 0; i < len; i++) {
-    const elementIndex = i >>> 5;
-    const bitPosition = i & 31;
-    const isSet = (bitArray.data[elementIndex] >>> bitPosition) & 1;
-    bits.push(isSet);
+function logBitArray(a) {
+  const out = new Array(a.length);
+  const d = a.data;
+  for (let i = 0; i < a.length; i++) {
+    out[i] = (d[i >>> SHIFT] >>> (i & MASK)) & 1;
   }
-
-  return `BitArray [${len} bits]: ${bits.join("")}`;
+  return `BitArray [${a.length} bits]: ${out.join("")}`;
 }
 
-// Get the number of bits set to 1
-function popCount(bitArray) {
-  let count = 0;
-  const len = bitArray.data.length;
-
-  // Using a lookup table for faster bit counting
-  const LOOKUP = new Uint8Array(256);
-  for (let i = 0; i < 256; i++) {
-    LOOKUP[i] = (i & 1) + LOOKUP[i >>> 1];
-  }
-
-  // Process 8 bits at a time using lookup table
-  const u8View = new Uint8Array(bitArray.data.buffer);
-  for (let i = 0; i < u8View.length; i++) {
-    count += LOOKUP[u8View[i]];
-  }
-
-  return count;
+function popCount(a) {
+  const u8 = new Uint8Array(a.data.buffer);
+  let sum = 0;
+  for (let i = 0; i < u8.length; i++) sum += LOOKUP[u8[i]];
+  return sum;
 }
 
-// Create a copy of a bit array
-function copyBitArray(bitArray) {
-  const newArray = createBitArray(bitArray.length);
-  newArray.data.set(bitArray.data);
-  return newArray;
+function copyBitArray(a) {
+  const c = createBitArray(a.length);
+  c.data.set(a.data);
+  return c;
 }
 
 export {
   BitOperation,
   createBitArray,
-  setBit,
-  clearBit,
+  enableBit,
+  disableBit,
   toggleBit,
   isBitSet,
   enableAllBits,

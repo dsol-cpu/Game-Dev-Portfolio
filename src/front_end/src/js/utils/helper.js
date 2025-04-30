@@ -1,105 +1,77 @@
 /**
- * @fileoverview Utility helper functions
+ * @fileoverview Utility helpers
  */
 
-/**
- * Debounce function to limit how often a function is called
- * @param {Function} func - The function to debounce
- * @param {number} wait - The time to wait in milliseconds
- * @param {boolean} immediate - Whether to call the function immediately
- * @returns {Function} The debounced function
- */
-function debounce(func, wait, immediate = false) {
+const PERF =
+  typeof performance !== "undefined" && performance.now
+    ? performance
+    : { now: Date.now };
+
+const ONE_SECOND = 1000;
+
+const getViewportSize = () => ({
+  w: window.innerWidth || document.documentElement.clientWidth,
+  h: window.innerHeight || document.documentElement.clientHeight,
+});
+
+function debounce(fn, wait, immediate = false) {
   let timeout;
 
-  return function executedFunction(...args) {
-    const context = this;
-
-    const later = () => {
-      timeout = null;
-      if (!immediate) func.apply(context, args);
-    };
+  return function (...args) {
+    if (timeout) clearTimeout(timeout);
 
     const callNow = immediate && !timeout;
+    timeout = setTimeout(() => {
+      timeout = null;
+      if (!immediate) fn.apply(this, args);
+    }, wait);
 
-    clearTimeout(timeout);
-
-    timeout = setTimeout(later, wait);
-
-    if (callNow) func.apply(context, args);
+    if (callNow) fn.apply(this, args);
   };
 }
 
-/**
- * Throttle function to limit how often a function is called
- * @param {Function} func - The function to throttle
- * @param {number} limit - The time limit in milliseconds
- * @returns {Function} The throttled function
- */
-function throttle(func, limit) {
-  let inThrottle;
+// Throttle: timestamp-based, low overhead
+function throttle(fn, limit) {
+  let lastCall = 0;
 
   return function (...args) {
-    const context = this;
-
-    if (!inThrottle) {
-      func.apply(context, args);
-      inThrottle = true;
-
-      setTimeout(() => {
-        inThrottle = false;
-      }, limit);
+    const now = PERF.now();
+    if (now - lastCall >= limit) {
+      lastCall = now;
+      fn.apply(this, args);
     }
   };
 }
 
-/**
- * Check if element is in viewport with improved calculation
- */
+// Viewport detection with cached dimensions
 function isElementInViewport(el) {
-  if (!el) return false;
+  const rect = el?.getBoundingClientRect?.();
+  if (!rect) return false;
 
-  const rect = el.getBoundingClientRect();
-  const windowHeight =
-    window.innerHeight || document.documentElement.clientHeight;
-  const windowWidth = window.innerWidth || document.documentElement.clientWidth;
+  const { top, bottom, left, right } = rect;
+  const { w, h } = getViewportSize();
 
-  // Element is at least partially visible
-  return (
-    rect.top <= windowHeight &&
-    rect.bottom >= 0 &&
-    rect.left <= windowWidth &&
-    rect.right >= 0
-  );
+  return top <= h && bottom >= 0 && left <= w && right >= 0;
 }
 
-/**
- * Simple performance monitoring
- */
-let frameCounter = 0;
-let lastFPSUpdate = 0;
-let fpsValue = 0;
+// FPS tracking
+let frameCount = 0,
+  lastTime = 0,
+  fps = 0;
 
 function updateFPS(timestamp) {
-  frameCounter++;
+  frameCount++;
+  const delta = timestamp - lastTime;
 
-  const elapsedTime = timestamp - lastFPSUpdate;
-
-  // Update FPS counter if 1 second has passed or more
-  if (elapsedTime >= 1000) {
-    fpsValue = frameCounter / (elapsedTime / 1000);
-    frameCounter = 0;
-    lastFPSUpdate = timestamp;
+  if (delta >= ONE_SECOND) {
+    fps = (frameCount * ONE_SECOND) / delta;
+    frameCount = 0;
+    lastTime = timestamp;
   }
 
-  return fpsValue;
+  return fps;
 }
 
-/**
- * Get current FPS value
- */
-function getFPS() {
-  return fpsValue;
-}
+const getFPS = () => fps;
 
 export { debounce, throttle, isElementInViewport, updateFPS, getFPS };

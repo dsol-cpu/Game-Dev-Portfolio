@@ -46,6 +46,7 @@
   z-index: 20; /* Higher than standard expanded cards */
   transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1),
     transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  transform: translateX(-140px);
 }
 
 .game-image-container {
@@ -360,7 +361,6 @@
   visibility: visible;
 }
 
-/* Ensure proper sizing for threejs in expanded state */
 .game-preview.expanded .threejs-canvas {
   height: 240px;
 }

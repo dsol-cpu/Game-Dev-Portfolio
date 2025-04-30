@@ -1,19 +1,7 @@
 /**
- * @fileoverview Three.js initialization and core rendering.
- * Handles renderer setup, scene creation, camera management, and animation loop.
- * @author David Solinsky
- * @version 2.1.0
+ * @fileoverview Three.js scene and object management system
  */
 
-import {
-  initUserInteraction,
-  handleUserInteraction,
-  isIdle,
-  onUserInteraction,
-  onIdleStateChange,
-} from "../user-interaction.js";
-
-// Import only what we need from Three.js
 import {
   WebGLRenderer,
   Scene,
@@ -21,20 +9,30 @@ import {
   AmbientLight,
   DirectionalLight,
   PCFSoftShadowMap,
+  Vector3,
 } from "../extern/three/three.module.min.js";
 
-import { detectLowEndDevice } from "../utils/device.js";
 import {
+  CAMERA_TYPES,
   initCameraRegistry,
   registerCamera,
-  getCamerasBySection,
+  getCameraRegistry,
   updateActiveControls,
   renderActiveCameras,
   createSimpleAutorotation,
   activateAllCameras,
 } from "./camera-registry.js";
 
+import {
+  initUserInteraction,
+  handleUserInteraction,
+  isIdle,
+  onUserInteraction,
+} from "../user-interaction.js";
+
+import { detectLowEndDevice } from "../utils/device.js";
 import { debounce } from "../utils/helper.js";
+import { isBitSet } from "../utils/bit-array.js";
 
 import {
   initModelManager,
@@ -47,45 +45,110 @@ import {
   FALLBACK_CUBE_NAME,
 } from "./model-manager.js";
 
-// Constants
-const TARGET_FRAMERATE = 60;
-const IDLE_FRAMERATE = 15; // Lower framerate for when no interaction is happening
-const FRAME_INTERVAL = 1000 / TARGET_FRAMERATE;
-const IDLE_FRAME_INTERVAL = 1000 / IDLE_FRAMERATE;
-const MAX_CAMERAS = 16;
-const VISIBLE_PRIORITY_COUNT = 6;
+// Centralize all constants
+const CONSTANTS = {
+  MS_IN_SECOND: 1000,
+  TARGET_FRAMERATE: 60,
+  IDLE_FRAMERATE: 8,
+  VISIBLE_PRIORITY_COUNT: 6,
+  DEFAULT_CAMERA_FOV: 75,
+  DEFAULT_CAMERA_NEAR: 0.1,
+  DEFAULT_CAMERA_FAR: 1000,
+  CAMERA_DISTANCE: 10,
+  MIN_CAMERA_DISTANCE: 1.5,
+  MAX_CAMERA_DISTANCE: 8,
+  DEFAULT_CANVAS_WIDTH: 300,
+  DEFAULT_CANVAS_HEIGHT: 200,
+  INTERSECTION_THRESHOLD: 0.1,
+  INTERSECTION_MARGIN: "150px",
+  AUTO_ROTATE_SPEED: 2.0,
+};
+
+// Pre-calculate derived constants
+CONSTANTS.FRAME_INTERVAL = CONSTANTS.MS_IN_SECOND / CONSTANTS.TARGET_FRAMERATE;
+CONSTANTS.IDLE_FRAME_INTERVAL =
+  CONSTANTS.MS_IN_SECOND / CONSTANTS.IDLE_FRAMERATE;
 
 // Global state
-let isAnimating = false;
-let lastRenderTime = 0;
-let isGameViewActive = false;
-let lastInteractionTime = 0;
-let userActive = false;
-let resizeObserver = null;
-let visibleSections = new Set();
+let isAnimating = false,
+  lastRenderTime = 0,
+  isGameViewActive = false,
+  resizeObserver = null;
 const isLowEndDevice = detectLowEndDevice();
 
 // Three.js variables
-let renderer = null;
-let info = null;
-let thirdPersonCamera = null;
-let gameScene = null;
-let projectCardScene = null;
-let OrbitControls = null;
-let mainGameCanvas = null;
-let mainGameCanvasContext = null;
-let gameAnimationFrameId = null;
+let renderer = null,
+  stats = null,
+  gameScene = null,
+  projectCardScene = null,
+  thirdPersonCamera = null;
+let OrbitControls = null,
+  mainGameCanvas = null,
+  mainGameCanvasContext = null,
+  gameAnimationFrameId = null;
 
 // Performance monitoring
-let frameCounter = 0;
-let lastFPSUpdate = 0;
-let fpsValue = 0;
+let frameCounter = 0,
+  lastFPSUpdate = 0,
+  fpsValue = 0;
+
+// Shared objects
+let sharedLights = {
+  ambientLight: null,
+  directionalLight1: null,
+  directionalLight2: null,
+};
+
+// Shared ControlsConfig for OrbitControls
+const orbitControlsConfig = {
+  enableDamping: true,
+  dampingFactor: 0.05,
+  autoRotate: true,
+  autoRotateSpeed: CONSTANTS.AUTO_ROTATE_SPEED,
+  enableZoom: true,
+  minDistance: CONSTANTS.MIN_CAMERA_DISTANCE,
+  maxDistance: CONSTANTS.MAX_CAMERA_DISTANCE,
+};
+
+/**
+ * Create shared lights that can be cloned for different scenes
+ */
+function initSharedLights() {
+  // Create lights once
+  sharedLights.ambientLight = new AmbientLight(0xffffff, 0.7);
+
+  sharedLights.directionalLight1 = new DirectionalLight(0xffffff, 0.8);
+  sharedLights.directionalLight1.position.set(1, 1, 1);
+  sharedLights.directionalLight1.castShadow = false;
+
+  sharedLights.directionalLight2 = new DirectionalLight(0xffffff, 0.4);
+  sharedLights.directionalLight2.position.set(-1, 0.5, -1);
+}
+
+/**
+ * Clone a shared light for use in a new scene
+ * @param {string} lightType - The type of light to clone
+ * @param {Object} options - Optional intensity override
+ * @returns {Object} - Cloned light
+ */
+function getClonedLight(lightType, options = {}) {
+  if (!sharedLights[lightType]) return null;
+
+  const original = sharedLights[lightType];
+  const cloned = original.clone();
+
+  // Apply overrides if provided
+  if (options.intensity !== undefined) {
+    cloned.intensity = options.intensity;
+  }
+
+  return cloned;
+}
 
 /**
  * Initialize Three.js renderer and scenes with optimizations
  */
 export function initThreeJS() {
-  // Check if we've already initialized
   if (renderer) {
     console.warn("Three.js is already initialized");
     return;
@@ -93,21 +156,19 @@ export function initThreeJS() {
 
   console.log("Initializing Three.js");
 
-  // Initialize renderer with dynamic performance optimizations
   renderer = new WebGLRenderer({
     powerPreference: isLowEndDevice ? "low-power" : "high-performance",
     precision: isLowEndDevice ? "lowp" : "mediump",
-    antialias: !isLowEndDevice, // No antialias on low end
-    alpha: true, // Enable alpha for transparent background
-    preserveDrawingBuffer: true, // Needed for canvas copying
-    premultipliedAlpha: true, // Better alpha blending
+    antialias: !isLowEndDevice,
+    alpha: true,
+    preserveDrawingBuffer: true,
+    premultipliedAlpha: true,
     stencil: false,
     depth: true,
-    failIfMajorPerformanceCaveat: false, // Don't fail on low performance devices
+    failIfMajorPerformanceCaveat: false,
   });
 
-  info = renderer.info;
-
+  // Set up WebGL context event listeners
   renderer.domElement.addEventListener(
     "webglcontextlost",
     (event) => {
@@ -128,106 +189,103 @@ export function initThreeJS() {
     false
   );
 
+  // Configure renderer
   renderer.setClearColor(0x000000, 0);
   renderer.setPixelRatio(
     isLowEndDevice ? 1 : Math.min(window.devicePixelRatio, 2)
   );
-  renderer.setSize(300, 200, false);
+  renderer.setSize(
+    CONSTANTS.DEFAULT_CANVAS_WIDTH,
+    CONSTANTS.DEFAULT_CANVAS_HEIGHT,
+    false
+  );
   renderer.shadowMap.enabled = !isLowEndDevice;
   renderer.shadowMap.type = PCFSoftShadowMap;
   renderer.info.autoReset = false;
 
-  // Initialize user interaction
-  initUserInteraction();
+  // Initialize shared resources
+  initSharedLights();
 
-  // Register animation restart callback
+  // Initialize systems
+  initUserInteraction();
   onUserInteraction(() => {
     if (!isAnimating) {
       isAnimating = true;
       requestAnimationFrame(animate);
     }
   });
-
-  // Initialize camera registry with more cameras
-  initCameraRegistry(MAX_CAMERAS);
-
-  // Initialize model manager
+  initCameraRegistry();
   initModelManager();
-
-  // Initialize scenes
   initGameScene();
   initProjectCardScene();
 
-  // Get visible project models and preload them first
+  // Get visible project models
   const visibleProjects = getVisibleProjectModels();
 
-  // Create a loading sequence with proper initialization order
+  // Create a loading sequence
   const initSequence = async () => {
     try {
-      console.log("Starting initialization sequence");
-
-      // First, load priority models (visible ones)
       await preloadProjectModels(visibleProjects.slice(0, 3), visibleProjects);
-      console.log("Priority models loaded");
-
-      //Initialize About Me Section canvas
       initAboutCanvas();
-      console.log("About section canvas initialized");
-
-      // Then initialize portfolio canvases
       initPortfolioCanvases();
-      console.log("Portfolio canvases initialized");
-
-      // Make sure all cameras are active
       activateAllCameras();
-
-      // Start animation loop
       isAnimating = true;
       requestAnimationFrame(animate);
-      console.log("Animation loop started");
-
-      // Preload remaining models during idle time
       return preloadProjectModels(visibleProjects.slice(3), visibleProjects);
     } catch (error) {
       console.error("Error in initialization sequence:", error);
     }
   };
 
-  // Start the initialization sequence
   initSequence();
-
-  if (process.env.NODE_ENV === "development") {
-    initPerformanceMonitoring();
-  }
+  if (process.env.NODE_ENV === "development") initPerformanceMonitoring();
 }
 
 /**
  * Initialize performance monitoring
  */
 function initPerformanceMonitoring() {
-  const stats = document.createElement("div");
-  stats.style.position = "fixed";
-  stats.style.top = "0";
-  stats.style.right = "0";
-  stats.style.backgroundColor = "rgba(0,0,0,0.5)";
-  stats.style.color = "white";
-  stats.style.padding = "5px";
-  stats.style.fontSize = "12px";
-  stats.style.fontFamily = "monospace";
-  stats.style.zIndex = "9999";
+  stats = document.createElement("div");
+  Object.assign(stats.style, {
+    position: "fixed",
+    top: "0",
+    right: "0",
+    backgroundColor: "rgba(0,0,0,0.5)",
+    color: "white",
+    padding: "5px",
+    fontSize: "12px",
+    fontFamily: "monospace",
+    zIndex: "9999",
+  });
   document.body.appendChild(stats);
 
   setInterval(() => {
     if (renderer) {
+      const activeCamerasCount = countActiveCameras();
       stats.textContent = `
-            FPS: ${fpsValue.toFixed(0)}
-            Draw calls: ${info.render.calls}
-            Geometries: ${info.memory.geometries}
-            Textures: ${info.memory.textures}
-          `;
-      info.reset();
+        FPS: ${fpsValue.toFixed(0)}
+        Draw calls: ${renderer.info.render.calls}
+        Geometries: ${renderer.info.memory.geometries}
+        Textures: ${renderer.info.memory.textures}
+        Active cameras: ${activeCamerasCount}/${getCameraRegistry().count}
+      `;
+      renderer.info.reset();
     }
-  }, 1000);
+  }, CONSTANTS.MS_IN_SECOND);
+}
+
+/**
+ * Count active cameras based on bitmask
+ */
+function countActiveCameras() {
+  const registry = getCameraRegistry();
+  if (!registry.activeCamBitmask) return 0;
+
+  let count = 0;
+  for (let i = 0; i < registry.count; i++) {
+    if (isBitSet(registry.activeCamBitmask, i)) count++;
+  }
+  return count;
 }
 
 /**
@@ -235,12 +293,9 @@ function initPerformanceMonitoring() {
  */
 function updateFPS(timestamp) {
   frameCounter++;
-
   const elapsedTime = timestamp - lastFPSUpdate;
-
-  // Update FPS counter if 1 second has passed or more
-  if (elapsedTime >= 1000) {
-    fpsValue = frameCounter / (elapsedTime / 1000); // Calculate FPS as frames per second
+  if (elapsedTime >= CONSTANTS.MS_IN_SECOND) {
+    fpsValue = frameCounter / (elapsedTime / CONSTANTS.MS_IN_SECOND);
     frameCounter = 0;
     lastFPSUpdate = timestamp;
   }
@@ -253,68 +308,55 @@ function initGameScene() {
   gameScene = new Scene();
   gameScene.background = null;
 
-  // Add lighting - simpler lighting for performance
-  const ambientLight = new AmbientLight(0xffffff, 0.7);
-  gameScene.add(ambientLight);
-
-  const directionalLight = new DirectionalLight(0xffffff, 0.8);
-  directionalLight.position.set(1, 1, 1);
-  directionalLight.castShadow = false; // Only enable when needed
-  gameScene.add(directionalLight);
+  // Add lighting using shared lights
+  gameScene.add(getClonedLight("ambientLight"));
+  gameScene.add(getClonedLight("directionalLight1"));
 
   // Set up camera
   thirdPersonCamera = new PerspectiveCamera(
-    75,
+    CONSTANTS.DEFAULT_CAMERA_FOV,
     window.innerWidth / window.innerHeight,
-    0.1,
-    1000
+    CONSTANTS.DEFAULT_CAMERA_NEAR,
+    CONSTANTS.DEFAULT_CAMERA_FAR
   );
   thirdPersonCamera.position.set(0, 2, 5);
   thirdPersonCamera.lookAt(0, 0, 0);
+
+  registerCamera(
+    thirdPersonCamera,
+    createSimpleAutorotation(thirdPersonCamera, new Vector3(0, 0, 0), 5, 0),
+    null,
+    { type: CAMERA_TYPES.GAME, elementId: "game-view", section: "game" },
+    false
+  );
 }
 
 /**
- * Initialize project card scene with improved model handling
+ * Initialize project card scene
  */
 function initProjectCardScene() {
   const portfolioItems = document.querySelectorAll(".portfolio-item");
   projectCardScene = new Scene();
   projectCardScene.background = null;
 
-  console.log(`Found ${portfolioItems.length} portfolio items`);
+  // Add lighting using shared lights
+  projectCardScene.add(getClonedLight("ambientLight", { intensity: 0.8 }));
+  projectCardScene.add(getClonedLight("directionalLight1", { intensity: 0.6 }));
+  projectCardScene.add(getClonedLight("directionalLight2"));
 
-  // Add improved lighting for better visibility
-  const ambientLight = new AmbientLight(0xffffff, 0.8); // Brighter ambient light
-  projectCardScene.add(ambientLight);
+  // Add fallback cube
+  projectCardScene.add(getFallbackCube());
 
-  // Add two directional lights for better model visibility
-  const dirLight1 = new DirectionalLight(0xffffff, 0.6);
-  dirLight1.position.set(1, 1, 1);
-  projectCardScene.add(dirLight1);
-
-  const dirLight2 = new DirectionalLight(0xffffff, 0.4);
-  dirLight2.position.set(-1, 0.5, -1);
-  projectCardScene.add(dirLight2);
-
-  // Add fallback cube to scene
-  const fallbackCube = getFallbackCube();
-  projectCardScene.add(fallbackCube);
-  console.log("Added fallback cube to scene");
-
-  // Calculate positions for models
+  // Get model names and calculate positions
   const modelNames = Array.from(portfolioItems)
     .map((item) => item.getAttribute("data-model"))
     .filter(Boolean);
 
-  console.log(`Found ${modelNames.length} model names from portfolio items`);
-
-  // Calculate grid positions for models
   calculateModelPositions(modelNames);
 }
 
 /**
  * Get models from visible project cards
- * @returns {Array} Array of model names that are currently visible
  */
 function getVisibleProjectModels() {
   const visibleModels = [];
@@ -333,7 +375,7 @@ function getVisibleProjectModels() {
   // Include models for first few items regardless of visibility
   for (
     let i = 0;
-    i < Math.min(VISIBLE_PRIORITY_COUNT, portfolioItems.length);
+    i < Math.min(CONSTANTS.VISIBLE_PRIORITY_COUNT, portfolioItems.length);
     i++
   ) {
     const modelName = portfolioItems[i]?.getAttribute("data-model");
@@ -346,43 +388,62 @@ function getVisibleProjectModels() {
 }
 
 /**
- * Initialize about me section canvas with lazy loading
+ * Initialize about me section canvas
  */
 function initAboutCanvas() {
   const aboutSection = document.querySelector(".about");
-  if (!aboutSection) {
-    console.warn("No about canvas found!");
-  }
+  if (!aboutSection) return;
 
-  console.log(`Setting up canvas for about me section`);
-  const camera = getCamerasBySection();
+  const canvas = aboutSection.querySelector(".about-canvas");
+  if (!canvas) return;
+
+  const ctx = canvas.getContext("2d", { alpha: true, desynchronized: true });
+  if (!ctx) return;
+
+  // Set canvas dimensions
+  const width = canvas.clientWidth || CONSTANTS.DEFAULT_CANVAS_WIDTH;
+  const height = canvas.clientHeight || CONSTANTS.DEFAULT_CANVAS_HEIGHT;
+  canvas.width = width;
+  canvas.height = height;
+
+  // Create camera
+  const camera = new PerspectiveCamera(
+    60,
+    width / height,
+    CONSTANTS.DEFAULT_CAMERA_NEAR,
+    CONSTANTS.DEFAULT_CAMERA_FAR
+  );
+  camera.position.set(0, 1, 5);
+  camera.lookAt(0, 0, 0);
+
+  registerCamera(
+    camera,
+    createSimpleAutorotation(camera, new Vector3(0, 0, 0), 5, 0),
+    ctx,
+    {
+      type: CAMERA_TYPES.ABOUT,
+      elementId: aboutSection.id || "about",
+      section: "about",
+    },
+    true
+  );
 }
 
 /**
- * Initialize portfolio canvases with lazy loading
+ * Initialize portfolio canvases
  */
 function initPortfolioCanvases() {
   const portfolioItems = document.querySelectorAll(".portfolio-item");
-  if (!portfolioItems.length) {
-    console.warn("No portfolio items found");
-    return;
-  }
-
-  console.log(
-    `Setting up canvases for ${portfolioItems.length} portfolio items`
-  );
-
-  // Set up intersection observer for lazy loading
+  if (!portfolioItems.length) return;
   setupVisibleProjectCameras(portfolioItems);
 }
 
 /**
- * Setup visible project cameras with improved intersection observer
+ * Setup visible project cameras with intersection observer
  */
 function setupVisibleProjectCameras(portfolioItems) {
   if (!portfolioItems.length) return;
 
-  // Setup intersectionObserver for lazy loading cameras
   const observer = new IntersectionObserver(
     (entries) => {
       entries.forEach((entry) => {
@@ -392,28 +453,25 @@ function setupVisibleProjectCameras(portfolioItems) {
         const sectionId = portfolioSection?.id || "portfolio";
 
         if (entry.isIntersecting) {
-          // Check if camera already exists
           const existingCameras = getCamerasBySection(sectionId);
-          const existingCamera = existingCameras.some(
-            (camera) => camera.metadata?.index === index
-          );
+          const existingCamera = existingCameras.some((cameraIndex) => {
+            const registry = getCameraRegistry();
+            return registry.cameraData[cameraIndex]?.index === index;
+          });
 
           if (!existingCamera) {
-            // Use requestIdleCallback for non-critical setup
-            requestIdleCallback(() => {
-              setupProjectCamera(item, index);
-            });
+            requestIdleCallback(() => setupProjectCamera(item, index));
           }
         } else {
-          // When item is out of view, mark associated model for potential cleanup
           const modelName = item.getAttribute("data-model");
-          if (modelName) {
-            markModelUnused(modelName);
-          }
+          if (modelName) markModelUnused(modelName);
         }
       });
     },
-    { threshold: 0.1, rootMargin: "150px" }
+    {
+      threshold: CONSTANTS.INTERSECTION_THRESHOLD,
+      rootMargin: CONSTANTS.INTERSECTION_MARGIN,
+    }
   );
 
   // Process items - immediately setup visible ones, observe others
@@ -421,153 +479,138 @@ function setupVisibleProjectCameras(portfolioItems) {
   const setupPromises = [];
 
   portfolioItems.forEach((item, index) => {
-    if (isElementInViewport(item) && visibleCount < VISIBLE_PRIORITY_COUNT) {
-      // Setup priority visible cameras immediately and collect promises
+    if (
+      isElementInViewport(item) &&
+      visibleCount < CONSTANTS.VISIBLE_PRIORITY_COUNT
+    ) {
       setupPromises.push(setupProjectCamera(item, index));
       visibleCount++;
     }
-    // Observe all items for future visibility changes
     observer.observe(item);
   });
 
-  // Wait for all priority setups to complete
   Promise.all(setupPromises).catch((err) =>
     console.warn("Error setting up priority cameras:", err)
   );
 }
 
 /**
+ * Get cameras by section ID
+ */
+function getCamerasBySection(sectionId) {
+  if (!sectionId) return [];
+
+  const registry = getCameraRegistry();
+  const indices = [];
+
+  for (let i = 0; i < registry.count; i++) {
+    const data = registry.cameraData[i];
+    if (data && data.section === sectionId) indices.push(i);
+  }
+
+  return indices;
+}
+
+/**
  * Ensure model is loaded and added to scene
- * @param {string} modelName - The name of the model
- * @param {THREE.Scene} scene - The scene to add the model to
  */
 async function ensureModelInScene(modelName, scene) {
   if (!modelName || !scene) return getFallbackCube();
 
   try {
-    // First, attempt to get the model (this will either return a cached model or load it)
     const model = await getModel(modelName);
 
-    // If model doesn't have a parent, it's not in the scene yet
     if (!model.parent) {
       scene.add(model);
-      console.log(`Added model ${modelName} to scene`);
     }
 
-    // Update position based on calculated grid
     const position = getModelPosition(modelName);
-
-    // Set position with small Y offset to ensure model is visible
     model.position.set(position.x, position.y + 0.1, position.z);
-
-    // Ensure model is visible
     model.visible = true;
 
-    // Make sure model has proper scale
     if (model.scale.x < 0.5 || model.scale.x > 2) {
       model.scale.set(1, 1, 1);
     }
 
-    // Force update matrix for correct positioning
     model.updateMatrix();
     model.updateMatrixWorld(true);
 
     return model;
   } catch (error) {
     console.error(`Failed to add model ${modelName} to scene`, error);
-
-    // Use the shared fallback cube
     const fallback = getFallbackCube();
-
-    // Make sure fallback is in scene
-    if (!fallback.parent) {
-      scene.add(fallback);
-    }
-
+    if (!fallback.parent) scene.add(fallback);
     return fallback;
   }
 }
 
+// Shared 2D context options for performance
+const sharedCanvasContextOptions = {
+  alpha: true,
+  desynchronized: true,
+  willReadFrequently: false,
+};
+
 /**
- * Set up camera and controls for a project card with memory optimizations
+ * Set up camera and controls for a project card
  */
 async function setupProjectCamera(item, index) {
   if (!item) return;
 
   const canvas = item.querySelector(".threejs-canvas");
-  if (!canvas) return;
-
-  // Check if canvas has already been transferred to offscreen
-  if (canvas._offscreenTransferred) {
-    return;
-  }
-
-  // Use high-performance canvas options
-  const ctxOptions = {
-    alpha: true,
-    desynchronized: true,
-    willReadFrequently: false,
-  };
+  if (canvas?._offscreenTransferred) return;
 
   let ctx;
   let offscreenCanvas = null;
 
-  // Try to use offscreen canvas if supported
-  if (!window.OffscreenCanvas) ctx = canvas.getContext("2d", ctxOptions);
   try {
-    offscreenCanvas = canvas.transferControlToOffscreen();
-    ctx = offscreenCanvas.getContext("2d", ctxOptions);
-    // Mark the original canvas as transferred
-    canvas._offscreenTransferred = true;
-    canvas._offscreen = offscreenCanvas;
+    if (!("transferControlToOffscreen" in canvas)) {
+      ctx = canvas.getContext("2d", sharedCanvasContextOptions);
+    } else {
+      offscreenCanvas = canvas.transferControlToOffscreen();
+      ctx = offscreenCanvas.getContext("2d", sharedCanvasContextOptions);
+      canvas._offscreenTransferred = true;
+      canvas._offscreen = offscreenCanvas;
+    }
   } catch (e) {
-    console.warn("OffscreenCanvas failed, using regular canvas", e);
-    ctx = canvas.getContext("2d", ctxOptions);
+    console.log(e);
+    ctx = canvas.getContext("2d", sharedCanvasContextOptions);
   }
 
   if (!ctx) return;
 
-  // Mark canvas for Safari/WebKit GPU acceleration
   canvas.style.transform = "translateZ(0)";
 
-  // Set the canvas size BEFORE transferring to offscreen
-  const width = canvas.clientWidth || 300;
-  const height = canvas.clientHeight || 200;
+  const width = canvas.clientWidth || CONSTANTS.DEFAULT_CANVAS_WIDTH;
+  const height = canvas.clientHeight || CONSTANTS.DEFAULT_CANVAS_HEIGHT;
 
   if (offscreenCanvas) {
-    // Use the offscreen canvas for size operations
     offscreenCanvas.width = width;
     offscreenCanvas.height = height;
   } else if (!canvas._offscreenTransferred) {
-    // Only set dimensions on the original canvas if not transferred
     canvas.width = width;
     canvas.height = height;
   }
 
-  // Get model info and setup camera
   const modelName = item.getAttribute("data-model") || FALLBACK_CUBE_NAME;
-
-  // Load model asynchronously and ensure it's in the scene FIRST
   const model = await ensureModelInScene(modelName, projectCardScene);
-
-  // IMPORTANT: Get the actual position after the model is loaded
   const target = model.position.clone();
 
-  // Create camera with proper aspect ratio
-  const camera = new PerspectiveCamera(75, width / height, 0.1, 1000);
-
-  // Vary the camera angle for visual interest
-  const angle = (index % 8) * (Math.PI / 4);
-
-  // Position camera to look directly at the model's center
-  const cameraDistance = 10; // Reduced distance for better view
-  camera.position.set(
-    target.x + Math.sin(angle) * cameraDistance,
-    target.y + 1.0, // Camera slightly above model
-    target.z + Math.cos(angle) * cameraDistance
+  const camera = new PerspectiveCamera(
+    CONSTANTS.DEFAULT_CAMERA_FOV,
+    width / height,
+    CONSTANTS.DEFAULT_CAMERA_NEAR,
+    CONSTANTS.DEFAULT_CAMERA_FAR
   );
 
-  // Force the camera to look at the model's actual position
+  const angle = (index % 8) * (Math.PI / 4);
+  const cameraDistance = CONSTANTS.CAMERA_DISTANCE;
+
+  camera.position.set(
+    target.x + Math.sin(angle) * cameraDistance,
+    target.y + 1.0,
+    target.z + Math.cos(angle) * cameraDistance
+  );
   camera.lookAt(target);
 
   // Load OrbitControls only once
@@ -579,25 +622,15 @@ async function setupProjectCamera(item, index) {
     }
   }
 
-  // Create camera controls
   let controls;
   try {
     if (OrbitControls) {
       controls = new OrbitControls(camera, canvas);
-      Object.assign(controls, {
-        enableDamping: true,
-        dampingFactor: 0.05,
-        autoRotate: true,
-        autoRotateSpeed: 2.0, // Ensure rotation is visible
-        enableZoom: true,
-        minDistance: 1.5, // Allow closer zooming
-        maxDistance: 8,
-      });
 
-      // IMPORTANT: Set target to the model's actual position
+      // Apply shared configuration
+      Object.assign(controls, orbitControlsConfig);
       controls.target.copy(target);
 
-      // Add event listeners with passive flag for better performance
       const usePassive = { passive: true };
       controls.addEventListener(
         "start",
@@ -616,7 +649,6 @@ async function setupProjectCamera(item, index) {
         usePassive
       );
 
-      // Force control update
       controls.update();
     } else {
       controls = createSimpleAutorotation(
@@ -627,62 +659,52 @@ async function setupProjectCamera(item, index) {
       );
     }
   } catch (e) {
-    console.warn("Using fallback controls:", e);
+    console.log(e);
     controls = createSimpleAutorotation(camera, target, cameraDistance, index);
   }
 
-  // Ensure section ID is properly obtained
   const portfolioSection = item.closest("section");
   const sectionId = portfolioSection?.id || "portfolio";
 
-  // Register camera with improved metadata
   const cameraIndex = registerCamera(
     camera,
     controls,
     ctx,
     {
+      type: CAMERA_TYPES.PROJECT,
       section: sectionId,
       modelName,
       elementId: item.id || `portfolio-item-${index}`,
       index,
       visible: isElementInViewport(item),
     },
-    true // Force activation regardless of viewport
+    true
   );
 
-  // Perform initial render after model is loaded
   if (renderer) {
-    // Set size specifically for this canvas
     renderer.setSize(width, height, false);
+    renderer.setViewport(0, 0, width, height);
+    renderer.setScissor(0, 0, width, height);
+    renderer.scissorTest = true;
 
-    // Force render to this canvas context
-    if (projectCardScene) {
-      renderer.setViewport(0, 0, width, height);
-      renderer.setScissor(0, 0, width, height);
-      renderer.scissorTest = true;
+    camera.aspect = width / height;
+    camera.updateProjectionMatrix();
 
-      // Ensure camera aspect ratio is correct
-      camera.aspect = width / height;
-      camera.updateProjectionMatrix();
+    renderer.clear();
+    renderer.render(projectCardScene, camera);
 
-      // Clear and render
-      renderer.clear();
-      renderer.render(projectCardScene, camera);
-
-      // Draw to 2D context
-      ctx.clearRect(0, 0, width, height);
-      ctx.drawImage(
-        renderer.domElement,
-        0,
-        0,
-        renderer.domElement.width,
-        renderer.domElement.height,
-        0,
-        0,
-        width,
-        height
-      );
-    }
+    ctx.clearRect(0, 0, width, height);
+    ctx.drawImage(
+      renderer.domElement,
+      0,
+      0,
+      renderer.domElement.width,
+      renderer.domElement.height,
+      0,
+      0,
+      width,
+      height
+    );
   }
 
   return cameraIndex;
@@ -694,30 +716,22 @@ async function setupProjectCamera(item, index) {
 function animate(timestamp) {
   if (!isAnimating) return;
 
-  // Calculate time since last frame
   const deltaTime = timestamp - lastRenderTime;
-
-  // Hard cap at 60 FPS (or lower if idle)
-  const frameDelay = isIdle() ? IDLE_FRAME_INTERVAL : FRAME_INTERVAL;
+  const frameDelay = isIdle()
+    ? CONSTANTS.IDLE_FRAME_INTERVAL
+    : CONSTANTS.FRAME_INTERVAL;
 
   if (deltaTime >= frameDelay) {
-    // Update last render time
     lastRenderTime = timestamp;
-
-    // Update only active controls that need it
     updateActiveControls(timestamp);
-
-    // Render cameras with the active ones first
     renderActiveCameras(renderer, projectCardScene);
 
-    // Reset renderer info for next frame if in development
     if (process.env.NODE_ENV === "development") {
       updateFPS(timestamp);
       renderer?.info?.reset();
     }
   }
 
-  // Schedule next frame
   requestAnimationFrame(animate);
 }
 
@@ -727,22 +741,20 @@ function animate(timestamp) {
 let orbitControlsPromise = null;
 
 async function loadAndPatchOrbitControls() {
-  if (OrbitControls) return OrbitControls; // already loaded
+  if (OrbitControls) return OrbitControls;
 
   if (!orbitControlsPromise) {
     orbitControlsPromise = import("../extern/three/OrbitControls.js").then(
       ({ OrbitControls: OC }) => {
         if (!OC.prototype._patched) {
-          // Add missing event dispatcher functionality
           OC.prototype._patched = true;
           OC.prototype._listeners = OC.prototype._listeners || {};
 
-          // Track dragging state with timestamp
           const originalOnMouseDown = OC.prototype.onMouseDown;
           OC.prototype.onMouseDown = function (event) {
             this._dragging = true;
             this._lastDragTime = performance.now();
-            handleUserInteraction(); // Trigger high framerate
+            handleUserInteraction();
             if (originalOnMouseDown) originalOnMouseDown.call(this, event);
           };
 
@@ -752,18 +764,13 @@ async function loadAndPatchOrbitControls() {
             if (originalOnMouseUp) originalOnMouseUp.call(this, event);
           };
 
-          // Throttle mouse move events
           const originalOnMouseMove = OC.prototype.onMouseMove;
           OC.prototype.onMouseMove = function (event) {
             const now = performance.now();
-            // Only process move events at most every 16ms when dragging
             if (this._lastMoveTime && now - this._lastMoveTime <= 16)
               event.preventDefault();
-
             this._lastMoveTime = now;
-            if (this._dragging) {
-              this._lastDragTime = now;
-            }
+            if (this._dragging) this._lastDragTime = now;
             if (originalOnMouseMove) originalOnMouseMove.call(this, event);
           };
 
@@ -771,7 +778,7 @@ async function loadAndPatchOrbitControls() {
           OC.prototype.onTouchStart = function (event) {
             this._dragging = true;
             this._lastDragTime = performance.now();
-            handleUserInteraction(); // Trigger high framerate
+            handleUserInteraction();
             if (originalOnTouchStart) originalOnTouchStart.call(this, event);
           };
 
@@ -781,7 +788,6 @@ async function loadAndPatchOrbitControls() {
             if (originalOnTouchEnd) originalOnTouchEnd.call(this, event);
           };
 
-          // Throttle touch move events too
           const originalOnTouchMove = OC.prototype.onTouchMove;
           OC.prototype.onTouchMove = function (event) {
             const now = performance.now();
@@ -794,7 +800,6 @@ async function loadAndPatchOrbitControls() {
             }
           };
 
-          // Optimized event dispatcher
           OC.prototype.addEventListener = function (type, listener) {
             if (!this._listeners[type]) this._listeners[type] = new Set();
             this._listeners[type].add(listener);
@@ -811,7 +816,6 @@ async function loadAndPatchOrbitControls() {
             return true;
           };
 
-          // Add dispose method for better memory management
           const originalDispose = OC.prototype.dispose || function () {};
           OC.prototype.dispose = function () {
             originalDispose.call(this);
@@ -827,7 +831,7 @@ async function loadAndPatchOrbitControls() {
 }
 
 /**
- * Check if element is in viewport with improved calculation
+ * Check if element is in viewport
  */
 export function isElementInViewport(el) {
   if (!el) return false;
@@ -837,7 +841,6 @@ export function isElementInViewport(el) {
     window.innerHeight || document.documentElement.clientHeight;
   const windowWidth = window.innerWidth || document.documentElement.clientWidth;
 
-  // Element is at least partially visible
   return (
     rect.top <= windowHeight &&
     rect.bottom >= 0 &&
@@ -870,12 +873,8 @@ export function startGameRendering() {
   isGameViewActive = true;
   renderGameView();
 
-  // Register for idle state changes to adjust game rendering
   onIdleStateChange((idle) => {
-    if (isGameViewActive) {
-      // Force a new frame when idle state changes
-      renderGameView();
-    }
+    if (isGameViewActive) renderGameView();
   });
 }
 
@@ -898,14 +897,14 @@ export function renderGameView() {
 
   renderer.render(gameScene, thirdPersonCamera);
 
-  // Use a clear rect with specific dimensions to avoid clearing whole canvas
   const w = mainGameCanvas.width;
   const h = mainGameCanvas.height;
   mainGameCanvasContext.clearRect(0, 0, w, h);
   mainGameCanvasContext.drawImage(renderer.domElement, 0, 0);
 
-  // Implement adaptive frame rate for game view
-  const frameDelay = isIdle() ? IDLE_FRAME_INTERVAL : FRAME_INTERVAL;
+  const frameDelay = isIdle()
+    ? CONSTANTS.IDLE_FRAME_INTERVAL
+    : CONSTANTS.FRAME_INTERVAL;
 
   gameAnimationFrameId = setTimeout(() => {
     gameAnimationFrameId = requestAnimationFrame(renderGameView);
@@ -915,7 +914,6 @@ export function renderGameView() {
 export function setupGameCanvasResize() {
   if (!mainGameCanvas) return;
 
-  // Clean up existing observer
   if (resizeObserver) {
     resizeObserver.disconnect();
   }

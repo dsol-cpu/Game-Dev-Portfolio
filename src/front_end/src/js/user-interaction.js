@@ -1,7 +1,5 @@
 /**
  * @fileoverview Handles user interaction tracking for performance optimizations
- * @author Your Name
- * @version 1.0.0
  */
 
 // Constants

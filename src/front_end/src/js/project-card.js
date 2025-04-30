@@ -1,443 +1,287 @@
 /**
- * @fileoverview Project card creation and management functionality.
- * Handles creation, display, and interaction with project cards.
- * @version 1.1.0
+ * @fileoverview Optimized project card creation and management functionality.
  */
 
 import { projectCardData } from "./data/project";
 import { detectLowEndDevice } from "./utils/device";
-// DOM element cache
+
 const domCache = {
   portfolioGrid: null,
   backdrop: null,
 };
 
-/**
- * Initialize project cards
- */
 function initProjectCards() {
   const portfolioGrid = document.querySelector(".portfolio-grid");
   if (!portfolioGrid) return;
-
   renderProjectsGrid(projectCardData);
 }
 
-/**
- * @param {string} tag - HTML tag name
- * @param {string} className - CSS class names
- * @param {Object} attributes - HTML attributes
- * @returns {HTMLElement} The created element
- */
 function createElement(tag, className, attributes = {}) {
-  const element = document.createElement(tag);
-
-  if (className) element.className = className;
-
-  for (const key in attributes) {
-    if (attributes[key] != null) {
-      element.setAttribute(key, attributes[key]);
-    }
-  }
-
-  return element;
+  const el = document.createElement(tag);
+  if (className) el.className = className;
+  Object.entries(attributes).forEach(([key, val]) => {
+    if (val != null) el.setAttribute(key, val);
+  });
+  return el;
 }
-/**
- * Creates a project card element from project data
- * @param {Object} project - Project data object
- * @returns {HTMLElement|null} The created card element or null if invalid input
- */
+
+function createTagElements(tags = []) {
+  const fragment = document.createDocumentFragment();
+  for (const tag of tags) {
+    const el = createElement("span", "project-tag");
+    el.textContent = tag;
+    fragment.appendChild(el);
+  }
+  return fragment;
+}
+
+function createDescriptionElements(shortDesc, fullDesc = []) {
+  const fragment = document.createDocumentFragment();
+  if (shortDesc) {
+    const p = createElement("p", "project-description");
+    p.textContent = shortDesc;
+    fragment.appendChild(p);
+  }
+  for (const paragraph of fullDesc) {
+    if (!paragraph) continue;
+    const p = createElement("p", "project-description");
+    p.textContent = paragraph;
+    fragment.appendChild(p);
+  }
+  return fragment;
+}
+
+function createOverlayButtons(project, cardId) {
+  const container = createElement("div", "overlay-buttons");
+
+  const playBtn = createElement("button", "btn btn-play");
+  playBtn.textContent = "Play Demo";
+  if (project.demoUrl)
+    playBtn.onclick = () => window.open(project.demoUrl, "_blank");
+
+  const detailsBtn = createElement("button", "btn btn-details");
+  detailsBtn.textContent = "Details";
+  detailsBtn.onclick = (e) => toggleExpand(e, cardId);
+
+  container.append(playBtn, detailsBtn);
+  return container;
+}
+
+function createActionButtons(project, cardId) {
+  const container = createElement("div", "action-buttons");
+
+  const backBtn = createElement("button", "btn btn-back");
+  backBtn.textContent = "Close";
+  backBtn.onclick = (e) => toggleExpand(e, cardId);
+
+  const viewBtn = createElement("button", "btn btn-full-details");
+  viewBtn.textContent = "View Project";
+  if (project.githubUrl)
+    viewBtn.onclick = () => window.open(project.githubUrl, "_blank");
+
+  container.append(backBtn, viewBtn);
+  return container;
+}
+
 function createProjectCard(project) {
   if (!project?.id) return null;
 
-  // Use the project's hardcoded ID
-  const cardId = project.id;
-
-  // Create the card element with the project's ID
-  const cardElement = createElement("div", "game-preview portfolio-item", {
-    id: cardId,
-    "data-category":
-      project.category || (project.tags?.[0] || "").toLowerCase(),
+  const card = createElement("div", "game-preview portfolio-item", {
+    id: project.id,
+    "data-category": project.category || project.tags?.[0]?.toLowerCase() || "",
     "data-model": project.modelName || "",
   });
 
-  // Create image container
   const imageContainer = createElement(
     "div",
     "game-image-container portfolio-canvas"
   );
+  const imageElement = createElement("div", "game-image");
+  if (project.imageUrl)
+    imageElement.style.backgroundImage = `url(${project.imageUrl})`;
 
-  // Check if the device is low-end
+  const closeBtn = createElement("button", "btn-close");
+  closeBtn.textContent = "×";
+  closeBtn.onclick = (e) => toggleExpand(e, project.id);
+
+  imageContainer.append(imageElement, closeBtn);
+
   const isLowEndDevice = detectLowEndDevice();
 
-  // Only create canvas if not a low-end device
-  if (!isLowEndDevice) {
-    // Create canvas with fixed dimensions
-    const canvasElement = createElement("canvas", "threejs-canvas", {
+  if (isLowEndDevice) {
+    // Add an img element for low-end devices
+    if (project.imageUrl) {
+      const fallbackImg = createElement("img", "fallback-image", {
+        src: project.imageUrl,
+        alt: project.title || "Project image",
+        loading: "lazy",
+      });
+      imageContainer.appendChild(fallbackImg);
+    }
+  } else {
+    // Add canvas for 3D visualization for capable devices
+    const canvas = createElement("canvas", "threejs-canvas", {
       width: 300,
       height: 200,
     });
-
-    // Add cursor styles directly to canvas element
-    canvasElement.style.cursor = "grab";
-
-    // Use event delegation for cursor interaction
-    const handleMouseDown = () => (canvasElement.style.cursor = "grabbing");
-    const handleMouseUp = () => (canvasElement.style.cursor = "grab");
-
-    canvasElement.addEventListener("mousedown", handleMouseDown);
-    canvasElement.addEventListener("mouseup", handleMouseUp);
-    canvasElement.addEventListener("mouseleave", handleMouseUp);
-
-    // Add canvas to image container
-    imageContainer.appendChild(canvasElement);
+    canvas.style.cursor = "grab";
+    canvas.onmousedown = () => (canvas.style.cursor = "grabbing");
+    canvas.onmouseup = canvas.onmouseleave = () =>
+      (canvas.style.cursor = "grab");
+    imageContainer.appendChild(canvas);
   }
 
-  // Create image element
-  const imageElement = createElement("div", "game-image");
-  if (project.imageUrl) {
-    imageElement.style.backgroundImage = `url(${project.imageUrl})`;
-  }
+  const overlay = createElement("div", "game-overlay");
+  const title = createElement("h3", "game-title");
+  title.textContent = project.title || "Untitled Project";
+  overlay.append(title, createOverlayButtons(project, project.id));
 
-  // Create close button
-  const closeButton = createElement("button", "btn-close");
-  closeButton.textContent = "×";
-  closeButton.addEventListener("click", (e) => toggleExpand(e, cardId));
+  const expanded = createElement("div", "expanded-content");
+  const inner = createElement("div", "expanded-content-inner");
 
-  // Create overlay
-  const overlayElement = createElement("div", "game-overlay");
+  inner.append(
+    createElement("h2", "card-title", {
+      textContent: project.title || "Untitled Project",
+    }),
+    createElement("div", "project-tags").appendChild(
+      createTagElements(project.tags)
+    ),
+    createDescriptionElements(
+      project.shortDescription,
+      project.fullDescription
+    ),
+    createActionButtons(project, project.id)
+  );
+  expanded.appendChild(inner);
 
-  // Create title
-  const titleElement = createElement("h3", "game-title");
-  titleElement.textContent = project.title || "Untitled Project";
-
-  // Create buttons container
-  const overlayButtons = createElement("div", "overlay-buttons");
-
-  // Create play button
-  const playButton = createElement("button", "btn btn-play");
-  playButton.textContent = "Play Demo";
-  if (project.demoUrl) {
-    playButton.addEventListener("click", () =>
-      window.open(project.demoUrl, "_blank")
-    );
-  }
-
-  // Create details button
-  const detailsButton = createElement("button", "btn btn-details");
-  detailsButton.textContent = "Details";
-  detailsButton.addEventListener("click", (e) => toggleExpand(e, cardId));
-
-  // Create expanded content
-  const expandedContent = createElement("div", "expanded-content");
-  const expandedContentInner = createElement("div", "expanded-content-inner");
-
-  // Create card title
-  const cardTitle = createElement("h2", "card-title");
-  cardTitle.textContent = project.title || "Untitled Project";
-
-  // Create tags container
-  const tagsContainer = createElement("div", "project-tags");
-
-  // Add tags if available
-  if (project.tags?.length) {
-    // Create all tags at once with a document fragment
-    const tagsFragment = document.createDocumentFragment();
-    for (let i = 0; i < project.tags.length; i++) {
-      const tagElement = createElement("span", "project-tag");
-      tagElement.textContent = project.tags[i];
-      tagsFragment.appendChild(tagElement);
-    }
-    tagsContainer.appendChild(tagsFragment);
-  }
-
-  // Create description fragment
-  const descFragment = document.createDocumentFragment();
-
-  // Add short description if available
-  if (project.shortDescription) {
-    const p = createElement("p", "project-description");
-    p.textContent = project.shortDescription;
-    descFragment.appendChild(p);
-  }
-
-  // Add full description paragraphs if available
-  if (project.fullDescription?.length) {
-    for (let i = 0; i < project.fullDescription.length; i++) {
-      const paragraph = project.fullDescription[i];
-      if (!paragraph) continue;
-
-      const p = createElement("p", "project-description");
-      p.textContent = paragraph;
-      descFragment.appendChild(p);
-    }
-  }
-
-  // Create action buttons
-  const actionButtons = createElement("div", "action-buttons");
-
-  // Create back button
-  const backButton = createElement("button", "btn btn-back");
-  backButton.textContent = "Close";
-  backButton.addEventListener("click", (e) => toggleExpand(e, cardId));
-
-  // Create view project button
-  const viewProjectButton = createElement("button", "btn btn-full-details");
-  viewProjectButton.textContent = "View Project";
-  if (project.githubUrl) {
-    viewProjectButton.addEventListener("click", () =>
-      window.open(project.githubUrl, "_blank")
-    );
-  }
-
-  // Assemble components
-  imageContainer.append(imageElement, closeButton);
-
-  overlayButtons.append(playButton, detailsButton);
-  overlayElement.append(titleElement, overlayButtons);
-
-  expandedContentInner.appendChild(cardTitle);
-  expandedContentInner.appendChild(tagsContainer);
-  expandedContentInner.appendChild(descFragment);
-
-  actionButtons.append(backButton, viewProjectButton);
-  expandedContentInner.appendChild(actionButtons);
-
-  expandedContent.appendChild(expandedContentInner);
-
-  cardElement.append(imageContainer, overlayElement, expandedContent);
-
-  // Store original project data for reference
-  cardElement.projectData = project;
-
-  return cardElement;
+  card.append(imageContainer, overlay, expanded);
+  card.projectData = project;
+  return card;
 }
 
-/**
- * Toggle expanded state of a card
- * @param {Event} event - The triggering event
- * @param {string} projectId - ID of the project card to toggle
- */
-function toggleExpand(event, projectId) {
-  if (!projectId) return;
-
-  // Stop event propagation
-  if (event) {
-    event.stopPropagation();
-    event.preventDefault();
+function toggleExpand(e, id) {
+  if (e) {
+    e.preventDefault();
+    e.stopPropagation();
   }
+  const card = document.getElementById(id);
+  if (!card) return;
 
-  // Get project card element
-  const projectCard = document.getElementById(projectId);
-  if (!projectCard) return;
+  const expanding = !card.classList.contains("expanded");
 
-  // Check if we're expanding
-  const isExpanding = !projectCard.classList.contains("expanded");
+  // Collapse all other expanded cards
+  document.querySelectorAll(".game-preview.expanded").forEach((el) => {
+    if (el.id !== id) el.classList.remove("expanded", "expand-left");
+  });
 
-  // Collapse other expanded cards
-  if (isExpanding) {
-    const expandedCards = document.querySelectorAll(".game-preview.expanded");
-    for (let i = 0; i < expandedCards.length; i++) {
-      if (expandedCards[i].id !== projectId) {
-        expandedCards[i].classList.remove("expanded");
-      }
+  // Apply expand class
+  card.classList.toggle("expanded", expanding);
+
+  if (expanding) {
+    const rect = card.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+
+    if (rect.right + 160 > viewportWidth) {
+      card.classList.add("expand-left");
+    } else {
+      card.classList.remove("expand-left");
     }
-
-    // Add expand-left class
-    projectCard.classList.add("expand-left");
   } else {
-    // Remove expand-left class when collapsing
-    projectCard.classList.remove("expand-left");
+    card.classList.remove("expand-left");
   }
-
-  // Toggle expanded class
-  projectCard.classList.toggle("expanded", isExpanding);
 
   // Handle backdrop
   const backdrop = getBackdrop();
-  if (backdrop) {
-    backdrop.classList.toggle("active", isExpanding);
-  }
+  if (backdrop) backdrop.classList.toggle("active", expanding);
 
-  // Toggle body overflow
-  document.body.classList.toggle("overflow-hidden", isExpanding);
+  document.body.classList.toggle("overflow-hidden", expanding);
 }
 
-/**
- * Get or create the backdrop element
- * @returns {HTMLElement} The backdrop element
- */
 function getBackdrop() {
-  // Use cached element if available
-  if (domCache.backdrop) {
-    return domCache.backdrop;
-  }
+  if (domCache.backdrop) return domCache.backdrop;
 
-  // Check if backdrop exists in DOM
   let backdrop = document.querySelector(".backdrop");
-
-  // Create backdrop if needed
   if (!backdrop) {
     backdrop = createElement("div", "backdrop");
-    backdrop.addEventListener("click", closeOnBackdropClick);
+    backdrop.onclick = (e) => {
+      const expandedCard = document.querySelector(".game-preview.expanded");
+      if (expandedCard) toggleExpand(e, expandedCard.id);
+    };
     document.body.appendChild(backdrop);
   }
-
-  // Cache for future use
   domCache.backdrop = backdrop;
-
   return backdrop;
 }
 
-/**
- * Close expanded card when clicking on backdrop
- * @param {Event} event - The click event
- */
-function closeOnBackdropClick(event) {
-  const expandedCard = document.querySelector(".game-preview.expanded");
-  if (expandedCard) {
-    toggleExpand(event, expandedCard.id);
-  }
-}
-
-/**
- * Get the portfolio grid element
- * @returns {HTMLElement} The portfolio grid element
- */
 function getPortfolioGrid() {
-  // Use cached element if available
-  if (domCache.portfolioGrid) {
-    return domCache.portfolioGrid;
-  }
-
-  // Get element from DOM
+  if (domCache.portfolioGrid) return domCache.portfolioGrid;
   const grid = document.querySelector(".portfolio-grid");
-
-  // Cache for future use
-  if (grid) {
-    domCache.portfolioGrid = grid;
-  }
-  console.warn("Portfolio grid not found");
-
+  if (grid) domCache.portfolioGrid = grid;
+  else console.warn("Portfolio grid not found");
   return grid;
 }
 
-/**
- * Render all projects into the grid
- * @param {Array} projectsData - Array of project data objects
- */
-function renderProjectsGrid(projectsData) {
-  if (!Array.isArray(projectsData)) {
-    console.warn("Invalid projects data format");
-    return;
-  }
+function renderProjectsGrid(projects) {
+  if (!Array.isArray(projects)) return console.warn("Invalid projects data");
 
-  // Get portfolio grid
-  const portfolioGrid = getPortfolioGrid();
-  if (!portfolioGrid) {
-    console.warn("Portfolio grid not found");
-    return;
-  }
+  const grid = getPortfolioGrid();
+  if (!grid) return;
 
-  // Clear existing content
-  portfolioGrid.innerHTML = "";
-
-  // Ensure backdrop exists
+  grid.innerHTML = "";
   getBackdrop();
 
-  // Use DocumentFragment for batch DOM operations
   const fragment = document.createDocumentFragment();
-
-  // Create card elements
-  for (let i = 0; i < projectsData.length; i++) {
-    const cardElement = createProjectCard(projectsData[i]);
-    if (cardElement) {
-      fragment.appendChild(cardElement);
-    }
+  for (const project of projects) {
+    const card = createProjectCard(project);
+    if (card) fragment.appendChild(card);
   }
+  grid.appendChild(fragment);
 
-  // Single DOM operation to add all cards
-  portfolioGrid.appendChild(fragment);
-
-  // Initialize Three.js for all cards
-  initializeAllCanvases(portfolioGrid);
+  // Only initialize canvases if not a low-end device
+  if (!detectLowEndDevice()) {
+    initializeAllCanvases(grid);
+  }
 }
 
-/**
- * Initialize all canvas elements in container
- * @param {HTMLElement} container - Container element
- */
 function initializeAllCanvases(container) {
   if (!container) return;
-
   const canvases = container.querySelectorAll(".threejs-canvas");
-
-  for (let i = 0; i < canvases.length; i++) {
-    const canvas = canvases[i];
+  for (const canvas of canvases) {
     const card = canvas.closest(".portfolio-item");
-
-    if (card?.projectData) {
-      initThreeJsCanvas(canvas, card.projectData);
-    }
+    if (card?.projectData) initThreeJsCanvas(canvas, card.projectData);
   }
 }
 
-/**
- * Initialize Three.js scene for a project card
- * @param {HTMLElement} canvas - The canvas element to initialize
- * @param {Object} projectData - Project data for customizing the scene
- */
-function initThreeJsCanvas(canvas, projectData) {
-  if (!canvas || !(canvas instanceof HTMLCanvasElement)) {
-    return;
-  }
-
-  // Set data attributes for initialization
+function initThreeJsCanvas(canvas, data) {
+  if (!(canvas instanceof HTMLCanvasElement)) return;
   canvas.setAttribute("data-needs-init", "true");
-  canvas.setAttribute("data-project-id", projectData.id || "");
-
-  // Dispatch event for main.js to handle
-  const event = new CustomEvent("canvasCreated", {
-    detail: {
-      canvasId: canvas.id || canvas.parentElement?.id || "",
-      projectId: projectData.id || "",
-    },
-  });
-
-  document.dispatchEvent(event);
+  canvas.setAttribute("data-project-id", data.id || "");
+  document.dispatchEvent(
+    new CustomEvent("canvasCreated", {
+      detail: {
+        canvasId: canvas.id || canvas.parentElement?.id || "",
+        projectId: data.id || "",
+      },
+    })
+  );
 }
 
-/**
- * Add a new project card dynamically to the grid
- * @param {Object} projectData - Project data object
- * @returns {string|null} The project ID or null if failed
- */
-function addNewProject(projectData) {
-  if (!projectData?.id) {
-    console.warn("Invalid project data - must include ID");
-    return null;
+function addNewProject(data) {
+  if (!data?.id) return console.warn("Invalid project data") || null;
+  const grid = getPortfolioGrid();
+  if (!grid) return null;
+  const card = createProjectCard(data);
+  if (!card) return null;
+  grid.appendChild(card);
+
+  // Only initialize the canvas if not a low-end device
+  if (!detectLowEndDevice()) {
+    const canvas = card.querySelector(".threejs-canvas");
+    if (canvas) initThreeJsCanvas(canvas, data);
   }
-
-  // Get portfolio grid
-  const portfolioGrid = getPortfolioGrid();
-  if (!portfolioGrid) return null;
-
-  // Create card element
-  const cardElement = createProjectCard(projectData);
-  if (!cardElement) return null;
-
-  // Add card to grid
-  portfolioGrid.appendChild(cardElement);
-
-  // Get the canvas element
-  const canvas = cardElement.querySelector(".threejs-canvas");
-  if (canvas) initThreeJsCanvas(canvas, projectData);
-
-  return projectData.id;
+  return data.id;
 }
 
-/**
- * Setup backdrop listener for closing expanded cards
- */
 function setupBackdropListener() {
   getBackdrop();
 }
