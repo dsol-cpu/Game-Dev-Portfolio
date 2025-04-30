@@ -170,6 +170,67 @@ export function removeActiveCameras(indices) {
 }
 
 /**
+ * Helper function to properly handle Three.js-compatible event dispatch
+ * @private
+ */
+function createEventHandler() {
+  return {
+    _listeners: {},
+    addEventListener: function (type, listener) {
+      if (this._listeners === undefined) this._listeners = {};
+      const listeners = this._listeners;
+      if (listeners[type] === undefined) listeners[type] = [];
+      if (listeners[type].indexOf(listener) === -1)
+        listeners[type].push(listener);
+    },
+    hasEventListener: function (type, listener) {
+      if (this._listeners === undefined) return false;
+      const listeners = this._listeners;
+      return (
+        listeners[type] !== undefined &&
+        listeners[type].indexOf(listener) !== -1
+      );
+    },
+    removeEventListener: function (type, listener) {
+      if (this._listeners === undefined) return;
+      const listeners = this._listeners;
+      const listenerArray = listeners[type];
+      if (listenerArray !== undefined) {
+        const index = listenerArray.indexOf(listener);
+        if (index !== -1) listenerArray.splice(index, 1);
+      }
+    },
+    dispatchEvent: function (event) {
+      if (this._listeners === undefined) return;
+
+      // Ensure event has necessary properties to prevent errors
+      if (!event) event = {};
+      if (!event.type) return;
+      if (!event.target) event.target = this;
+
+      // Initialize all the properties that OrbitControls expects
+      if (event.type === "start" && event.start === undefined) event.start = {};
+      if (event.type === "end" && event.end === undefined) event.end = {};
+      if (event.type === "change" && event.change === undefined)
+        event.change = {};
+
+      const listeners = this._listeners;
+      const listenerArray = listeners[event.type];
+
+      if (listenerArray !== undefined) {
+        // Create a copy to avoid modification during iteration
+        const array = listenerArray.slice(0);
+        for (let i = 0, l = array.length; i < l; i++) {
+          array[i].call(this, event);
+        }
+        return true;
+      }
+      return false;
+    },
+  };
+}
+
+/**
  * Creates a simple auto-rotation controller for a camera
  */
 export function createSimpleAutorotation(
@@ -193,48 +254,15 @@ export function createSimpleAutorotation(
     targetPosition.z || 0
   );
 
-  // Create a proper controller object with required event properties
-  return {
+  // Create controller with proper event handling capability
+  const controller = {
+    ...createEventHandler(),
     autoRotate: true,
     target,
-    // Add event handling properties to prevent null reference errors
-    _listeners: {},
-    addEventListener: function (type, listener) {
-      if (this._listeners === undefined) this._listeners = {};
-      const listeners = this._listeners;
-      if (listeners[type] === undefined) listeners[type] = [];
-      if (listeners[type].indexOf(listener) === -1)
-        listeners[type].push(listener);
-    },
-    hasEventListener: function (type, listener) {
-      if (this._listeners === undefined) return false;
-      const listeners = this._listeners;
-      return (
-        listeners[type] !== undefined &&
-        listeners[type].indexOf(listener) !== -1
-      );
-    },
-    removeEventListener: function (type, listener) {
-      if (this._listeners === undefined) return;
-      const listeners = this._listeners;
-      const listenerArray = listeners[type];
-      if (listenerArray !== undefined) {
-        const index = listenerArray.indexOf(listener);
-        if (index !== -1) listenerArray.splice(index, 1);
-      }
-    },
-    dispatchEvent: function (event) {
-      if (this._listeners === undefined) return;
-      const listeners = this._listeners;
-      const listenerArray = listeners[event.type];
-      if (listenerArray !== undefined) {
-        event.target = this;
-        const array = listenerArray.slice(0);
-        for (let i = 0, l = array.length; i < l; i++) {
-          array[i].call(this, event);
-        }
-      }
-    },
+    _state: -1, // Add state property for OrbitControls compatibility
+    _enabledState: 0, // Add enabledState property for OrbitControls compatibility
+    _dragging: false,
+    enabled: true,
     update: (timestamp = performance.now()) => {
       if (!camera) return;
 
@@ -251,9 +279,32 @@ export function createSimpleAutorotation(
       camera.position.z = target.z + Math.cos(newAngle) * cameraDistance;
       camera.lookAt(target);
       camera.updateMatrixWorld(true);
+
+      // Dispatch a change event for any listeners
+      controller.dispatchEvent({ type: "change" });
     },
-    dispose: () => {},
+    dispose: () => {
+      controller._dragging = false;
+    },
+    // Add additional properties for OrbitControls compatibility
+    minDistance: 0,
+    maxDistance: Infinity,
+    minZoom: 0,
+    maxZoom: Infinity,
+    minPolarAngle: 0,
+    maxPolarAngle: Math.PI,
+    minAzimuthAngle: -Infinity,
+    maxAzimuthAngle: Infinity,
+    dampingFactor: 0.05,
+    draggingDampingFactor: 0.25,
+    dollySpeed: 1.0,
+    truckSpeed: 2.0,
+    verticalDragToForward: false,
+    dollyToCursor: false,
+    colliderMeshes: [],
   };
+
+  return controller;
 }
 
 /**
@@ -261,48 +312,34 @@ export function createSimpleAutorotation(
  * @private
  */
 function createEmptyController() {
-  return {
-    // Add event handling properties to prevent null reference errors
-    _listeners: {},
-    addEventListener: function (type, listener) {
-      if (this._listeners === undefined) this._listeners = {};
-      const listeners = this._listeners;
-      if (listeners[type] === undefined) listeners[type] = [];
-      if (listeners[type].indexOf(listener) === -1)
-        listeners[type].push(listener);
-    },
-    hasEventListener: function (type, listener) {
-      if (this._listeners === undefined) return false;
-      const listeners = this._listeners;
-      return (
-        listeners[type] !== undefined &&
-        listeners[type].indexOf(listener) !== -1
-      );
-    },
-    removeEventListener: function (type, listener) {
-      if (this._listeners === undefined) return;
-      const listeners = this._listeners;
-      const listenerArray = listeners[type];
-      if (listenerArray !== undefined) {
-        const index = listenerArray.indexOf(listener);
-        if (index !== -1) listenerArray.splice(index, 1);
-      }
-    },
-    dispatchEvent: function (event) {
-      if (this._listeners === undefined) return;
-      const listeners = this._listeners;
-      const listenerArray = listeners[event.type];
-      if (listenerArray !== undefined) {
-        event.target = this;
-        const array = listenerArray.slice(0);
-        for (let i = 0, l = array.length; i < l; i++) {
-          array[i].call(this, event);
-        }
-      }
-    },
+  const controller = {
+    ...createEventHandler(),
+    _state: -1, // Add state property for OrbitControls compatibility
+    _enabledState: 0, // Add enabledState property for OrbitControls compatibility
+    _dragging: false,
+    enabled: true,
+    target: new Vector3(),
     update: () => {},
     dispose: () => {},
+    // Add additional properties for OrbitControls compatibility
+    minDistance: 0,
+    maxDistance: Infinity,
+    minZoom: 0,
+    maxZoom: Infinity,
+    minPolarAngle: 0,
+    maxPolarAngle: Math.PI,
+    minAzimuthAngle: -Infinity,
+    maxAzimuthAngle: Infinity,
+    dampingFactor: 0.05,
+    draggingDampingFactor: 0.25,
+    dollySpeed: 1.0,
+    truckSpeed: 2.0,
+    verticalDragToForward: false,
+    dollyToCursor: false,
+    colliderMeshes: [],
   };
+
+  return controller;
 }
 
 /**
