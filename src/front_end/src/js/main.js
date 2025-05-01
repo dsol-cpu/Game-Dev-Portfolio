@@ -10,7 +10,7 @@ import { initNavigation } from "./navigation.js";
 import { initPortfolioFilters } from "./portfolio-filters.js";
 import { initGameView } from "./game-view.js";
 import { initUserInteraction } from "./user-interaction.js";
-import { detectLowEndDevice } from "./utils/device.js";
+import { isLowPoweredDevice } from "./utils/device.js";
 import { initThreeJS } from "./three/threejs-manager.js";
 
 // Initialize on DOM load
@@ -28,7 +28,7 @@ function initializeApp() {
 
   initProjectCards();
   // Only initialize the ThreeJS scenes and models if you don't have a doodoo computer
-  if (!detectLowEndDevice()) initThreeJS();
+  if (!isLowPoweredDevice()) initThreeJS();
 
   initPortfolioFilters();
   setupBackdropListener();

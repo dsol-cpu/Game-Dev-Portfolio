@@ -1,50 +1,31 @@
-/* Game View Styling */
-
-/* Base styles for game view */
 .game-view-container {
-  position: absolute;
+  position: fixed;
   top: 0;
-  left: 0;
-  width: calc(100% - 300px); /* Adjust based on sidebar width */
-  height: 100vh;
-  margin-left: 300px; /* Should match sidebar width */
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: stretch;
+  /* Left position and width set dynamically in JS */
+  height: 100%;
   background-color: var(--bg-color);
-  z-index: 10;
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.3s ease;
+  overflow: hidden;
+  display: none;
+  z-index: 100;
 }
 
-/* Game canvas styling */
 #main-game-canvas {
+  display: block;
   width: 100%;
   height: 100%;
-  display: block;
   background-color: var(--bg-color-secondary);
-  border-radius: 8px;
 }
 
-/* Game controls info panel */
+/* Game controls info */
 .game-controls-info {
   position: absolute;
   bottom: 20px;
   left: 20px;
-  background-color: rgba(0, 0, 0, 0.7);
+  background-color: rgba(0, 0, 0, 0.5);
   color: white;
-  padding: 15px;
-  border-radius: 8px;
-  z-index: 11;
-  pointer-events: none; /* Allow clicks to pass through */
-  opacity: 0.8;
-  transition: opacity 0.3s ease;
-}
-
-.game-controls-info:hover {
-  opacity: 1;
+  padding: 10px;
+  border-radius: 5px;
+  z-index: 1001;
 }
 
 .game-controls-info ul {
@@ -56,64 +37,17 @@
 .game-controls-info li {
   display: flex;
   align-items: center;
-  margin-bottom: 10px;
-}
-
-.game-controls-info li:last-child {
-  margin-bottom: 0;
+  margin-bottom: 5px;
 }
 
 .game-controls-info svg {
   width: 24px;
   height: 24px;
   margin-right: 8px;
-  fill: white;
+  fill: currentColor;
 }
 
-.game-controls-info p {
-  margin: 0;
-}
-
-/* Toggle button styling */
-.view-toggle-btn {
-  padding: 8px 16px;
-  background-color: var(--accent-color);
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-weight: 500;
-  transition: background-color 0.2s ease;
-}
-
-.view-toggle-btn:hover {
-  background-color: var(--accent-color-hover);
-}
-
-/* Game mode class applied to body */
-body.game-mode .main-content {
-  opacity: 0;
-  visibility: hidden;
-  pointer-events: none;
-}
-
-body.game-mode .game-view-container {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-}
-
-/* Responsive styles */
-@media (max-width: 768px) {
-  .game-view-container {
-    width: 100%;
-    margin-left: 0;
-    top: 60px; /* Adjust based on mobile header height */
-    height: calc(100vh - 60px);
-  }
-
-  /* Handle mobile sidebar if needed */
-  body.sidebar-open .game-view-container {
-    display: none;
-  }
+/* Game mode body state */
+body.game-mode {
+  overflow: hidden;
 }

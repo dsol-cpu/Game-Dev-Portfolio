@@ -1,6 +1,6 @@
 const BITS_PER_ELEMENT = 32;
-const SHIFT = 5;
-const MASK = 31;
+export const SHIFT = 5;
+export const MASK = 31;
 const FULL_MASK = 0xffffffff;
 
 // Precomputed popcount lookup

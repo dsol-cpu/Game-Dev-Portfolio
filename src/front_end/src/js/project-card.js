@@ -3,7 +3,7 @@
  */
 
 import { projectCardData } from "./data/project";
-import { detectLowEndDevice } from "./utils/device";
+import { isLowPoweredDevice } from "./utils/device";
 
 const domCache = {
   portfolioGrid: null,
@@ -97,7 +97,7 @@ function createProjectCard(project) {
     "game-image-container portfolio-canvas"
   );
 
-  const isLowEndDevice = detectLowEndDevice();
+  const isLowEndDevice = isLowPoweredDevice();
 
   if (isLowEndDevice) {
     // Add background image and img element for low-end devices
@@ -241,7 +241,7 @@ function renderProjectsGrid(projects) {
   grid.appendChild(fragment);
 
   // Only initialize canvases if not a low-end device
-  if (!detectLowEndDevice()) {
+  if (!isLowPoweredDevice()) {
     initializeAllCanvases(grid);
   }
 }
@@ -278,7 +278,7 @@ function addNewProject(data) {
   grid.appendChild(card);
 
   // Only initialize the canvas if not a low-end device
-  if (!detectLowEndDevice()) {
+  if (!isLowPoweredDevice()) {
     const canvas = card.querySelector(".threejs-canvas");
     if (canvas) initThreeJsCanvas(canvas, data);
   }

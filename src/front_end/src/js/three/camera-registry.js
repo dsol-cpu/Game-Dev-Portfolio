@@ -1,5 +1,5 @@
 /**
- * @fileoverview Global camera registry with 32-bit bitmask-based activation.
+ * @fileoverview Optimized global camera registry with 32-bit bitmask-based activation.
  */
 
 import {
@@ -20,68 +20,33 @@ export const CAMERA_TYPES = Object.freeze({
 });
 
 // Configuration constants
-const EMPTY_ARRAY = Object.freeze([]);
-const MAX_SUPPORTED_CAMERAS = 32;
+const MAX_CAMERAS = 32;
 const DEFAULT_ROTATION_SPEED = 0.003;
 const ROTATION_SPEED_VARIANCE = 0.001;
 const IDLE_UPDATE_MODULO = 3;
 const MIN_UPDATE_INTERVAL = 100;
-const DEFAULT_CANVAS_WIDTH = 300;
-const DEFAULT_CANVAS_HEIGHT = 200;
 const DEFAULT_CAMERA_TYPE = CAMERA_TYPES.PROJECT;
 const HIGH_PRIORITY = 1;
 const NORMAL_PRIORITY = 0;
 const MAX_ROTATION_INDEX = 5;
-const VALID_INDEX_MIN = 0;
 
-// Error messages
-const ERROR_CAMERA_FULL = (maxCameras) =>
-  `Camera registry full (max: ${maxCameras})`;
-const ERROR_MAX_POSITIVE = "maxCameras must be positive";
-const ERROR_INVALID_CAM_TARGET =
-  "Invalid camera or target in createSimpleAutorotation";
-const ERROR_RENDERING = (index) => `Error rendering camera ${index}:`;
-
-// Warning messages
-const WARN_MAX_CAMERAS = (max) =>
-  `Camera registry limited to ${max} cameras, truncating`;
-
-// Global camera registry with a single 32-bit bitmask
-const cameraRegistry = {
-  cameras: EMPTY_ARRAY,
-  controls: EMPTY_ARRAY,
-  contexts: EMPTY_ARRAY,
-  activeCamBitmask: null,
-  cameraData: EMPTY_ARRAY,
+// Global registry - single instance for performance
+const registry = {
+  cameras: Array(MAX_CAMERAS).fill(null),
+  controls: Array(MAX_CAMERAS).fill(null),
+  contexts: Array(MAX_CAMERAS).fill(null),
+  data: Array(MAX_CAMERAS).fill(null),
+  mask: null,
   count: 0,
-  maxCameras: 0,
-  MAX_SUPPORTED_CAMERAS,
 };
 
 /**
  * Initialize the camera registry
- * @param {number} maxCameras - Maximum number of cameras to support (max 32)
  */
-export function initCameraRegistry(maxCameras = MAX_SUPPORTED_CAMERAS) {
-  if (maxCameras <= 0) throw new Error(ERROR_MAX_POSITIVE);
-
-  if (maxCameras > MAX_SUPPORTED_CAMERAS) {
-    console.warn(WARN_MAX_CAMERAS(MAX_SUPPORTED_CAMERAS));
-    maxCameras = MAX_SUPPORTED_CAMERAS;
-  }
-
-  cameraRegistry.maxCameras = maxCameras;
-  cameraRegistry.count = 0;
-  cameraRegistry.activeCamBitmask = createBitArray(maxCameras);
-
-  // Initialize arrays with nulls
-  cameraRegistry.cameras = new Array(maxCameras).fill(null);
-  cameraRegistry.controls = new Array(maxCameras).fill(null);
-  cameraRegistry.contexts = new Array(maxCameras).fill(null);
-  cameraRegistry.cameraData = new Array(maxCameras).fill(null);
-
-  // All cameras active by default
-  enableAllBits(cameraRegistry.activeCamBitmask);
+export function initCameraRegistry() {
+  registry.count = 0;
+  registry.mask = createBitArray(MAX_CAMERAS);
+  enableAllBits(registry.mask);
 }
 
 /**
@@ -94,26 +59,25 @@ export function registerCamera(
   metadata = {},
   active = true
 ) {
-  if (cameraRegistry.count >= cameraRegistry.maxCameras) {
-    throw new Error(ERROR_CAMERA_FULL(cameraRegistry.maxCameras));
+  if (registry.count >= MAX_CAMERAS) {
+    throw new Error(`Camera registry full (max: ${MAX_CAMERAS})`);
   }
 
-  const index = cameraRegistry.count++;
-  cameraRegistry.cameras[index] = camera;
-  cameraRegistry.controls[index] = controls;
-  cameraRegistry.contexts[index] = context;
+  const index = registry.count++;
+  registry.cameras[index] = camera;
+  registry.controls[index] = controls;
+  registry.contexts[index] = context;
 
-  // Create camera data with defaults
-  cameraRegistry.cameraData[index] = {
+  // Simplified data object
+  registry.data[index] = {
     type: metadata.type || DEFAULT_CAMERA_TYPE,
     elementId: metadata.elementId || null,
     modelName: metadata.modelName || null,
-    ...(metadata.hasOwnProperty("type") ? {} : metadata),
+    ...(metadata.type ? {} : metadata),
   };
 
   // Set activity state
-  const bitFunc = active ? enableBit : disableBit;
-  bitFunc(cameraRegistry.activeCamBitmask, index);
+  if (!active) disableBit(registry.mask, index);
 
   return index;
 }
@@ -122,36 +86,41 @@ export function registerCamera(
  * Set specific cameras as active
  */
 export function setActiveCameras(indices) {
-  if (!cameraRegistry.activeCamBitmask || !indices?.length) return;
+  if (!registry.mask || !indices?.length) return;
 
-  const newMask = createBitArray(cameraRegistry.maxCameras);
+  const newMask = createBitArray(MAX_CAMERAS);
 
   for (const index of indices) {
-    if (isValidIndex(index)) {
+    if (index >= 0 && index < MAX_CAMERAS) {
       enableBit(newMask, index);
     }
   }
 
-  cameraRegistry.activeCamBitmask = newMask;
+  registry.mask = newMask;
 }
 
 /**
- * Check if index is valid for the camera registry
- * @private
+ * Count active cameras based on bitmask
  */
-function isValidIndex(index) {
-  return index >= VALID_INDEX_MIN && index < cameraRegistry.maxCameras;
+export function countActiveCameras() {
+  if (!registry.mask) return 0;
+
+  let count = 0;
+  for (let i = 0; i < registry.count; i++) {
+    if (isBitSet(registry.mask, i)) count++;
+  }
+  return count;
 }
 
 /**
  * Add indices to active cameras without clearing others
  */
 export function addActiveCameras(indices) {
-  if (!indices?.length || !cameraRegistry.activeCamBitmask) return;
+  if (!indices?.length || !registry.mask) return;
 
   for (const index of indices) {
-    if (isValidIndex(index)) {
-      enableBit(cameraRegistry.activeCamBitmask, index);
+    if (index >= 0 && index < MAX_CAMERAS) {
+      enableBit(registry.mask, index);
     }
   }
 }
@@ -160,13 +129,31 @@ export function addActiveCameras(indices) {
  * Remove indices from active cameras
  */
 export function removeActiveCameras(indices) {
-  if (!indices?.length || !cameraRegistry.activeCamBitmask) return;
+  if (!indices?.length || !registry.mask) return;
 
   for (const index of indices) {
-    if (isValidIndex(index)) {
-      disableBit(cameraRegistry.activeCamBitmask, index);
+    if (index >= 0 && index < MAX_CAMERAS) {
+      disableBit(registry.mask, index);
     }
   }
+}
+
+/**
+ * Enable a single camera
+ */
+export function enableCamera(index) {
+  if (!registry.mask || index < 0 || index >= MAX_CAMERAS) return false;
+  enableBit(registry.mask, index);
+  return true;
+}
+
+/**
+ * Disable a single camera
+ */
+export function disableCamera(index) {
+  if (!registry.mask || index < 0 || index >= MAX_CAMERAS) return false;
+  disableBit(registry.mask, index);
+  return true;
 }
 
 /**
@@ -178,14 +165,12 @@ export function createSimpleAutorotation(
   cameraDistance,
   index
 ) {
-  if (!camera || !targetPosition) {
-    console.error(ERROR_INVALID_CAM_TARGET);
-    return createEmptyController();
-  }
+  if (!camera || !targetPosition) return null;
 
   const rotationSpeed =
     DEFAULT_ROTATION_SPEED +
     (index % MAX_ROTATION_INDEX) * ROTATION_SPEED_VARIANCE;
+
   let lastUpdate = 0;
   const target = new Vector3(
     targetPosition.x || 0,
@@ -193,51 +178,41 @@ export function createSimpleAutorotation(
     targetPosition.z || 0
   );
 
-  // Create a proper controller object with required event properties
+  // Create minimal controller object with required properties
   return {
     autoRotate: true,
     target,
-    // Add event handling properties to prevent null reference errors
     _listeners: {},
+
+    // Simplified event handling
     addEventListener: function (type, listener) {
-      if (this._listeners === undefined) this._listeners = {};
-      const listeners = this._listeners;
-      if (listeners[type] === undefined) listeners[type] = [];
-      if (listeners[type].indexOf(listener) === -1)
-        listeners[type].push(listener);
+      (this._listeners[type] = this._listeners[type] || []).push(listener);
     },
+
     hasEventListener: function (type, listener) {
-      if (this._listeners === undefined) return false;
-      const listeners = this._listeners;
-      return (
-        listeners[type] !== undefined &&
-        listeners[type].indexOf(listener) !== -1
-      );
+      return this._listeners[type]?.includes(listener) || false;
     },
+
     removeEventListener: function (type, listener) {
-      if (this._listeners === undefined) return;
-      const listeners = this._listeners;
-      const listenerArray = listeners[type];
-      if (listenerArray !== undefined) {
-        const index = listenerArray.indexOf(listener);
-        if (index !== -1) listenerArray.splice(index, 1);
+      const listeners = this._listeners[type];
+      if (listeners) {
+        const index = listeners.indexOf(listener);
+        if (index !== -1) listeners.splice(index, 1);
       }
     },
+
     dispatchEvent: function (event) {
-      if (this._listeners === undefined) return;
-      const listeners = this._listeners;
-      const listenerArray = listeners[event.type];
-      if (listenerArray !== undefined) {
-        event.target = this;
-        const array = listenerArray.slice(0);
-        for (let i = 0, l = array.length; i < l; i++) {
-          array[i].call(this, event);
-        }
-      }
+      const listeners = this._listeners[event.type];
+      if (!listeners) return;
+
+      event.target = this;
+      listeners.slice().forEach((listener) => listener.call(this, event));
     },
+
     update: (timestamp = performance.now()) => {
       if (!camera) return;
 
+      // Throttle updates in idle mode
       if (isIdle() && timestamp - lastUpdate < MIN_UPDATE_INTERVAL) return;
       lastUpdate = timestamp;
 
@@ -252,70 +227,92 @@ export function createSimpleAutorotation(
       camera.lookAt(target);
       camera.updateMatrixWorld(true);
     },
+
     dispose: () => {},
   };
 }
 
 /**
- * Create an empty controller with no-op methods
- * @private
+ * Get cameras for the specified element IDs
  */
-function createEmptyController() {
-  return {
-    // Add event handling properties to prevent null reference errors
-    _listeners: {},
-    addEventListener: function (type, listener) {
-      if (this._listeners === undefined) this._listeners = {};
-      const listeners = this._listeners;
-      if (listeners[type] === undefined) listeners[type] = [];
-      if (listeners[type].indexOf(listener) === -1)
-        listeners[type].push(listener);
-    },
-    hasEventListener: function (type, listener) {
-      if (this._listeners === undefined) return false;
-      const listeners = this._listeners;
-      return (
-        listeners[type] !== undefined &&
-        listeners[type].indexOf(listener) !== -1
-      );
-    },
-    removeEventListener: function (type, listener) {
-      if (this._listeners === undefined) return;
-      const listeners = this._listeners;
-      const listenerArray = listeners[type];
-      if (listenerArray !== undefined) {
-        const index = listenerArray.indexOf(listener);
-        if (index !== -1) listenerArray.splice(index, 1);
-      }
-    },
-    dispatchEvent: function (event) {
-      if (this._listeners === undefined) return;
-      const listeners = this._listeners;
-      const listenerArray = listeners[event.type];
-      if (listenerArray !== undefined) {
-        event.target = this;
-        const array = listenerArray.slice(0);
-        for (let i = 0, l = array.length; i < l; i++) {
-          array[i].call(this, event);
-        }
-      }
-    },
-    update: () => {},
-    dispose: () => {},
-  };
+export function getCamerasForElements(elementIds) {
+  if (!elementIds?.size || registry.count === 0) return new Set();
+
+  const cameraIndices = new Set();
+
+  for (let i = 0; i < registry.count; i++) {
+    const data = registry.data[i];
+    if (data?.elementId && elementIds.has(data.elementId)) {
+      cameraIndices.add(i);
+    }
+  }
+
+  return cameraIndices;
+}
+
+/**
+ * Batch enable a set of cameras
+ * @param {Set<number>} cameraIndices - Set of camera indices to enable
+ * @returns {number} - Number of cameras successfully enabled
+ */
+export function enableCameras(cameraIndices) {
+  if (!registry.mask) return 0;
+
+  let enabledCount = 0;
+  cameraIndices.forEach((index) => {
+    if (index >= 0 && index < MAX_CAMERAS) {
+      enableBit(registry.mask, index);
+      enabledCount++;
+    }
+  });
+
+  return enabledCount;
+}
+
+/**
+ * Batch disable a set of cameras
+ * @param {Set<number>} cameraIndices - Set of camera indices to disable
+ * @returns {number} - Number of cameras successfully disabled
+ */
+export function disableCameras(cameraIndices) {
+  if (!registry.mask) return 0;
+
+  let disabledCount = 0;
+  cameraIndices.forEach((index) => {
+    if (index >= 0 && index < MAX_CAMERAS) {
+      disableBit(registry.mask, index);
+      disabledCount++;
+    }
+  });
+
+  return disabledCount;
+}
+
+/**
+ * Get cameras by data category
+ */
+export function getCamerasByCategory(category) {
+  if (!category || registry.count === 0) return [];
+
+  const indices = [];
+  for (let i = 0; i < registry.count; i++) {
+    if (registry.data[i]?.categories?.includes(category)) {
+      indices.push(i);
+    }
+  }
+
+  return indices;
 }
 
 /**
  * Find camera indices matching a predicate function
- * @private
  */
 function getCamerasByPredicate(predicate) {
-  if (cameraRegistry.count === 0 || !cameraRegistry.cameraData)
-    return EMPTY_ARRAY;
+  if (registry.count === 0) return [];
 
   const indices = [];
-  for (let i = 0; i < cameraRegistry.count; i++) {
-    if (predicate(cameraRegistry.cameraData[i])) {
+  for (let i = 0; i < registry.count; i++) {
+    if (predicate(registry.data[i])) {
       indices.push(i);
     }
   }
@@ -326,15 +323,22 @@ function getCamerasByPredicate(predicate) {
  * Get camera indices by type
  */
 export function getCamerasByType(type) {
-  if (!type) return EMPTY_ARRAY;
+  if (!type) return [];
   return getCamerasByPredicate((data) => data?.type === type);
+}
+
+/**
+ * Set active cameras by type
+ */
+export function setActiveCamerasByType(type) {
+  setActiveCameras(getCamerasByType(type));
 }
 
 /**
  * Get camera indices by element ID
  */
 export function getCamerasByElementId(elementId) {
-  if (!elementId) return EMPTY_ARRAY;
+  if (!elementId) return [];
   return getCamerasByPredicate((data) => data?.elementId === elementId);
 }
 
@@ -346,66 +350,60 @@ export function getCamerasBySection(sectionId) {
 }
 
 /**
- * Set active cameras by type
+ * Check if a camera is enabled
  */
-export function setActiveCamerasByType(type) {
-  setActiveCameras(getCamerasByType(type));
+export function isCameraEnabled(index) {
+  if (!registry.mask || index < 0 || index >= MAX_CAMERAS) return false;
+  return isBitSet(registry.mask, index);
 }
 
 /**
- * Update all active controls
+ * Toggle a camera's enabled state
+ */
+export function toggleCamera(index) {
+  if (!registry.mask || index < 0 || index >= MAX_CAMERAS) return false;
+
+  const newState = !isBitSet(registry.mask, index);
+  if (newState) {
+    enableBit(registry.mask, index);
+  } else {
+    disableBit(registry.mask, index);
+  }
+
+  return newState;
+}
+
+/**
+ * Update all active controls with priority handling
  */
 export function updateActiveControls(timestamp) {
-  if (!cameraRegistry.activeCamBitmask) return;
+  if (!registry.mask) return;
 
-  // First update any controls that are currently being dragged
+  // Process dragging controls first (highest priority)
   let foundActiveDrag = false;
 
-  try {
-    // Process dragging controls first (highest priority)
-    for (let i = 0; i < cameraRegistry.count; i++) {
-      if (!isBitSet(cameraRegistry.activeCamBitmask, i)) continue;
+  for (let i = 0; i < registry.count; i++) {
+    if (!isBitSet(registry.mask, i)) continue;
 
-      const control = cameraRegistry.controls[i];
-
-      if (!control) continue;
-
-      if (control._dragging) {
-        try {
-          control.update();
-          foundActiveDrag = true;
-        } catch (controlError) {
-          console.warn(`Error updating dragging control ${i}:`, controlError);
-        }
-      }
+    const control = registry.controls[i];
+    if (control?._dragging) {
+      control.update();
+      foundActiveDrag = true;
     }
+  }
 
-    // In idle mode, only update auto-rotating controls at a lower rate
-    const updateNonDragging = !isIdle() || timestamp % IDLE_UPDATE_MODULO === 0;
-    if (!updateNonDragging) return;
+  // Only update non-dragging controls when not idle or at reduced rate
+  const updateNonDragging = !isIdle() || timestamp % IDLE_UPDATE_MODULO === 0;
+  if (!updateNonDragging) return;
 
-    // Then update the rest
-    for (let i = 0; i < cameraRegistry.count; i++) {
-      if (!isBitSet(cameraRegistry.activeCamBitmask, i)) continue;
+  // Then update the rest
+  for (let i = 0; i < registry.count; i++) {
+    if (!isBitSet(registry.mask, i)) continue;
 
-      const control = cameraRegistry.controls[i];
-
-      if (!control) continue;
-
-      // Check if we should update this non-dragging control
-      if (!control._dragging && (!foundActiveDrag || control.autoRotate)) {
-        try {
-          control.update();
-        } catch (controlError) {
-          console.warn(
-            `Error updating non-dragging control ${i}:`,
-            controlError
-          );
-        }
-      }
+    const control = registry.controls[i];
+    if (!control?._dragging && (!foundActiveDrag || control.autoRotate)) {
+      control.update();
     }
-  } catch (error) {
-    console.error("Error in updateActiveControls:", error);
   }
 }
 
@@ -413,16 +411,40 @@ export function updateActiveControls(timestamp) {
  * Set all cameras as active
  */
 export function activateAllCameras() {
-  if (cameraRegistry.activeCamBitmask) {
-    enableAllBits(cameraRegistry.activeCamBitmask);
+  if (registry.mask) {
+    for (let i = 0; i < registry.count; i++) {
+      enableBit(registry.mask, i);
+    }
   }
+}
+
+/**
+ * Get active cameras sorted by priority
+ */
+function getActiveCamerasWithPriority() {
+  if (!registry.mask) return [];
+
+  const activeCameras = [];
+
+  for (let i = 0; i < registry.count; i++) {
+    if (isBitSet(registry.mask, i)) {
+      const control = registry.controls[i];
+      activeCameras.push({
+        index: i,
+        priority: control?._dragging ? HIGH_PRIORITY : NORMAL_PRIORITY,
+      });
+    }
+  }
+
+  // Sort by priority (highest first)
+  return activeCameras.sort((a, b) => b.priority - a.priority);
 }
 
 /**
  * Optimized rendering of active cameras
  */
 export function renderActiveCameras(renderer, scene) {
-  if (!renderer || !scene || !cameraRegistry.activeCamBitmask) return;
+  if (!renderer || !scene || !registry.mask) return;
 
   try {
     const activeCameras = getActiveCamerasWithPriority();
@@ -435,76 +457,33 @@ export function renderActiveCameras(renderer, scene) {
 
     // Process cameras in priority order
     for (const { index } of activeCameras) {
-      try {
-        renderSingleCamera(index, renderer, scene, domElement);
-      } catch (cameraError) {
-        console.error(`Error rendering camera ${index}:`, cameraError);
-        // Continue with other cameras even if one fails
-      }
+      renderSingleCamera(index, renderer, scene, domElement);
     }
 
     renderer.scissorTest = originalScissorTest;
   } catch (error) {
-    console.error("Fatal error in renderActiveCameras:", error);
+    // Minimal error handling in production
+    console.error("Error in renderActiveCameras");
   }
 }
 
 /**
- * Get active cameras with priority sorting
- * @private
- */
-function getActiveCamerasWithPriority() {
-  if (!cameraRegistry.activeCamBitmask) return [];
-
-  const activeCameras = [];
-
-  try {
-    for (let i = 0; i < cameraRegistry.count; i++) {
-      if (isBitSet(cameraRegistry.activeCamBitmask, i)) {
-        const control = cameraRegistry.controls[i];
-        activeCameras.push({
-          index: i,
-          priority: control?._dragging ? HIGH_PRIORITY : NORMAL_PRIORITY,
-        });
-      }
-    }
-
-    return activeCameras.sort((a, b) => b.priority - a.priority);
-  } catch (error) {
-    console.error("Error getting active cameras:", error);
-    return [];
-  }
-}
-
-/**
- * Render a single camera with comprehensive error handling
- * @private
+ * Render a single camera with minimal error handling
  */
 function renderSingleCamera(index, renderer, scene, domElement) {
-  if (index < 0 || index >= cameraRegistry.count) return;
+  if (index < 0 || index >= registry.count) return;
 
-  const camera = cameraRegistry.cameras[index];
-  const ctx = cameraRegistry.contexts[index];
-  const control = cameraRegistry.controls[index];
+  const camera = registry.cameras[index];
+  const ctx = registry.contexts[index];
+  const control = registry.controls[index];
 
-  // Guard against null objects
+  // Quick validation
   if (!camera || !ctx?.canvas) return;
 
-  // Extra validation for WebGL context loss scenarios
-  if (
-    renderer.context &&
-    renderer.context.isContextLost &&
-    renderer.context.isContextLost()
-  ) {
-    console.warn("Skipping render - WebGL context is lost");
-    return;
-  }
-
   try {
-    // Get dimensions from the canvas
     const canvas = ctx.canvas;
-    const width = canvas.width || DEFAULT_CANVAS_WIDTH;
-    const height = canvas.height || DEFAULT_CANVAS_HEIGHT;
+    const width = canvas.width || 300;
+    const height = canvas.height || 200;
 
     if (width <= 0 || height <= 0) return;
 
@@ -514,59 +493,19 @@ function renderSingleCamera(index, renderer, scene, domElement) {
       camera.updateProjectionMatrix();
     }
 
-    setupRendererForCamera(renderer, width, height);
+    // Setup renderer
+    renderer.setSize(width, height, false);
+    renderer.setViewport(0, 0, width, height);
+    renderer.setScissor(0, 0, width, height);
+    renderer.clear();
 
-    // Safe control update
-    if (control?.update && typeof control.update === "function") {
-      try {
-        control.update();
-      } catch (controlError) {
-        console.warn(`Control update error for camera ${index}:`, controlError);
-        // Continue rendering even if control update fails
-      }
-    }
+    // Update control
+    if (control?.update) control.update();
 
     // Render scene
     renderer.render(scene, camera);
 
     // Draw to 2D context
-    drawToContext(ctx, domElement, width, height);
-  } catch (error) {
-    console.error(`Error rendering camera ${index}:`, error);
-    // Mark camera as problematic? Maybe disable temporarily?
-  }
-}
-
-/**
- * Setup renderer for a specific camera with error handling
- * @private
- */
-function setupRendererForCamera(renderer, width, height) {
-  try {
-    renderer.setSize(width, height, false);
-    renderer.setViewport(0, 0, width, height);
-    renderer.setScissor(0, 0, width, height);
-    renderer.clear();
-  } catch (error) {
-    console.error("Error setting up renderer:", error);
-    // Try minimal setup as fallback
-    try {
-      renderer.setViewport(0, 0, width, height);
-      renderer.setScissor(0, 0, width, height);
-    } catch (fallbackError) {
-      console.error("Critical renderer setup error:", fallbackError);
-    }
-  }
-}
-
-/**
- * Draw rendered content to context with error handling
- * @private
- */
-function drawToContext(ctx, domElement, width, height) {
-  if (!ctx || !domElement) return;
-
-  try {
     ctx.clearRect(0, 0, width, height);
     ctx.drawImage(
       domElement,
@@ -579,22 +518,14 @@ function drawToContext(ctx, domElement, width, height) {
       width,
       height
     );
-  } catch (error) {
-    console.error("Error drawing to 2D context:", error);
-
-    // Fallback to basic clear
-    try {
-      ctx.clearRect(0, 0, width, height);
-    } catch (fallbackError) {
-      // At this point, we can't do much else
-      console.error("Critical context drawing error:", fallbackError);
-    }
+  } catch (e) {
+    // Minimal error handling
   }
 }
 
 /**
- * Get the registry state
+ * Get the registry state (for debugging/testing)
  */
 export function getCameraRegistry() {
-  return cameraRegistry;
+  return registry;
 }

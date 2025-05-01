@@ -1,17 +1,14 @@
 import { isBitSet } from "../utils/bit-array.js";
-import { detectLowEndDevice } from "../utils/device.js";
 import {
-  getCamerasByType,
+  getCamerasBySection,
   setActiveCameras,
   getCameraRegistry,
   CAMERA_TYPES,
 } from "../three/camera-registry.js";
 export async function initializeProjectCameras() {
-  if (detectLowEndDevice()) return;
-
   const reg = getCameraRegistry();
   const projCams = reg?.activeCamBitmask
-    ? getCamerasByType(CAMERA_TYPES.PROJECT)
+    ? getCamerasBySection(CAMERA_TYPES.PROJECT)
     : null;
 
   if (!projCams?.length) return;
@@ -36,8 +33,6 @@ export async function initializeProjectCameras() {
  * @returns {boolean} success
  */
 export async function updateCameras(state) {
-  if (detectLowEndDevice()) return false;
-
   const pfs = window.portfolioFilterState;
   if (!pfs?.needsCameraUpdate) return false;
 
@@ -47,7 +42,7 @@ export async function updateCameras(state) {
     return false;
   }
 
-  const projCams = getCamerasByType(CAMERA_TYPES.PROJECT);
+  const projCams = getCamerasBySection(CAMERA_TYPES.PROJECT);
   if (!projCams.length) {
     pfs.needsCameraUpdate = false;
     return false;

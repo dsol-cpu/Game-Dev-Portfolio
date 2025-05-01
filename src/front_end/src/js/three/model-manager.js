@@ -16,7 +16,7 @@ import { GLTFLoader } from "../extern/three/GLTFLoader.js";
 
 // Constants
 const BATCH_SIZE = 3;
-const GRID_SIZE = 512;
+const GRID_SIZE = 1024;
 const FALLBACK_CUBE_NAME = "fallbackCube";
 const MODEL_CLEANUP_THRESHOLD = 10000; // ms
 const MODEL_LOAD_TIMEOUT = 10000; // ms

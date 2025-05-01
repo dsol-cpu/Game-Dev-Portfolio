@@ -16,19 +16,31 @@ function toggleGameView() {
   const body = document.body;
   const toggleBtn = document.getElementById("view-toggle-btn");
   const viewLabel = toggleBtn.querySelector(".view-label");
+  const mainContent = document.querySelector(".main-content");
+  const sidebar = document.querySelector(".sidebar");
+  const gameViewContainer = document.getElementById("game-view-container");
 
   isGameViewActive = !isGameViewActive;
 
   if (isGameViewActive) {
     body.classList.add("game-mode");
-    viewLabel.textContent = "Game View";
+    viewLabel.textContent = "Scroll View";
+
+    // Position game view container next to sidebar, over main content
+    const sidebarWidth = sidebar.offsetWidth;
+    gameViewContainer.style.position = "fixed";
+    gameViewContainer.style.top = "0";
+    gameViewContainer.style.left = sidebarWidth + "px";
+    gameViewContainer.style.width = `calc(100% - ${sidebarWidth}px)`;
+    gameViewContainer.style.height = "100%";
+    gameViewContainer.style.zIndex = "100";
+    gameViewContainer.style.display = "block";
 
     // Force an immediate resize when entering game mode
-    const container = document.getElementById("game-view-container");
     const mainGameCanvas = document.getElementById("main-game-canvas");
-    if (container && mainGameCanvas) {
-      const width = container.clientWidth || 1;
-      const height = container.clientHeight || 1;
+    if (gameViewContainer && mainGameCanvas) {
+      const width = window.innerWidth - sidebarWidth || 1;
+      const height = window.innerHeight || 1;
       mainGameCanvas.width = width;
       mainGameCanvas.height = height;
       lastWidth = width;
@@ -44,7 +56,17 @@ function toggleGameView() {
     }
   } else {
     body.classList.remove("game-mode");
-    viewLabel.textContent = "Scroll View";
+    viewLabel.textContent = "Game View";
+
+    // Reset game view container styles
+    gameViewContainer.style.position = "";
+    gameViewContainer.style.top = "";
+    gameViewContainer.style.left = "";
+    gameViewContainer.style.width = "";
+    gameViewContainer.style.height = "";
+    gameViewContainer.style.zIndex = "";
+    gameViewContainer.style.display = "none";
+
     if (window.stopGameRendering) {
       window.stopGameRendering();
     }
@@ -63,7 +85,8 @@ function toggleGameView() {
  */
 function setupGameCanvasResize() {
   const mainGameCanvas = document.getElementById("main-game-canvas");
-  if (!mainGameCanvas) return;
+  const sidebar = document.querySelector(".sidebar");
+  if (!mainGameCanvas || !sidebar) return;
 
   // Clean up existing observer
   if (resizeObserver) {
@@ -71,11 +94,11 @@ function setupGameCanvasResize() {
     resizeObserver = null;
   }
 
-  const container = document.getElementById("game-view-container");
+  const sidebarWidth = sidebar.offsetWidth;
 
-  // Set initial size
-  const width = container.clientWidth || 1;
-  const height = container.clientHeight || 1;
+  // Set initial size to dimensions next to sidebar
+  const width = window.innerWidth - sidebarWidth || 1;
+  const height = window.innerHeight || 1;
   mainGameCanvas.width = width;
   mainGameCanvas.height = height;
   lastWidth = width;
@@ -84,8 +107,9 @@ function setupGameCanvasResize() {
   const handleResize = debounce(() => {
     if (!isGameViewActive) return;
 
-    const width = container.clientWidth || 1;
-    const height = container.clientHeight || 1;
+    const sidebarWidth = sidebar.offsetWidth;
+    const width = window.innerWidth - sidebarWidth || 1;
+    const height = window.innerHeight || 1;
 
     // Only update if dimensions have actually changed
     if (Math.abs(lastWidth - width) > 1 || Math.abs(lastHeight - height) > 1) {
@@ -104,11 +128,8 @@ function setupGameCanvasResize() {
     }
   }, 200);
 
-  resizeObserver = new ResizeObserver((entries) => {
-    handleResize();
-  });
-
-  resizeObserver.observe(container);
+  // Observe window resize events
+  window.addEventListener("resize", handleResize);
 }
 
 /**
@@ -117,21 +138,17 @@ function setupGameCanvasResize() {
 function initGameView() {
   const viewToggleBtn = document.getElementById("view-toggle-btn");
   const mainGameCanvas = document.getElementById("main-game-canvas");
+  const gameViewContainer = document.getElementById("game-view-container");
+
+  // Hide game view container initially
+  if (gameViewContainer) {
+    gameViewContainer.style.display = "none";
+  }
 
   if (viewToggleBtn && mainGameCanvas) {
     setupGameCanvasResize();
     viewToggleBtn.addEventListener("click", toggleGameView);
   }
-
-  // Add window resize listener as a fallback
-  window.addEventListener(
-    "resize",
-    debounce(() => {
-      if (isGameViewActive) {
-        setupGameCanvasResize(); // Re-setup on window resize to catch any edge cases
-      }
-    }, 300)
-  );
 
   return {
     isGameViewActive: () => isGameViewActive,
