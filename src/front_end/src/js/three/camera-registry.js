@@ -34,6 +34,25 @@ const registry = {
   count: 0,
 };
 
+let aboutCamera = null;
+let gameCamera = null;
+
+export function onToggleGameCamera(isGameView) {
+  console.info("Game view is: ", isGameView);
+  if (gameCamera === null)
+    gameCamera = getCamerasByCategory(CAMERA_SECTIONS.GAME);
+  if (aboutCamera === null)
+    aboutCamera = getCamerasByCategory(CAMERA_SECTIONS.ABOUT);
+  console.info("About Camera index: ", aboutCamera);
+  if (!isGameView) {
+    enableCamera(aboutCamera);
+    disableCamera(gameCamera);
+  } else {
+    enableCamera(gameCamera);
+    disableCamera(aboutCamera);
+  }
+}
+
 /**
  * Initialize the camera registry
  */
@@ -69,6 +88,13 @@ export function registerCamera(
     modelName: metadata.modelName || null,
     ...(metadata.type ? {} : metadata),
   };
+
+  console.info(
+    "Registered camera for section: ",
+    metadata.type,
+    " at index: ",
+    index
+  );
 
   // Set activity state
   if (!active) disableBit(registry.mask, index);
@@ -219,7 +245,6 @@ export function disableCameras(cameraIndices) {
 export function enableCamera(index) {
   if (!registry.mask || index < 0 || index >= MAX_CAMERAS) return false;
   enableBit(registry.mask, index);
-  return true;
 }
 
 /**
@@ -228,7 +253,6 @@ export function enableCamera(index) {
 export function disableCamera(index) {
   if (!registry.mask || index < 0 || index >= MAX_CAMERAS) return false;
   disableBit(registry.mask, index);
-  return false;
 }
 
 /**

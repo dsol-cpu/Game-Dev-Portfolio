@@ -7,7 +7,8 @@ import {
   initProjectCardScene,
 } from "./project-cards";
 import { preloadProjectModels } from "./model-manager";
-import { activateAllCameras } from "./camera-registry";
+import { activateAllCameras, getCamerasByCategory } from "./camera-registry";
+import { CAMERA_SECTIONS } from "../data/sections";
 
 export function initThreeJS() {
   initRenderer();
@@ -17,7 +18,11 @@ export function initThreeJS() {
   const initSequence = async () => {
     try {
       await preloadProjectModels(visibleProjects.slice(0, 3), visibleProjects);
-      initAboutCanvas();
+      await initAboutCanvas();
+      console.info(
+        "initialized about canvas and registered its camera! ",
+        getCamerasByCategory(CAMERA_SECTIONS.ABOUT)
+      );
       initPortfolioCanvases();
       activateAllCameras();
 

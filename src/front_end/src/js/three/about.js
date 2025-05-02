@@ -4,7 +4,7 @@ import { CAMERA_SECTIONS } from "../data/sections";
 /**
  * Initialize about section canvas
  */
-export function initAboutCanvas() {
+export async function initAboutCanvas() {
   const aboutSection = document.querySelector(".about");
   if (!aboutSection) return;
 
@@ -35,5 +35,9 @@ export function initAboutCanvas() {
       section: CAMERA_SECTIONS.ABOUT,
     },
     true
+  );
+  console.info(
+    "initialized about canvas and registered its camera! ",
+    getCamerasByCategory(CAMERA_SECTIONS.ABOUT)
   );
 }

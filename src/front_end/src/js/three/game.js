@@ -1,18 +1,32 @@
 /**
- * @fileoverview Game scene management and rendering
+ * @fileoverview Game scene with player model and camera follow
  */
 
+// Keep existing imports
 import {
   Scene,
   PerspectiveCamera,
   Vector3,
+  Clock,
 } from "../extern/three/three.module.min.js";
-import { registerCamera, createSimpleAutorotation } from "./camera-registry.js";
+import {
+  registerCamera,
+  createSimpleAutorotation,
+  onToggleGameCamera,
+} from "./camera-registry.js";
 import { CAMERA_SECTIONS } from "../data/sections.js";
 import { isIdle, handleUserInteraction } from "../user-interaction.js";
 import { debounce } from "../utils/helper.js";
 import { hasWebGLSupport, getPerfLevel } from "../utils/device.js";
 import { getClonedLight, getRenderer } from "./renderer-core.js";
+// Add new imports for player model and camera follow
+import {
+  createPlayerModel,
+  initPlayerControls,
+  updatePlayerMovement,
+  getPlayerModel,
+} from "./player-model.js";
+import { createOrbitController, updateOrbitCamera } from "./camera-follow.js";
 
 // Constants
 const C = {
@@ -38,6 +52,10 @@ let gameAnimationFrameId = null;
 let isGameViewActive = false;
 let renderer = null;
 let resizeObserver = null;
+let gameTime = new Clock();
+let playerEntity = null;
+let cameraFollowActive = true;
+let orbitController = null;
 
 // Game controller state
 const gameState = {
@@ -53,10 +71,18 @@ const gameState = {
  */
 export function initGameScene() {
   renderer = getRenderer();
+  gameTime.start();
 
   gameScene = new Scene();
   gameScene.add(getClonedLight("ambientLight"));
   gameScene.add(getClonedLight("directionalLight1"));
+
+  // Create player model
+  playerEntity = createPlayerModel();
+  gameScene.add(playerEntity);
+
+  // Initialize player controls
+  initPlayerControls();
 
   thirdPersonCamera = new PerspectiveCamera(
     C.DEFAULT_FOV,
@@ -67,10 +93,18 @@ export function initGameScene() {
   thirdPersonCamera.position.set(0, 2, 5);
   thirdPersonCamera.lookAt(0, 0, 0);
 
+  orbitController = createOrbitController(thirdPersonCamera, playerEntity);
+
+  // Get the game canvas context
+  const mainGameCanvas = document.getElementById("main-game-canvas");
+  const gameCanvasContext = mainGameCanvas
+    ? mainGameCanvas.getContext("2d")
+    : null;
+
   registerCamera(
     thirdPersonCamera,
     createSimpleAutorotation(thirdPersonCamera, new Vector3(0, 0, 0), 5, 0),
-    null,
+    gameCanvasContext,
     {
       type: CAMERA_SECTIONS.GAME,
       elementId: "game-view",
@@ -94,6 +128,23 @@ export function getGameScene() {
  */
 export function getThirdPersonCamera() {
   return thirdPersonCamera;
+}
+
+/**
+ * Toggle camera follow mode
+ * @param {boolean} active - Whether camera follow should be active
+ */
+export function toggleCameraFollow(active) {
+  cameraFollowActive = active !== undefined ? active : !cameraFollowActive;
+  return cameraFollowActive;
+}
+
+/**
+ * Get game's clock
+ * @returns {Clock} The game clock
+ */
+export function getGameClock() {
+  return gameTime;
 }
 
 /**
@@ -169,6 +220,8 @@ function getPublicAPI() {
     getPerfLevel,
     getGameScene,
     getThirdPersonCamera,
+    getPlayerModel,
+    toggleCameraFollow,
   };
 }
 
@@ -210,6 +263,7 @@ export function toggleGameView(elements) {
       ? VIEW_MODES.SCROLL
       : VIEW_MODES.GAME;
   const isGameView = gameState.viewMode === VIEW_MODES.GAME;
+  onToggleGameCamera(isGameView);
 
   if (isGameView) {
     // Switch to game view
@@ -376,6 +430,20 @@ function renderGameView() {
     renderer.setSize(mainGameCanvas.width, mainGameCanvas.height, false);
   }
 
+  // Update game logic
+  const deltaTime = gameTime.getDelta() * 1000; // Convert to milliseconds
+
+  // Update player movement
+  if (playerEntity) {
+    updatePlayerMovement(deltaTime);
+
+    // Update camera to follow player if enabled
+    if (cameraFollowActive && thirdPersonCamera) {
+      orbitController();
+    }
+  }
+
+  // Render scene
   renderer.render(gameScene, thirdPersonCamera);
 
   const w = mainGameCanvas.width;
