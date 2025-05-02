@@ -8,7 +8,6 @@ import { initBlogPosts } from "./blog.js";
 import { initProjectCards, setupBackdropListener } from "./project-card.js";
 import { initNavigation } from "./navigation.js";
 import { initPortfolioFilters } from "./portfolio-filters.js";
-import { initGameView } from "./game-view.js";
 import { initUserInteraction } from "./user-interaction.js";
 import { isLowPoweredDevice } from "./utils/device.js";
 import { initThreeJS } from "./three/threejs-manager.js";
@@ -36,6 +35,6 @@ function initializeApp() {
   // Delay less critical initializations
   requestIdleCallback(() => {
     initBlogPosts();
-    initGameView();
+    // initGameView();
   });
 }

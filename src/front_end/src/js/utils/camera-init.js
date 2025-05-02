@@ -3,12 +3,12 @@ import {
   getCamerasBySection,
   setActiveCameras,
   getCameraRegistry,
-  CAMERA_TYPES,
 } from "../three/camera-registry.js";
-export async function initializeProjectCameras() {
+import { CAMERA_SECTIONS } from "../data/sections.js";
+export async function initProjectCameras() {
   const reg = getCameraRegistry();
   const projCams = reg?.activeCamBitmask
-    ? getCamerasBySection(CAMERA_TYPES.PROJECT)
+    ? getCamerasBySection(CAMERA_SECTIONS.PROJECT)
     : null;
 
   if (!projCams?.length) return;
@@ -18,9 +18,9 @@ export async function initializeProjectCameras() {
     const cam = reg.cameraData[i];
     if (!cam) continue;
     if (
-      (cam.type !== CAMERA_TYPES.PROJECT &&
+      (cam.type !== CAMERA_SECTIONS.PROJECT &&
         isBitSet(reg.activeCamBitmask, i)) ||
-      cam.type === CAMERA_TYPES.PROJECT
+      cam.type === CAMERA_SECTIONS.PROJECT
     ) {
       active.push(i);
     }
@@ -42,7 +42,7 @@ export async function updateCameras(state) {
     return false;
   }
 
-  const projCams = getCamerasBySection(CAMERA_TYPES.PROJECT);
+  const projCams = getCamerasBySection(CAMERA_SECTIONS.PROJECT);
   if (!projCams.length) {
     pfs.needsCameraUpdate = false;
     return false;
@@ -60,8 +60,8 @@ export async function updateCameras(state) {
     if (!cam) continue;
 
     if (
-      (cam.type !== CAMERA_TYPES.PROJECT && isBitSet(mask, i)) ||
-      (cam.type === CAMERA_TYPES.PROJECT &&
+      (cam.type !== CAMERA_SECTIONS.PROJECT && isBitSet(mask, i)) ||
+      (cam.type === CAMERA_SECTIONS.PROJECT &&
         cam.elementId &&
         isProjVisible(cam.elementId))
     ) {

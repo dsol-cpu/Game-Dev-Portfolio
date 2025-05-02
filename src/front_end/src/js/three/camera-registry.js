@@ -11,13 +11,7 @@ import {
 } from "../utils/bit-array.js";
 import { isIdle } from "../user-interaction.js";
 import { Vector3 } from "../extern/three/three.core.min.js";
-
-// Constants
-export const CAMERA_TYPES = Object.freeze({
-  ABOUT: "about",
-  GAME: "game",
-  PROJECT: "project",
-});
+import { CAMERA_SECTIONS } from "../data/sections.js";
 
 // Configuration constants
 const MAX_CAMERAS = 32;
@@ -25,7 +19,7 @@ const DEFAULT_ROTATION_SPEED = 0.003;
 const ROTATION_SPEED_VARIANCE = 0.001;
 const IDLE_UPDATE_MODULO = 3;
 const MIN_UPDATE_INTERVAL = 100;
-const DEFAULT_CAMERA_TYPE = CAMERA_TYPES.PROJECT;
+const DEFAULT_CAMERA_TYPE = CAMERA_SECTIONS.PROJECT;
 const HIGH_PRIORITY = 1;
 const NORMAL_PRIORITY = 0;
 const MAX_ROTATION_INDEX = 5;
@@ -83,6 +77,62 @@ export function registerCamera(
 }
 
 /**
+ * Find camera indices matching a predicate function
+ */
+function getCamerasByPredicate(predicate) {
+  if (registry.count === 0) return [];
+
+  const indices = [];
+  for (let i = 0; i < registry.count; i++) {
+    if (predicate(registry.data[i])) {
+      indices.push(i);
+    }
+  }
+  return indices;
+}
+
+/**
+ * Get camera indices by data property value
+ * @param {string} property - Property name to match (type, elementId, etc.)
+ * @param {any} value - Value to match
+ * @returns {number[]} - Array of matching camera indices
+ */
+export function getCamerasByProperty(property, value) {
+  if (!property || value === undefined) return [];
+  return getCamerasByPredicate((data) => data?.[property] === value);
+}
+
+/**
+ * Get camera indices by type (using the generic property function)
+ */
+export function getCamerasByType(type) {
+  return getCamerasByProperty("type", type);
+}
+
+/**
+ * Get camera indices by element ID (using the generic property function)
+ */
+export function getCamerasByElementId(elementId) {
+  return getCamerasByProperty("elementId", elementId);
+}
+
+/**
+ * Get camera indices by section ID (alias for element ID)
+ */
+export function getCamerasBySection(sectionId) {
+  return getCamerasByElementId(sectionId);
+}
+
+/**
+ * Get cameras by data category
+ */
+export function getCamerasByCategory(category) {
+  if (!category || registry.count === 0) return [];
+
+  return getCamerasByPredicate((data) => data?.categories?.includes(category));
+}
+
+/**
  * Set specific cameras as active
  */
 export function setActiveCameras(indices) {
@@ -100,15 +150,38 @@ export function setActiveCameras(indices) {
 }
 
 /**
- * Count active cameras based on bitmask
+ * Set active cameras by property value
  */
-export function countActiveCameras() {
-  if (!registry.mask) return 0;
+export function setActiveCamerasByProperty(property, value) {
+  setActiveCameras(getCamerasByProperty(property, value));
+}
 
+/**
+ * Set active cameras by type
+ */
+export function setActiveCamerasByType(type) {
+  setActiveCamerasByProperty("type", type);
+}
+
+/**
+ * Modify camera activation state in batch
+ * @param {Set<number>|Array<number>} indices - Camera indices to modify
+ * @param {Function} action - Function to apply (enableBit or disableBit)
+ * @returns {number} - Count of cameras affected
+ */
+function modifyCamerasActivation(indices, action) {
+  if (!registry.mask || !indices) return 0;
+
+  const indexArray = Array.isArray(indices) ? indices : Array.from(indices);
   let count = 0;
-  for (let i = 0; i < registry.count; i++) {
-    if (isBitSet(registry.mask, i)) count++;
+
+  for (const index of indexArray) {
+    if (index >= 0 && index < MAX_CAMERAS) {
+      action(registry.mask, index);
+      count++;
+    }
   }
+
   return count;
 }
 
@@ -116,26 +189,28 @@ export function countActiveCameras() {
  * Add indices to active cameras without clearing others
  */
 export function addActiveCameras(indices) {
-  if (!indices?.length || !registry.mask) return;
-
-  for (const index of indices) {
-    if (index >= 0 && index < MAX_CAMERAS) {
-      enableBit(registry.mask, index);
-    }
-  }
+  return modifyCamerasActivation(indices, enableBit);
 }
 
 /**
  * Remove indices from active cameras
  */
 export function removeActiveCameras(indices) {
-  if (!indices?.length || !registry.mask) return;
+  return modifyCamerasActivation(indices, disableBit);
+}
 
-  for (const index of indices) {
-    if (index >= 0 && index < MAX_CAMERAS) {
-      disableBit(registry.mask, index);
-    }
-  }
+/**
+ * Batch enable a set of cameras
+ */
+export function enableCameras(cameraIndices) {
+  return modifyCamerasActivation(cameraIndices, enableBit);
+}
+
+/**
+ * Batch disable a set of cameras
+ */
+export function disableCameras(cameraIndices) {
+  return modifyCamerasActivation(cameraIndices, disableBit);
 }
 
 /**
@@ -153,7 +228,53 @@ export function enableCamera(index) {
 export function disableCamera(index) {
   if (!registry.mask || index < 0 || index >= MAX_CAMERAS) return false;
   disableBit(registry.mask, index);
-  return true;
+  return false;
+}
+
+/**
+ * Check if a camera is enabled
+ */
+export function isCameraEnabled(index) {
+  if (!registry.mask || index < 0 || index >= MAX_CAMERAS) return false;
+  return isBitSet(registry.mask, index);
+}
+
+/**
+ * Toggle a camera's enabled state
+ */
+export function toggleCamera(index) {
+  if (!registry.mask || index < 0 || index >= MAX_CAMERAS) return false;
+
+  const newState = !isBitSet(registry.mask, index);
+  if (newState) {
+    enableBit(registry.mask, index);
+  } else {
+    disableBit(registry.mask, index);
+  }
+
+  return newState;
+}
+
+/**
+ * Count active cameras based on bitmask
+ */
+export function countActiveCameras() {
+  if (!registry.mask) return 0;
+
+  let count = 0;
+  for (let i = 0; i < registry.count; i++) {
+    if (isBitSet(registry.mask, i)) count++;
+  }
+  return count;
+}
+
+/**
+ * Set all cameras as active
+ */
+export function activateAllCameras() {
+  if (registry.mask) {
+    enableAllBits(registry.mask);
+  }
 }
 
 /**
@@ -251,126 +372,25 @@ export function getCamerasForElements(elementIds) {
 }
 
 /**
- * Batch enable a set of cameras
- * @param {Set<number>} cameraIndices - Set of camera indices to enable
- * @returns {number} - Number of cameras successfully enabled
+ * Get active cameras sorted by priority
  */
-export function enableCameras(cameraIndices) {
-  if (!registry.mask) return 0;
+function getActiveCamerasWithPriority() {
+  if (!registry.mask) return [];
 
-  let enabledCount = 0;
-  cameraIndices.forEach((index) => {
-    if (index >= 0 && index < MAX_CAMERAS) {
-      enableBit(registry.mask, index);
-      enabledCount++;
-    }
-  });
+  const activeCameras = [];
 
-  return enabledCount;
-}
-
-/**
- * Batch disable a set of cameras
- * @param {Set<number>} cameraIndices - Set of camera indices to disable
- * @returns {number} - Number of cameras successfully disabled
- */
-export function disableCameras(cameraIndices) {
-  if (!registry.mask) return 0;
-
-  let disabledCount = 0;
-  cameraIndices.forEach((index) => {
-    if (index >= 0 && index < MAX_CAMERAS) {
-      disableBit(registry.mask, index);
-      disabledCount++;
-    }
-  });
-
-  return disabledCount;
-}
-
-/**
- * Get cameras by data category
- */
-export function getCamerasByCategory(category) {
-  if (!category || registry.count === 0) return [];
-
-  const indices = [];
   for (let i = 0; i < registry.count; i++) {
-    if (registry.data[i]?.categories?.includes(category)) {
-      indices.push(i);
+    if (isBitSet(registry.mask, i)) {
+      const control = registry.controls[i];
+      activeCameras.push({
+        index: i,
+        priority: control?._dragging ? HIGH_PRIORITY : NORMAL_PRIORITY,
+      });
     }
   }
 
-  return indices;
-}
-
-/**
- * Find camera indices matching a predicate function
- */
-function getCamerasByPredicate(predicate) {
-  if (registry.count === 0) return [];
-
-  const indices = [];
-  for (let i = 0; i < registry.count; i++) {
-    if (predicate(registry.data[i])) {
-      indices.push(i);
-    }
-  }
-  return indices;
-}
-
-/**
- * Get camera indices by type
- */
-export function getCamerasByType(type) {
-  if (!type) return [];
-  return getCamerasByPredicate((data) => data?.type === type);
-}
-
-/**
- * Set active cameras by type
- */
-export function setActiveCamerasByType(type) {
-  setActiveCameras(getCamerasByType(type));
-}
-
-/**
- * Get camera indices by element ID
- */
-export function getCamerasByElementId(elementId) {
-  if (!elementId) return [];
-  return getCamerasByPredicate((data) => data?.elementId === elementId);
-}
-
-/**
- * Get camera indices by section ID (alias for element ID)
- */
-export function getCamerasBySection(sectionId) {
-  return getCamerasByElementId(sectionId);
-}
-
-/**
- * Check if a camera is enabled
- */
-export function isCameraEnabled(index) {
-  if (!registry.mask || index < 0 || index >= MAX_CAMERAS) return false;
-  return isBitSet(registry.mask, index);
-}
-
-/**
- * Toggle a camera's enabled state
- */
-export function toggleCamera(index) {
-  if (!registry.mask || index < 0 || index >= MAX_CAMERAS) return false;
-
-  const newState = !isBitSet(registry.mask, index);
-  if (newState) {
-    enableBit(registry.mask, index);
-  } else {
-    disableBit(registry.mask, index);
-  }
-
-  return newState;
+  // Sort by priority (highest first)
+  return activeCameras.sort((a, b) => b.priority - a.priority);
 }
 
 /**
@@ -404,66 +424,6 @@ export function updateActiveControls(timestamp) {
     if (!control?._dragging && (!foundActiveDrag || control.autoRotate)) {
       control.update();
     }
-  }
-}
-
-/**
- * Set all cameras as active
- */
-export function activateAllCameras() {
-  if (registry.mask) {
-    for (let i = 0; i < registry.count; i++) {
-      enableBit(registry.mask, i);
-    }
-  }
-}
-
-/**
- * Get active cameras sorted by priority
- */
-function getActiveCamerasWithPriority() {
-  if (!registry.mask) return [];
-
-  const activeCameras = [];
-
-  for (let i = 0; i < registry.count; i++) {
-    if (isBitSet(registry.mask, i)) {
-      const control = registry.controls[i];
-      activeCameras.push({
-        index: i,
-        priority: control?._dragging ? HIGH_PRIORITY : NORMAL_PRIORITY,
-      });
-    }
-  }
-
-  // Sort by priority (highest first)
-  return activeCameras.sort((a, b) => b.priority - a.priority);
-}
-
-/**
- * Optimized rendering of active cameras
- */
-export function renderActiveCameras(renderer, scene) {
-  if (!renderer || !scene || !registry.mask) return;
-
-  try {
-    const activeCameras = getActiveCamerasWithPriority();
-    if (activeCameras.length === 0) return;
-
-    // Setup renderer once
-    const originalScissorTest = renderer.scissorTest;
-    renderer.scissorTest = true;
-    const domElement = renderer.domElement;
-
-    // Process cameras in priority order
-    for (const { index } of activeCameras) {
-      renderSingleCamera(index, renderer, scene, domElement);
-    }
-
-    renderer.scissorTest = originalScissorTest;
-  } catch (error) {
-    // Minimal error handling in production
-    console.error("Error in renderActiveCameras");
   }
 }
 
@@ -518,8 +478,33 @@ function renderSingleCamera(index, renderer, scene, domElement) {
       width,
       height
     );
-  } catch (e) {
-    // Minimal error handling
+  } catch {}
+}
+
+/**
+ * Rendering of active cameras
+ */
+export function renderActiveCameras(renderer, scene) {
+  if (!renderer || !scene || !registry.mask) return;
+
+  try {
+    const activeCameras = getActiveCamerasWithPriority();
+    if (activeCameras.length === 0) return;
+
+    // Setup renderer once
+    const originalScissorTest = renderer.scissorTest;
+    renderer.scissorTest = true;
+    const domElement = renderer.domElement;
+
+    // Process cameras in priority order
+    for (const { index } of activeCameras) {
+      renderSingleCamera(index, renderer, scene, domElement);
+    }
+
+    renderer.scissorTest = originalScissorTest;
+  } catch (error) {
+    // Minimal error handling in production
+    console.error("Error in renderActiveCameras: ", error);
   }
 }
 

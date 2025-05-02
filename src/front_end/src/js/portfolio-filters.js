@@ -1,8 +1,5 @@
 import { isLowPoweredDevice } from "./utils/device.js";
-import {
-  initializeProjectCameras,
-  updateCameras,
-} from "./utils/camera-init.js";
+import { initProjectCameras, updateCameras } from "./utils/camera-init.js";
 import {
   getCamerasByElementId,
   enableCameras,
@@ -11,6 +8,7 @@ import {
   getCameraRegistry,
   countActiveCameras,
 } from "./three/camera-registry.js";
+import { initProjectCardScene } from "./three/project-cards.js";
 
 // Constants & state
 const ALL = "all",
@@ -76,7 +74,8 @@ function initPortfolioFilters() {
       applyFilter(init);
     }
   } else if (!isLowPoweredDevice()) {
-    initializeProjectCameras();
+    initProjectCameras();
+    initProjectCardScene();
   }
 
   return {
