@@ -4,6 +4,7 @@ import { initGame } from "./game";
 import {
   getVisibleProjectModels,
   initPortfolioCanvases,
+  initProjectCardScene,
 } from "./project-cards";
 import { preloadProjectModels } from "./model-manager";
 import { activateAllCameras } from "./camera-registry";
@@ -30,5 +31,6 @@ export function initThreeJS() {
   };
 
   initGame();
+  initProjectCardScene();
   initSequence();
 }

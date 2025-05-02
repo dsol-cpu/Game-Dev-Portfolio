@@ -8,7 +8,6 @@ import {
   getCameraRegistry,
   countActiveCameras,
 } from "./three/camera-registry.js";
-import { initProjectCardScene } from "./three/project-cards.js";
 
 // Constants & state
 const ALL = "all",
@@ -73,9 +72,6 @@ function initPortfolioFilters() {
       btn.classList.add("active");
       applyFilter(init);
     }
-  } else if (!isLowPoweredDevice()) {
-    initProjectCameras();
-    initProjectCardScene();
   }
 
   return {

@@ -33,6 +33,7 @@ import {
 } from "./orbit-controls-helper.js";
 import { handleUserInteraction } from "../user-interaction.js";
 import { C } from "../constants/constants.js";
+import { initProjectCameras } from "../utils/camera-init.js";
 // Scene for project cards
 let projectCardScene = null;
 
@@ -40,6 +41,7 @@ let projectCardScene = null;
  * Initialize project card scene
  */
 export function initProjectCardScene() {
+  initProjectCameras();
   projectCardScene = new Scene();
 
   // Add lights with custom intensities
