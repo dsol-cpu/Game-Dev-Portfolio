@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -297,7 +297,101 @@
     </div>
 
     <div id="game-view-container" class="game-view-container">
-      <canvas id="main-game-canvas"></canvas>
+      <canvas id="main-game-canvas">
+        <div id="mobile-controls" class="mobile-controls hidden">
+          <!-- Left side - Joystick -->
+          <div id="joystick-container" class="joystick-container">
+            <svg
+              viewBox="0 0 128 128"
+              width="100%"
+              height="100%"
+              style="overflow: visible"
+            >
+              <!-- Base circle -->
+              <circle cx="64" cy="64" r="64" fill="rgba(0, 0, 0, 0.3)"></circle>
+
+              <!-- Joystick knob -->
+              <g
+                id="joystick-knob"
+                transform="translate(64, 64)"
+                style="transition: transform 0.2s ease-out"
+              >
+                <circle
+                  cx="0"
+                  cy="0"
+                  r="32"
+                  fill="rgba(255, 255, 255, 0.8)"
+                  stroke="#555"
+                  stroke-width="1"
+                ></circle>
+              </g>
+            </svg>
+          </div>
+
+          <!-- Right side - Altitude buttons -->
+          <div class="altitude-controls">
+            <!-- UP button -->
+            <button id="altitude-up" class="altitude-button" aria-label="Up">
+              <svg
+                class="icon-up"
+                viewBox="0 0 64 64"
+                width="100%"
+                height="100%"
+              >
+                <!-- Up arrow icon -->
+                <circle
+                  cx="32"
+                  cy="32"
+                  r="30"
+                  fill="rgba(0,0,0,0.3)"
+                  stroke="#555"
+                  stroke-width="1"
+                ></circle>
+                <path
+                  d="M20 36 L32 20 L44 36"
+                  stroke="#FFFFFF"
+                  stroke-width="4"
+                  fill="none"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                ></path>
+              </svg>
+            </button>
+
+            <!-- DOWN button -->
+            <button
+              id="altitude-down"
+              class="altitude-button"
+              aria-label="Down"
+            >
+              <svg
+                class="icon-down"
+                viewBox="0 0 64 64"
+                width="100%"
+                height="100%"
+              >
+                <!-- Down arrow icon -->
+                <circle
+                  cx="32"
+                  cy="32"
+                  r="30"
+                  fill="rgba(0,0,0,0.3)"
+                  stroke="#555"
+                  stroke-width="1"
+                ></circle>
+                <path
+                  d="M20 28 L32 44 L44 28"
+                  stroke="#FFFFFF"
+                  stroke-width="4"
+                  fill="none"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                ></path>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </canvas>
       <div class="game-controls-info">
         <ul>
           <li>

@@ -1,6 +1,6 @@
 /**
  * @fileoverview Game scene with player model and camera follow
- */
+ **/
 
 // Keep existing imports
 import {
@@ -8,6 +8,13 @@ import {
   PerspectiveCamera,
   Vector3,
   Clock,
+  Mesh,
+  CylinderGeometry,
+  BoxGeometry,
+  CapsuleGeometry,
+  Group,
+  MeshStandardMaterial,
+  SphereGeometry
 } from "../extern/three/three.module.min.js";
 import {
   registerCamera,
@@ -19,15 +26,15 @@ import { isIdle, handleUserInteraction } from "../user-interaction.js";
 import { debounce } from "../utils/helper.js";
 import { hasWebGLSupport, getPerfLevel } from "../utils/device.js";
 import { getClonedLight, getRenderer } from "./renderer-core.js";
-// Add new imports for player model and camera follow
+// Import player model and camera follow modules
 import {
   createPlayerModel,
   initPlayerControls,
   updatePlayerMovement,
   getPlayerModel,
 } from "./player-model.js";
-import { createOrbitController, updateOrbitCamera } from "./camera-follow.js";
-
+import { createOrbitController } from "./camera-follow.js";
+import { COLORS } from "../constants/constants.js";
 // Constants
 const C = {
   FRAME_INTERVAL: 1000 / 60,
@@ -36,6 +43,34 @@ const C = {
   NEAR: 0.1,
   FAR: 1000,
 };
+
+// Define colors for the scene objects
+const colors = {
+  clouds: 0xffffff,
+  islandSide: 0x8B4513, // Brown
+  islandTop: 0x228B22, // Forest Green
+  shipBody: 0x3366cc,
+  shipAccent: 0x66ccff,
+};
+
+// Island data - you would need to define this based on your game's world
+const ISLAND_DATA = [
+  {
+    position: new Vector3(0, 0, 0),
+    section: "home",
+    name: "Home Island"
+  },
+  {
+    position: new Vector3(10, 0, 10),
+    section: "explore",
+    name: "Exploration Island"
+  },
+  {
+    position: new Vector3(-10, 0, -15),
+    section: "adventure",
+    name: "Adventure Island"
+  }
+];
 
 // View modes
 const VIEW_MODES = {
@@ -74,11 +109,109 @@ export function initGameScene() {
   gameTime.start();
 
   gameScene = new Scene();
+  gameScene.background = COLORS.SKY;
   gameScene.add(getClonedLight("ambientLight"));
   gameScene.add(getClonedLight("directionalLight1"));
 
-  // Create player model
+  const cloudGeometry = new SphereGeometry(1, 7, 7);
+  const cloudMaterial = new MeshStandardMaterial({
+    color: colors.clouds,
+    flatShading: true,
+    transparent: true,
+    opacity: 0.9,
+  });
+
+  const islandBaseGeometry = new CylinderGeometry(2, 1.5, 2, 8);
+  const islandBaseMaterial = new MeshStandardMaterial({
+    color: colors.islandSide,
+    flatShading: true,
+  });
+
+  const islandTopGeometry = new CylinderGeometry(2, 2, 0.5, 8);
+  const islandTopMaterial = new MeshStandardMaterial({
+    color: colors.islandTop,
+    flatShading: true,
+  });
+
+  // Create containers for scene objects
+  const clouds = [];
+  const islands = [];
+
+  // Create islands using ISLAND_DATA from world.js
+  for (let i = 0; i < ISLAND_DATA.length; i++) {
+    const islandGroup = new Group();
+    const islandInfo = ISLAND_DATA[i];
+
+    // Create geometries with randomized dimensions
+    const baseSize = 2 + Math.random() * 0.5;
+    const topSize = 2 + Math.random() * 0.5;
+
+    // Clone and modify geometries for variation
+    const customBaseGeometry = islandBaseGeometry.clone();
+    customBaseGeometry.scale(baseSize / 2, 1, baseSize / 2);
+
+    const customTopGeometry = islandTopGeometry.clone();
+    customTopGeometry.scale(topSize / 2, 1, topSize / 2);
+
+    // Create island parts
+    const base = new Mesh(customBaseGeometry, islandBaseMaterial);
+
+    const top = new Mesh(customTopGeometry, islandTopMaterial);
+    top.position.y = 1;
+
+    // Add island parts to group
+    islandGroup.add(base, top);
+
+    // Use position from ISLAND_DATA
+    islandGroup.position.copy(islandInfo.position);
+
+    // Store section information in userData for navigation
+    islandGroup.userData.type = islandInfo.section;
+    islandGroup.userData.name = islandInfo.name;
+
+    gameScene.add(islandGroup);
+    islands.push(islandGroup);
+  }
+
+  // Create clouds more efficiently
+  for (let i = 0; i < 8; i++) {
+    // Clone and modify geometry for each cloud
+    const customGeometry = cloudGeometry.clone();
+    customGeometry.scale(
+      1 + Math.random(),
+      1 + Math.random(),
+      1 + Math.random()
+    );
+
+    const cloud = new Mesh(customGeometry, cloudMaterial);
+
+    const scale = 0.8 + Math.random() * 1.5;
+    cloud.position.set(
+      (Math.random() - 0.5) * 40,
+      5 + Math.random() * 8,
+      (Math.random() - 0.5) * 40
+    );
+
+    cloud.scale.set(scale, scale * 0.6, scale);
+    gameScene.add(cloud);
+    clouds.push(cloud);
+  }
+
+  // Create player model using the imported function
   playerEntity = createPlayerModel();
+
+  // Start player at home island position + offset for height
+  const homeIsland = ISLAND_DATA.find((island) => island.section === "home");
+  if (homeIsland) {
+    playerEntity.position.set(
+      homeIsland.position.x,
+      homeIsland.position.y + 2, // Offset player above island
+      homeIsland.position.z
+    );
+  } else {
+    playerEntity.position.set(0, 2, 0); // Fallback position
+  }
+
   gameScene.add(playerEntity);
 
   // Initialize player controls
@@ -93,6 +226,7 @@ export function initGameScene() {
   thirdPersonCamera.position.set(0, 2, 5);
   thirdPersonCamera.lookAt(0, 0, 0);
 
+  // Initialize orbit controller for camera follow
   orbitController = createOrbitController(thirdPersonCamera, playerEntity);
 
   // Get the game canvas context
