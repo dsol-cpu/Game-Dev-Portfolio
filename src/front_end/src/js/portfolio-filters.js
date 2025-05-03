@@ -1,15 +1,4 @@
-import { isLowPoweredDevice } from "./utils/device.js";
-import { initProjectCameras, updateCameras } from "./utils/camera-init.js";
-import {
-  getCamerasByElementId,
-  enableCameras,
-  disableCameras,
-  getCamerasForElements,
-  getCameraRegistry,
-  countActiveCameras,
-} from "./three/camera-registry.js";
-
-// Constants & state
+// Constants
 const ALL = "all",
   NONE = "none",
   BLOCK = "block";
@@ -19,7 +8,6 @@ const state = {
   items: null,
   filter: ALL,
   customFilter: null,
-  lastFilteredCameras: new Set(), // Track previously filtered cameras
 };
 
 /**
@@ -29,26 +17,6 @@ const state = {
 function initPortfolioFilters() {
   state.buttons = document.querySelectorAll(".filter-button");
   state.items = document.querySelectorAll(".portfolio-item");
-
-  // Initialize lastFilteredCameras with all project cameras if this is the first run
-  if (state.lastFilteredCameras.size === 0 && !isLowPoweredDevice()) {
-    // If we're showing all cameras initially (ALL filter), pre-populate the set
-    const visibleIds = new Set();
-    state.items.forEach((item, i) => {
-      const id = item.getAttribute("id") || `portfolio-item-${i}`;
-      visibleIds.add(id);
-
-      // Get all cameras for this element
-      const cameras = getCamerasByElementId(id);
-      cameras.forEach((cameraIndex) => {
-        state.lastFilteredCameras.add(cameraIndex);
-      });
-    });
-
-    console.log(
-      `Initialized lastFilteredCameras with ${state.lastFilteredCameras.size} cameras`
-    );
-  }
 
   state.buttons.forEach((btn) =>
     btn.addEventListener("click", (e) => {
@@ -88,15 +56,11 @@ function initPortfolioFilters() {
       applyFilter(state.filter);
     },
     getActiveFilter: () => state.filter,
-    getCameraStatus: () => ({
-      totalCameras: getCameraRegistry().count,
-      activeCameras: countActiveCameras(),
-    }),
   };
 }
 
 /**
- * Apply filter and update cameras
+ * Apply filter to portfolio items
  * @param {string} filter - Filter to apply
  */
 function applyFilter(filter) {
@@ -135,89 +99,7 @@ function applyFilter(filter) {
     visibleItems: visible,
     visibleItemIds: visibleIds,
     hiddenItemIds: hiddenIds,
-    needsCameraUpdate: true,
   };
-
-  // Update camera visibility based on portfolio item visibility
-  updateCamerasForFilter(visibleIds, hiddenIds);
-
-  // Additional cleanup actions
-  window.cleanupHiddenModels?.();
-  updateCameras(filter, state.items);
 }
 
-/**
- * Update camera visibility based on visible and hidden portfolio items
- * @param {Set<string>} visibleIds - Set of visible portfolio item IDs
- * @param {Set<string>} hiddenIds - Set of hidden portfolio item IDs
- */
-function updateCamerasForFilter(visibleIds, hiddenIds) {
-  const startTime = performance.now();
-
-  const allPortfolioElementIds = new Set([...visibleIds, ...hiddenIds]);
-  const portfolioCameras = new Set(); // All cameras related to this portfolio section
-
-  state.items.forEach((item, i) => {
-    const id = item.getAttribute("id") || `portfolio-item-${i}`;
-    if (allPortfolioElementIds.has(id)) {
-      const cameras = getCamerasByElementId(id);
-      cameras.forEach((cameraIndex) => portfolioCameras.add(cameraIndex));
-    }
-  });
-
-  const camerasToEnable = getCamerasForElements(visibleIds);
-
-  console.log(`Portfolio section has ${portfolioCameras.size} total cameras`);
-  console.log(`Cameras to enable in current filter: ${camerasToEnable.size}`);
-
-  const camerasToDisable = new Set();
-  portfolioCameras.forEach((cameraIndex) => {
-    if (!camerasToEnable.has(cameraIndex)) {
-      camerasToDisable.add(cameraIndex);
-    }
-  });
-
-  console.log(`Cameras to disable: ${camerasToDisable.size}`);
-
-  if (camerasToDisable.size > 0) {
-    const disabledCount = disableCameras(camerasToDisable);
-    console.log(`Disabled ${disabledCount} cameras`);
-  }
-
-  if (camerasToEnable.size > 0) {
-    const enabledCount = enableCameras(camerasToEnable);
-    console.log(`Enabled ${enabledCount} cameras`);
-  }
-
-  // Update tracking state
-  state.lastFilteredCameras = new Set([...camerasToEnable]);
-
-  console.log(`After updates - Active cameras: ${countActiveCameras()}`);
-
-  const endTime = performance.now();
-  console.log(
-    `Camera update completed in ${(endTime - startTime).toFixed(2)}ms`
-  );
-}
-
-/**
- * Improved refreshAllCameras that is scoped to just portfolio items
- */
-function refreshAllCameras() {
-  const visibleIds = new Set();
-  const hiddenIds = new Set();
-
-  state.items.forEach((item, i) => {
-    const id = item.getAttribute("id") || `portfolio-item-${i}`;
-    if (item.style.display !== NONE) {
-      visibleIds.add(id);
-    } else {
-      hiddenIds.add(id);
-    }
-  });
-
-  // Use the scoped camera update function
-  updateCamerasForFilter(visibleIds, hiddenIds);
-}
-
-export { initPortfolioFilters, refreshAllCameras };
+export { initPortfolioFilters };

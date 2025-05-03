@@ -1,4 +1,4 @@
-import { createSimpleAutorotation, registerCamera } from "./camera-registry";
+import { registerCamera } from "./camera-registry";
 import { PerspectiveCamera, Vector3 } from "../extern/three/three.core.min";
 import { CAMERA_SECTIONS } from "../data/sections";
 /**
@@ -27,7 +27,7 @@ export async function initAboutCanvas() {
 
   registerCamera(
     camera,
-    createSimpleAutorotation(camera, new Vector3(0, 0, 0), 5, 0),
+    null,
     ctx,
     {
       type: CAMERA_SECTIONS.ABOUT,

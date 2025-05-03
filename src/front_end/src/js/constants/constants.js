@@ -14,13 +14,3 @@ export const C = {
   INTERSECTION_MARGIN: "150px",
   AUTO_ROTATE_SPEED: 2.0,
 };
-
-export const COLORS = {
-  SKY: 0x87ceeb,
-  CLOUDS: 0xffffff,
-  ISLANDTOP: 0x7cfc00,
-  ISLANDSIDE: 0x8b4513,
-  WATER: 0x1e90ff,
-  SHIP_BODY: 0xd3d3d3,
-  SHIP_ACCENT: 0x4169e1,
-};

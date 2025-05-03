@@ -5,12 +5,17 @@
  */
 
 import { initBlogPosts } from "./blog.js";
-import { initProjectCards, setupBackdropListener } from "./project-card.js";
 import { initNavigation } from "./navigation.js";
 import { initPortfolioFilters } from "./portfolio-filters.js";
+import { initProjectCards, setupBackdropListener } from "./project-card.js";
+import {
+  initPortfolioCanvases,
+  initProjectCardScene,
+} from "./three/project-cards.js";
+import { initThreeJSManager } from "./three/threejs-manager.js";
 import { initUserInteraction } from "./user-interaction.js";
 import { isLowPoweredDevice } from "./utils/device.js";
-import { initThreeJS } from "./three/threejs-manager.js";
+import { initGame } from "./three/game.js";
 
 // Initialize on DOM load
 document.addEventListener("DOMContentLoaded", initializeApp);
@@ -27,14 +32,14 @@ function initializeApp() {
 
   initProjectCards();
   // Only initialize the ThreeJS scenes and models if you don't have a doodoo computer
-  if (!isLowPoweredDevice()) initThreeJS();
+  if (!isLowPoweredDevice()) {
+    initThreeJSManager();
+    initPortfolioCanvases();
+    initProjectCardScene();
+    initGame();
+  }
 
   initPortfolioFilters();
   setupBackdropListener();
-
-  // Delay less critical initializations
-  requestIdleCallback(() => {
-    initBlogPosts();
-    // initGameView();
-  });
+  initBlogPosts();
 }
