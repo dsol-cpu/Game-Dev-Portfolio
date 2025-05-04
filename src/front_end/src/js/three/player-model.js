@@ -20,18 +20,18 @@ let playerControls = null;
 let playerModel = null;
 let playerHeight = 10; // Default starting height
 
-// Player movement settings
+// Player movement settings - SPEEDS DEFINED AS PER-SECOND RATES
 const SHIP = {
-  MAX_SPEED: 0.2,
-  ACCELERATION: 0.01,
-  DECELERATION: 0.008,
-  ROTATION_SPEED: 0.05,
-  VERTICAL_MAX_SPEED: 0.15,
-  VERTICAL_ACCELERATION: 0.008,
-  VERTICAL_DECELERATION: 0.006,
+  MAX_SPEED: 12.0, // Units per second
+  ACCELERATION: 0.6, // Units per second squared
+  DECELERATION: 0.5, // Units per second squared
+  ROTATION_SPEED: 3.0, // Radians per second
+  VERTICAL_MAX_SPEED: 9.0, // Units per second
+  VERTICAL_ACCELERATION: 0.5, // Units per second squared
+  VERTICAL_DECELERATION: 0.4, // Units per second squared
   TILT_AMOUNT: Math.PI / 24, // Amount of tilt for pitch adjustments
-  TILT_SPEED: 0.1, // Speed of tilt transitions
-  ORIENTATION_RESET_SPEED: 0.1, // Speed for resetting orientation
+  TILT_SPEED: 6.0, // Speed of tilt transitions per second
+  ORIENTATION_RESET_SPEED: 6.0, // Speed for resetting orientation per second
 };
 
 // Height constraints
@@ -238,8 +238,9 @@ export function initPlayerControls() {
     mobileMovementY: 0,
     mobileAltitudeChange: 0,
     isArrived: false,
+    lastHoverOffset: 0,
+    lastTime: performance.now(), // Track time for hover effect
   };
-
   // Add keyboard event listeners
   const handleKeyDown = (e) => {
     if (CONTROL_KEYS.includes(e.code)) {
@@ -286,7 +287,7 @@ export function initPlayerControls() {
     update: (deltaTime) => updatePlayerMovement(deltaTime),
     updateCamera: (camera) => updateCamera(camera),
     startOrientationReset: () => startOrientationReset(),
-    updateOrientationReset: () => updateOrientationReset(),
+    updateOrientationReset: (deltaTime) => updateOrientationReset(deltaTime),
 
     // Cleanup method
     dispose: () => {
@@ -306,18 +307,18 @@ export function initPlayerControls() {
  * @param {Object} controls - Player controls object
  * @param {Vector3} direction - Direction vector
  * @param {Vector3} moveVector - Movement vector to update
- * @param {number} deltaTime - Delta time
+ * @param {number} deltaTime - Delta time in milliseconds
  */
 function updateForwardMovement(controls, direction, moveVector, deltaTime) {
   const keys = controls.keysPressed;
   const speedMultiplier = controls.speedMultiplier;
+  // Convert deltaTime to seconds for proper movement scale
+  const deltaSeconds = deltaTime / 1000;
 
-  // Time scaling factor to ensure consistent movement speed
-  const timeScale = deltaTime / 16.67; // 60fps as baseline
-
-  const maxSpeed = SHIP.MAX_SPEED * speedMultiplier;
-  const acceleration = SHIP.ACCELERATION * speedMultiplier * timeScale;
-  const deceleration = SHIP.DECELERATION * speedMultiplier * timeScale;
+  // Apply rates based on deltaTime
+  const maxSpeed = SHIP.MAX_SPEED * speedMultiplier * deltaSeconds;
+  const acceleration = SHIP.ACCELERATION * speedMultiplier * deltaSeconds;
+  const deceleration = SHIP.DECELERATION * speedMultiplier * deltaSeconds;
 
   const movingForward =
     keys["ArrowUp"] || keys["KeyW"] || controls.mobileMovementY > 0.2;
@@ -354,26 +355,26 @@ function updateForwardMovement(controls, direction, moveVector, deltaTime) {
     moveVector.add(direction.clone().multiplyScalar(velocity));
   }
 }
-
 /**
  * Update player's vertical movement
  * @param {Object} controls - Player controls
  * @param {Group} shipObj - Ship object
  * @param {Vector3} moveVector - Movement vector to update
- * @param {number} deltaTime - Delta time
+ * @param {number} deltaTime - Delta time in milliseconds
  */
 function updateVerticalMovement(controls, shipObj, moveVector, deltaTime) {
   const keys = controls.keysPressed;
   const speedMultiplier = controls.speedMultiplier;
+  // Convert deltaTime to seconds for proper movement scale
+  const deltaSeconds = deltaTime / 1000;
 
-  // Time scaling factor
-  const timeScale = deltaTime / 16.67; // 60fps as baseline
-
-  const verticalMaxSpeed = SHIP.VERTICAL_MAX_SPEED * speedMultiplier;
+  // Apply rates based on deltaTime
+  const verticalMaxSpeed =
+    SHIP.VERTICAL_MAX_SPEED * speedMultiplier * deltaSeconds;
   const verticalAcceleration =
-    SHIP.VERTICAL_ACCELERATION * speedMultiplier * timeScale;
+    SHIP.VERTICAL_ACCELERATION * speedMultiplier * deltaSeconds;
   const verticalDeceleration =
-    SHIP.VERTICAL_DECELERATION * speedMultiplier * timeScale;
+    SHIP.VERTICAL_DECELERATION * speedMultiplier * deltaSeconds;
 
   const movingUp =
     (keys["Space"] || controls.mobileAltitudeChange > 0) &&
@@ -443,18 +444,18 @@ function updateVerticalMovement(controls, shipObj, moveVector, deltaTime) {
  * Update player rotation
  * @param {Object} controls - Player controls
  * @param {Group} shipObj - Ship object
- * @param {number} deltaTime - Delta time
+ * @param {number} deltaTime - Delta time in milliseconds
  */
 function updateRotation(controls, shipObj, deltaTime) {
   const keys = controls.keysPressed;
   const speedMultiplier = controls.speedMultiplier;
+  // Convert deltaTime to seconds for proper movement scale
+  const deltaSeconds = deltaTime / 1000;
 
-  // Time scaling factor
-  const timeScale = deltaTime / 16.67; // 60fps as baseline
-
-  const turnAcceleration = 0.0025 * speedMultiplier * timeScale;
-  const maxTurnRate = SHIP.ROTATION_SPEED * speedMultiplier;
-  const turnDeceleration = 0.0025 * speedMultiplier * timeScale;
+  // Apply rates based on deltaTime
+  const turnAcceleration = 0.15 * speedMultiplier * deltaSeconds;
+  const maxTurnRate = SHIP.ROTATION_SPEED * speedMultiplier * deltaSeconds;
+  const turnDeceleration = 0.15 * speedMultiplier * deltaSeconds;
 
   const turningLeft =
     keys["ArrowLeft"] || keys["KeyA"] || controls.mobileMovementX < -0.2;
@@ -514,9 +515,14 @@ function updateRotation(controls, shipObj, deltaTime) {
  * Update ship tilt
  * @param {Object} controls - Player controls
  * @param {Group} shipObj - Ship object
+ * @param {number} deltaTime - Delta time in milliseconds
  */
-function updateShipTilt(controls, shipObj) {
-  const tiltSpeed = SHIP.TILT_SPEED * controls.speedMultiplier;
+function updateShipTilt(controls, shipObj, deltaTime) {
+  const speedMultiplier = controls.speedMultiplier;
+  // Convert deltaTime to seconds for proper movement scale
+  const deltaSeconds = deltaTime / 1000;
+
+  const tiltSpeed = SHIP.TILT_SPEED * speedMultiplier * deltaSeconds;
   const newPitch =
     controls.currentPitch +
     (controls.targetPitch - controls.currentPitch) * tiltSpeed;
@@ -558,6 +564,9 @@ function checkMovement(controls, shipObj) {
 export function updatePlayerMovement(deltaTime) {
   if (!playerModel || !playerControls) return false;
 
+  // Ensure we have a valid deltaTime (prevent jumps with extremely high values)
+  deltaTime = Math.min(deltaTime, 100); // Cap at 100ms (10fps minimum)
+
   // Skip if orientation reset is in progress
   if (playerControls.resetOrientationInProgress) return false;
 
@@ -593,27 +602,30 @@ export function updatePlayerMovement(deltaTime) {
   }
 
   // Update ship tilt
-  updateShipTilt(playerControls, playerModel);
+  updateShipTilt(playerControls, playerModel, deltaTime);
 
   // Update cardinal direction
   playerControls.cardinalDirection = calculateCardinalDirection(
     playerModel.rotation.y
   );
 
-  // Add subtle hovering motion - FIXED: Preserve the player's intended height
-  const hoverTime = Date.now() * 0.001;
-  const hoverAmount = 0.03; // Slightly increased for better visibility
-  const baseHeight = playerModel.position.y;
-  const hoverOffset = Math.sin(hoverTime * 2) * hoverAmount;
+  // Add subtle hovering motion using proper time-based approach with smoother interpolation
+  const currentTime = performance.now() / 1000; // Get current time in seconds
+  const hoverAmount = 0.03; // Amplitude of hover
+  const hoverFrequency = 0.5; // Slower oscillations per second for smoother effect
 
-  // Store the current base height without hover effect
-  const currentBaseHeight = baseHeight - playerControls.lastHoverOffset;
+  // Calculate hover offset using smoothed sine wave
+  const newHoverOffset =
+    Math.sin(currentTime * hoverFrequency * Math.PI * 2) * hoverAmount;
 
-  // Calculate new position with hover effect
-  playerModel.position.y = currentBaseHeight + hoverOffset;
+  // Get the base height without hover effect from last frame
+  const baseHeight = playerModel.position.y - playerControls.lastHoverOffset;
+
+  // Apply new hover offset
+  playerModel.position.y = baseHeight + newHoverOffset;
 
   // Store the current hover offset for next frame
-  playerControls.lastHoverOffset = hoverOffset;
+  playerControls.lastHoverOffset = newHoverOffset;
 
   return true;
 }
@@ -631,9 +643,10 @@ export function startOrientationReset() {
 
 /**
  * Update orientation reset process
+ * @param {number} deltaTime - Delta time in milliseconds
  * @returns {boolean} True if reset is still in progress
  */
-export function updateOrientationReset() {
+export function updateOrientationReset(deltaTime) {
   if (
     !playerModel ||
     !playerControls ||
@@ -641,8 +654,13 @@ export function updateOrientationReset() {
   )
     return false;
 
+  // Convert to seconds
+  const deltaSeconds = deltaTime / 1000;
+
+  const resetSpeed = SHIP.ORIENTATION_RESET_SPEED * deltaSeconds;
+
   const levelOrientation = getLevelOrientation(playerModel.quaternion);
-  playerModel.quaternion.slerp(levelOrientation, SHIP.ORIENTATION_RESET_SPEED);
+  playerModel.quaternion.slerp(levelOrientation, resetSpeed);
   playerControls.shipYawRotation = levelOrientation.clone();
 
   if (playerModel.quaternion.angleTo(levelOrientation) < 0.01) {

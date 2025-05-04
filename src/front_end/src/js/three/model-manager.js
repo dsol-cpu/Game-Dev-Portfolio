@@ -337,7 +337,7 @@ function optimizeMesh(mesh, geometries, materials) {
 
 /**
  * Optimize individual material properties
- * @param {THREE.Material} material - The material to optimize
+ * @param {Material} material - The material to optimize
  */
 function optimizeMaterial(material) {
   if (!material) return;
@@ -408,7 +408,7 @@ function disposeModel(modelName, scene = null) {
 
 /**
  * Dispose of a material and its textures
- * @param {THREE.Material} material - The material to dispose
+ * @param {Material} material - The material to dispose
  */
 function disposeMaterial(material) {
   if (!material) return;

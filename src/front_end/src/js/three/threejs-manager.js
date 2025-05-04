@@ -47,6 +47,7 @@ const manager = {
   cameras: Array(MAX_CAMERAS).fill(null),
   controls: Array(MAX_CAMERAS).fill(null),
   contexts: Array(MAX_CAMERAS).fill(null),
+  metadata: Array(MAX_CAMERAS).fill(null), // Store metadata for each camera
   // Optimized observers
   observers: [],
   // Performance metrics
@@ -115,6 +116,9 @@ export function initThreeJSManager() {
   // Event handlers with minimal overhead
   setupEventHandlers();
 
+  // Start rendering immediately - CRITICAL FIX: Start rendering engine
+  startRendering();
+
   return {
     getStats: () => ({
       fps: manager.metrics.fps,
@@ -178,10 +182,17 @@ function setupEventHandlers() {
  * @param {Camera} camera - Three.js camera
  * @param {Object} controls - Camera controls (optional)
  * @param {CanvasRenderingContext2D} context - Canvas context
+ * @param {Object} metadata - Camera metadata
  * @param {boolean} active - Whether initially active
  * @returns {number} - Camera index
  */
-export function registerCamera(camera, controls, context, active = true) {
+export function registerCamera(
+  camera,
+  controls,
+  context,
+  metadata = {},
+  active = true
+) {
   if (manager.count >= MAX_CAMERAS) {
     throw new Error(`Max cameras (${MAX_CAMERAS}) reached`);
   }
@@ -192,6 +203,7 @@ export function registerCamera(camera, controls, context, active = true) {
   manager.cameras[idx] = camera;
   manager.controls[idx] = controls;
   manager.contexts[idx] = context;
+  manager.metadata[idx] = metadata; // Store metadata
 
   // Set state flags (typed arrays for performance)
   manager.active[idx] = active ? 1 : 0;
@@ -203,10 +215,10 @@ export function registerCamera(camera, controls, context, active = true) {
   optimizeControls(controls);
   setupCanvas(context, idx, active);
 
-  // Start rendering if first camera
-  if (manager.count === 1) {
-    startRendering();
-  }
+  console.log(
+    `Camera ${idx} registered with active=${active ? 1 : 0}, metadata:`,
+    metadata
+  );
 
   return idx;
 }
@@ -312,7 +324,10 @@ function setupObserver(idx, canvas) {
  * @param {boolean} visible - Whether visible
  */
 export function setCameraVisible(idx, visible) {
-  if (idx < 0 || idx >= manager.count) return;
+  if (idx < 0 || idx >= manager.count) {
+    console.error(`Invalid camera index: ${idx}`);
+    return;
+  }
 
   // Get previous state and set new state with typed array access
   const prev = manager.active[idx] === 1;
@@ -321,13 +336,35 @@ export function setCameraVisible(idx, visible) {
   // Only mark dirty if changed
   if (prev !== visible) {
     manager.dirty[idx] = 1;
+    console.log(`Camera ${idx} visibility changed to ${visible}, marked dirty`);
   }
 
   // Direct canvas style manipulation
   const ctx = manager.contexts[idx];
   if (ctx?.canvas) {
     ctx.canvas.style.display = visible ? "block" : "none";
+    console.log(
+      `Camera ${idx} canvas display set to ${visible ? "block" : "none"}`
+    );
+  } else {
+    console.warn(`Camera ${idx} has no valid canvas context`);
   }
+
+  // Ensure rendering is active when setting a camera to visible
+  if (visible && !manager.rendering) {
+    console.log("Restarting rendering due to camera becoming visible");
+    startRendering();
+  }
+}
+
+/**
+ * Get camera's active state
+ * @param {number} idx - Camera index
+ * @returns {boolean} - Whether camera is active
+ */
+export function isCameraActive(idx) {
+  if (idx < 0 || idx >= manager.count) return false;
+  return manager.active[idx] === 1;
 }
 
 /**
@@ -385,18 +422,12 @@ function updateControls(deltaTime) {
  * @returns {boolean} - Whether rendered
  */
 function renderCamera(idx, now) {
-  // Print detailed debug for this specific camera
-  console.log(
-    `Rendering camera ${idx}: active=${manager.active[idx]}, visible=${manager.visible[idx]}, dirty=${manager.dirty[idx]}`
-  );
-
   // Early bail conditions using typed arrays
   if (
     manager.active[idx] !== 1 ||
     manager.visible[idx] !== 1 ||
     manager.dirty[idx] !== 1
   ) {
-    console.log(`Skipping camera ${idx} - not active/visible/dirty`);
     return false;
   }
 
@@ -404,18 +435,11 @@ function renderCamera(idx, now) {
   const camera = manager.cameras[idx];
   const ctx = manager.contexts[idx];
 
-  if (!camera) {
-    console.error(`Camera ${idx} is null`);
-    return false;
-  }
-
-  if (!ctx?.canvas) {
-    console.error(`Canvas context ${idx} is null`);
+  if (!camera || !ctx?.canvas) {
     return false;
   }
 
   if (!ctx.canvas.isConnected) {
-    console.error(`Canvas ${idx} is not connected to DOM`);
     return false;
   }
 
@@ -424,10 +448,7 @@ function renderCamera(idx, now) {
   const width = canvas.width;
   const height = canvas.height;
 
-  console.log(`Canvas dimensions: ${width}x${height}`);
-
   if (width <= 8 || height <= 8) {
-    console.error(`Canvas dimensions too small: ${width}x${height}`);
     return false;
   }
 
@@ -435,7 +456,6 @@ function renderCamera(idx, now) {
   try {
     const r = manager.renderer;
     if (!r) {
-      console.error("Renderer is null");
       return false;
     }
 
@@ -445,25 +465,8 @@ function renderCamera(idx, now) {
     manager.renderer.setScissor(0, 0, width, height);
     manager.renderer.scissorTest = true;
 
-    // Force clear the scene with bright color to verify renderer is working
+    // Clear for this camera
     manager.renderer.clear(true, true, false);
-
-    // Check scene
-    // if (!manager.scene) {
-    //   console.error("Scene is null");
-    //   return false;
-    // }
-
-    // if (manager.scene.children.length === 0) {
-    //   console.warn("Scene has no children");
-    // } else {
-    //   console.log(`Scene has ${manager.scene.children.length} children`);
-    // }
-
-    // Debug camera position
-    console.log(
-      `Camera position: ${camera.position.x}, ${camera.position.y}, ${camera.position.z}`
-    );
 
     // Force update matrices
     camera.updateMatrixWorld(true);
@@ -471,7 +474,6 @@ function renderCamera(idx, now) {
 
     // Render
     manager.renderer.render(manager.scene, camera);
-    console.log("Render call completed");
 
     // Draw to 2D canvas
     ctx.clearRect(0, 0, width, height);
@@ -493,7 +495,6 @@ function renderCamera(idx, now) {
     manager.metrics.rendered++;
     manager.metrics.total++;
 
-    console.log(`Successfully rendered camera ${idx}`);
     return true;
   } catch (error) {
     console.error(`Render error for camera ${idx}:`, error);
@@ -526,14 +527,23 @@ function renderCameras(now) {
 
     // Process cameras in batches for better CPU cache usage
     const count = manager.count;
+    let renderedCount = 0;
+
     for (let start = 0; start < count; start += BATCH_SIZE) {
       const end = Math.min(start + BATCH_SIZE, count);
 
       // Process batch
       for (let i = start; i < end; i++) {
-        renderCamera(i, now);
+        if (renderCamera(i, now)) {
+          renderedCount++;
+        }
       }
     }
+
+    // Log if we rendered cameras
+    // if (renderedCount > 0) {
+    //   console.log(`Rendered ${renderedCount} cameras`);
+    // }
 
     // Reset renderer state
     manager.renderer.scissorTest = false;
@@ -602,6 +612,7 @@ function renderLoop(now) {
 function startRendering() {
   if (manager.rendering) return;
 
+  console.log("Starting ThreeJS render loop");
   manager.rendering = true;
   manager.clock.start();
   manager.lastTime = performance.now();
@@ -614,6 +625,7 @@ function startRendering() {
 function pauseRendering() {
   if (!manager.rendering) return;
 
+  console.log("Pausing ThreeJS render loop");
   manager.rendering = false;
   manager.clock.stop();
 
@@ -629,6 +641,7 @@ function pauseRendering() {
 function resumeRendering() {
   if (manager.rendering) return;
 
+  console.log("Resuming ThreeJS render loop");
   // Mark all as dirty
   manager.dirty.fill(1, 0, manager.count);
 
@@ -659,6 +672,7 @@ export function disposeThreeJSManager() {
     manager.controls[i] = null;
     manager.cameras[i] = null;
     manager.contexts[i] = null;
+    manager.metadata[i] = null; // Clean up metadata
   }
 
   // Force WebGL context loss
@@ -702,6 +716,39 @@ export function disposeThreeJSManager() {
   });
 }
 
+/**
+ * Get the scene instance from the manager
+ * @returns {Scene} - The Three.js scene
+ */
 export function getScene() {
   return manager.scene;
+}
+
+/**
+ * Get all registered cameras
+ * @returns {Array} - Array of camera objects with metadata
+ */
+export function getAllCameras() {
+  const cameras = [];
+  for (let i = 0; i < manager.count; i++) {
+    if (manager.cameras[i]) {
+      cameras.push({
+        index: i,
+        camera: manager.cameras[i],
+        metadata: manager.metadata[i],
+        active: manager.active[i] === 1,
+        visible: manager.visible[i] === 1,
+      });
+    }
+  }
+  return cameras;
+}
+
+/**
+ * Force redraw of a specific camera
+ * @param {number} idx - Camera index
+ */
+export function forceRedraw(idx) {
+  if (idx < 0 || idx >= manager.count) return;
+  manager.dirty[idx] = 1;
 }

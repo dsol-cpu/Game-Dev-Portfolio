@@ -36,7 +36,7 @@ const tempPlayerQuaternion = new Quaternion();
 export function createCameraController(camera, target) {
   // Initialize camera state
   cameraState = {
-    targetPosition: new Vector3(),
+    targetPosition: new Vector3().copy(target.position),
     currentDistance: CAMERA.DEFAULT_DISTANCE,
   };
 
@@ -48,42 +48,37 @@ export function createCameraController(camera, target) {
 }
 
 /**
- * Update camera position to exactly follow target's left/right rotation
+ * Update camera position to track the target
  * @param {PerspectiveCamera} camera - The camera to update
  * @param {Group} target - The target to follow
  */
 export function updateCamera(camera, target) {
   if (!camera || !target || !cameraState) return;
 
-  // Get player position
-  const playerPosition = target.position;
+  // Get player position and update target position in state
+  cameraState.targetPosition.copy(target.position);
 
   // Extract just the Y-axis rotation (yaw) from the player's quaternion
   tempPlayerQuaternion.copy(target.quaternion);
   tempPlayerEuler.setFromQuaternion(tempPlayerQuaternion, "YXZ");
   const playerYaw = tempPlayerEuler.y;
 
-  // The forward vector of the player would be:
-  // forward = (-sin(yaw), 0, -cos(yaw))
-  // So for the camera to be behind, we want:
-  // cameraPos = playerPos + distance * (sin(yaw), 0, cos(yaw))
+  // Calculate offset vector based on player's rotation
+  const offsetX = Math.sin(playerYaw) * cameraState.currentDistance;
+  const offsetZ = Math.cos(playerYaw) * cameraState.currentDistance;
 
   // Calculate camera position - positioned directly behind the player
   tempCameraPosition.set(
-    Math.sin(playerYaw) * cameraState.currentDistance,
-    CAMERA.HEIGHT_OFFSET * 1.2, // Raised camera height for better viewing angle
-    Math.cos(playerYaw) * cameraState.currentDistance
+    cameraState.targetPosition.x + offsetX,
+    cameraState.targetPosition.y + CAMERA.HEIGHT_OFFSET * 1.2, // Raised camera height
+    cameraState.targetPosition.z + offsetZ
   );
-
-  // Add to player position
-  tempCameraPosition.add(playerPosition);
 
   // Smoothly move camera to calculated position
   camera.position.lerp(tempCameraPosition, CAMERA.SMOOTHING);
 
   // Calculate target position at the player position plus height offset
-  // Ensure we're looking at the player's head level, not just the origin
-  tempTargetPosition.copy(playerPosition);
+  tempTargetPosition.copy(cameraState.targetPosition);
   tempTargetPosition.y += CAMERA.HEIGHT_OFFSET * 0.8;
 
   // Make camera look at target

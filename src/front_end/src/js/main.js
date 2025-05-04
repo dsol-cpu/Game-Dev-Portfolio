@@ -1,7 +1,6 @@
 /**
  * @fileoverview Main JavaScript for portfolio site.
  * Handles bootstrapping and coordination between modules.
-
  */
 
 import { initBlogPosts } from "./blog.js";
