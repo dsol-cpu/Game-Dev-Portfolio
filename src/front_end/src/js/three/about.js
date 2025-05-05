@@ -1,6 +1,6 @@
-import { registerCamera } from "./camera-registry";
-import { PerspectiveCamera, Vector3 } from "../extern/three/three.core.min";
 import { CAMERA_SECTIONS } from "../data/sections";
+import { PerspectiveCamera } from "../extern/three/three.core.min";
+import { registerCamera } from "./camera-registry";
 /**
  * Initialize about section canvas
  */

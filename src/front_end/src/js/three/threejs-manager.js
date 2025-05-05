@@ -1,29 +1,28 @@
 /**
  * @fileoverview Ultra-optimized ThreeJS manager with zero overhead.
  * Extreme performance optimizations for high-efficiency 3D rendering.
+ * Fixed version with consistent time handling for smooth animations.
  */
 
 import {
   AmbientLight,
-  Clock,
   DirectionalLight,
   Scene,
   Vector2,
   WebGLRenderer,
-  SphereGeometry,
-  MeshStandardMaterial,
-  Mesh,
 } from "../extern/three/three.module.min.js";
 import { isIdle } from "../user-interaction.js";
 import { getFallbackCube } from "./model-manager.js";
-import { C } from "../constants/constants.js";
+import { TimeManager } from "./time-manager.js";
 
 // OPTIMIZED CONSTANTS - Critical path tuning
 const MAX_CAMERAS = 32;
-const RENDER_THROTTLE = 3; // ms between renders when active
-const IDLE_THROTTLE = 67; // ~15fps max when idle
+// REMOVED THROTTLE VALUES FOR CONSISTENT TIMING
 const VISIBILITY_THRESHOLD = 0.01; // minimal visibility to trigger render
 const BATCH_SIZE = 4; // Process cameras in batches for better CPU cache usage
+const TARGET_FRAMERATE = 60; // Target framerate for consistent timing
+const MIN_DELTA_TIME = 1 / 120; // Minimum time step to prevent tiny physics steps
+const MAX_DELTA_TIME = 1 / 30; // Maximum time step to prevent large jumps
 
 // PRE-ALLOCATED OBJECTS - Avoid allocations in render loop
 const TEMP_VEC2 = new Vector2(); // Reused for calculations
@@ -32,10 +31,9 @@ const TEMP_VEC2 = new Vector2(); // Reused for calculations
 const manager = {
   renderer: null,
   scene: null,
-  clock: new Clock(),
   rafId: 0,
   rendering: false,
-  lastTime: 0,
+  lastTimestamp: 0,
   dimCache: new Map(),
   // TypedArrays for maximum memory efficiency and cache locality
   active: new Uint8Array(MAX_CAMERAS),
@@ -156,9 +154,16 @@ function setupOptimizedLights() {
 function setupEventHandlers() {
   // Pause rendering when not visible
   const visChange = () => {
-    document.hidden ? pauseRendering() : resumeRendering();
+    if (document.visibilityState === "hidden") {
+      pauseRendering();
+    } else {
+      resumeRendering();
+    }
   };
   document.addEventListener("visibilitychange", visChange, { passive: true });
+
+  // Don't pause rendering on idle to ensure cameras remain visible when scrolling back
+  // This is the critical fix - we don't want isIdle to pause rendering completely
 
   // Efficient resize handling
   let resizing = false;
@@ -306,6 +311,10 @@ function setupObserver(idx, canvas) {
       // Mark dirty if becoming visible
       if (!wasVisible && isVisible) {
         manager.dirty[idx] = 1;
+        // Ensure rendering is active when element becomes visible
+        if (!manager.rendering) {
+          startRendering();
+        }
       }
     },
     {
@@ -368,44 +377,29 @@ export function isCameraActive(idx) {
 }
 
 /**
- * Update controls with maximum efficiency
+ * Update controls with consistent deltaTime
  * @param {number} deltaTime - Time since last frame in seconds
  * @returns {boolean} - Whether any updates occurred
  */
 function updateControls(deltaTime) {
-  const isUserActive = !isIdle();
-  let updated = false;
+  // Always check for dragging controls first (highest priority)
   manager.flags.hasActiveDrag = false;
+  let updated = false;
 
-  // First pass: check for active drags (highest priority)
-  for (let i = 0; i < manager.count; i++) {
-    if (manager.active[i] !== 1 || manager.visible[i] !== 1) continue;
-
-    const control = manager.controls[i];
-    if (control?._dragging) {
-      manager.flags.hasActiveDrag = true;
-      break;
-    }
-  }
-
-  // Fast path for idle state when no drags happening
-  if (!isUserActive && !manager.flags.hasActiveDrag) {
-    // Check if too soon for idle update
-    const now = performance.now();
-    if (now - manager.lastTime < IDLE_THROTTLE) {
-      return false;
-    }
-  }
-
-  // Main update loop
+  // Process all cameras regardless of user activity state to ensure consistent animations
   for (let i = 0; i < manager.count; i++) {
     if (manager.active[i] !== 1 || manager.visible[i] !== 1) continue;
 
     const control = manager.controls[i];
     if (!control) continue;
 
-    // Priority to dragging controls
-    if (control._dragging || (!manager.flags.hasActiveDrag && control.update)) {
+    // Check for active drag
+    if (control._dragging) {
+      manager.flags.hasActiveDrag = true;
+    }
+
+    // Always update controls with consistent timing
+    if (control.update) {
       control.update(deltaTime);
       manager.dirty[i] = 1;
       updated = true;
@@ -418,10 +412,10 @@ function updateControls(deltaTime) {
 /**
  * Hyper-optimized camera rendering
  * @param {number} idx - Camera index
- * @param {number} now - Current timestamp
+ * @param {number} deltaTime - Current frame's delta time
  * @returns {boolean} - Whether rendered
  */
-function renderCamera(idx, now) {
+function renderCamera(idx, deltaTime) {
   // Early bail conditions using typed arrays
   if (
     manager.active[idx] !== 1 ||
@@ -435,11 +429,7 @@ function renderCamera(idx, now) {
   const camera = manager.cameras[idx];
   const ctx = manager.contexts[idx];
 
-  if (!camera || !ctx?.canvas) {
-    return false;
-  }
-
-  if (!ctx.canvas.isConnected) {
+  if (!camera || !ctx?.canvas?.isConnected) {
     return false;
   }
 
@@ -489,8 +479,8 @@ function renderCamera(idx, now) {
       height
     );
 
-    // Update state
-    manager.lastRender[idx] = now;
+    // Update state - use consistent time value for lastRender
+    manager.lastRender[idx] = performance.now();
     manager.dirty[idx] = 0;
     manager.metrics.rendered++;
     manager.metrics.total++;
@@ -503,11 +493,11 @@ function renderCamera(idx, now) {
 }
 
 /**
- * Ultra-efficient batch rendering of all cameras
- * @param {number} now - Current timestamp
+ * Ultra-efficient batch rendering of all cameras with consistent timing
+ * @param {number} deltaTime - Current frame's delta time in seconds
  * @returns {number} - Cameras rendered
  */
-function renderCameras(now) {
+function renderCameras(deltaTime) {
   const r = manager.renderer;
   if (!r) return 0;
 
@@ -519,11 +509,8 @@ function renderCameras(now) {
     manager.renderer.autoClear = false;
     manager.renderer.scissorTest = true;
 
-    // Get delta time for controls
-    const delta = manager.clock.getDelta();
-
-    // Update controls - optimized batch
-    updateControls(delta);
+    // Update controls with consistent delta time
+    updateControls(deltaTime);
 
     // Process cameras in batches for better CPU cache usage
     const count = manager.count;
@@ -534,16 +521,11 @@ function renderCameras(now) {
 
       // Process batch
       for (let i = start; i < end; i++) {
-        if (renderCamera(i, now)) {
+        if (renderCamera(i, deltaTime)) {
           renderedCount++;
         }
       }
     }
-
-    // Log if we rendered cameras
-    // if (renderedCount > 0) {
-    //   console.log(`Rendered ${renderedCount} cameras`);
-    // }
 
     // Reset renderer state
     manager.renderer.scissorTest = false;
@@ -578,29 +560,47 @@ function updateFPS(now) {
 }
 
 /**
- * Ultra-optimized render loop
- * @param {number} now - Current timestamp
+ * Ultra-optimized render loop with consistent timing
+ * @param {number} timestamp - Current timestamp from requestAnimationFrame
  */
-function renderLoop(now) {
+function renderLoop(timestamp) {
   // Break loop if stopped
   if (!manager.rendering) return;
 
-  // Throttle when idle
-  if (isIdle()) {
-    const elapsed = now - manager.lastTime;
-    if (elapsed < IDLE_THROTTLE) {
-      manager.metrics.skipped++;
+  // Get consistent delta time from TimeManager for all rendering operations
+  const timeInfo = TimeManager.update(timestamp, "renderer");
+
+  // Calculate actual delta time for this frame
+  const now = performance.now();
+
+  // Update with a consistent time step
+  let deltaTime = timeInfo.deltaTime;
+
+  // Clamp delta time to prevent extreme values
+  // This prevents physics from breaking during lag spikes or tab switches
+  deltaTime = Math.max(MIN_DELTA_TIME, Math.min(deltaTime, MAX_DELTA_TIME));
+
+  // Adjust rendering frequency when idle for performance
+  const idle = isIdle();
+  if (idle) {
+    // Render at reduced framerate when idle (about 1/4 the normal rate)
+    // This allows visible cameras to still update but reduces CPU usage
+    const idleFrameSkip = Math.floor(TARGET_FRAMERATE / 15); // ~15fps when idle
+    if (manager.metrics.frames % idleFrameSkip !== 0) {
+      // Schedule next frame but skip rendering
       manager.rafId = requestAnimationFrame(renderLoop);
       return;
     }
   }
 
-  // Update timestamp
-  manager.lastTime = now;
+  // Render with consistent time step
+  renderCameras(deltaTime);
 
-  // Render and update stats
-  renderCameras(now);
+  // Update FPS stats
   updateFPS(now);
+
+  // Store last frame time
+  manager.lastTimestamp = timestamp;
 
   // Continue loop
   manager.rafId = requestAnimationFrame(renderLoop);
@@ -614,8 +614,7 @@ function startRendering() {
 
   console.log("Starting ThreeJS render loop");
   manager.rendering = true;
-  manager.clock.start();
-  manager.lastTime = performance.now();
+  manager.lastTimestamp = performance.now();
   manager.rafId = requestAnimationFrame(renderLoop);
 }
 
@@ -627,7 +626,6 @@ function pauseRendering() {
 
   console.log("Pausing ThreeJS render loop");
   manager.rendering = false;
-  manager.clock.stop();
 
   if (manager.rafId) {
     cancelAnimationFrame(manager.rafId);
@@ -643,12 +641,12 @@ function resumeRendering() {
 
   console.log("Resuming ThreeJS render loop");
   // Mark all as dirty
+
   manager.dirty.fill(1, 0, manager.count);
 
   // Restart
   manager.rendering = true;
-  manager.clock.start();
-  manager.lastTime = performance.now();
+  manager.lastTimestamp = performance.now();
   manager.rafId = requestAnimationFrame(renderLoop);
 }
 
@@ -751,4 +749,9 @@ export function getAllCameras() {
 export function forceRedraw(idx) {
   if (idx < 0 || idx >= manager.count) return;
   manager.dirty[idx] = 1;
+
+  // Ensure rendering is active when forcing a redraw
+  if (!manager.rendering) {
+    startRendering();
+  }
 }

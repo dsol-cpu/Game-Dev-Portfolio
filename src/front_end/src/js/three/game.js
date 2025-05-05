@@ -1,8 +1,7 @@
 /**
- * @fileoverview Game scene with player model and camera follow integrated with ThreeJS Manager
+ * @fileoverview Optimized game scene with player model and camera follow
  **/
 
-// Update imports to use threejs-manager instead of camera-registry and renderer-core
 import { CAMERA_SECTIONS } from "../data/sections.js";
 import {
   Clock,
@@ -14,19 +13,17 @@ import {
   SphereGeometry,
   Vector3,
 } from "../extern/three/three.module.min.js";
-import { handleUserInteraction, isIdle } from "../user-interaction.js";
+import { handleUserInteraction } from "../user-interaction.js";
 import { getPerfLevel, hasWebGLSupport } from "../utils/device.js";
 import { debounce } from "../utils/helper.js";
-
-// Import player model and camera follow modules
+import { TimeManager } from "./time-manager.js";
 import { createCameraController, updateCamera } from "./camera-follow.js";
 import {
   createPlayerModel,
   getPlayerModel,
   initPlayerControls,
-  updatePlayerMovement,
+  updatePlayer,
 } from "./player-model.js";
-
 import {
   forceRedraw,
   getScene,
@@ -37,29 +34,23 @@ import {
 
 // Constants
 const C = {
-  FRAME_INTERVAL: 1000 / 60,
-  IDLE_FRAME_INTERVAL: 1000 / 8,
   DEFAULT_FOV: 75,
   NEAR: 0.1,
   FAR: 1000,
 };
 
-// Define colors for the scene objects
-const colors = {
+// Colors for scene objects
+const COLORS = {
   clouds: 0xffffff,
-  islandSide: 0x8b4513, // Brown
-  islandTop: 0x228b22, // Forest Green
+  islandSide: 0x8b4513,
+  islandTop: 0x228b22,
   shipBody: 0x3366cc,
   shipAccent: 0x66ccff,
 };
 
-// Island data - you would need to define this based on your game's world
+// Island data
 const ISLAND_DATA = [
-  {
-    position: new Vector3(0, 0, 0),
-    section: "home",
-    name: "Home Island",
-  },
+  { position: new Vector3(0, 0, 0), section: "home", name: "Home Island" },
   {
     position: new Vector3(10, 0, 10),
     section: "explore",
@@ -73,83 +64,74 @@ const ISLAND_DATA = [
 ];
 
 // View modes
-const VIEW_MODES = {
-  SCROLL: "scroll",
-  GAME: "game",
-};
+const VIEW_MODES = { SCROLL: "scroll", GAME: "game" };
 
-// Game scene state
-let thirdPersonCamera = null;
-let mainGameCanvas = null;
-let mainGameCanvasContext = null;
-let gameAnimationFrameId = null;
-let cameraFollowActive = true;
-let camController = null;
-let gameTime = new Clock();
-let playerEntity = null;
-let cameraIndex = -1; // Store the camera index from ThreeJS manager
+// Game state & objects
+let thirdPersonCamera,
+  camController,
+  cameraIndex = -1;
+let playerEntity, gameAnimationFrameId;
+let islands = [];
+const islandAnimationData = [];
 
 // Game controller state
 const gameState = {
   viewMode: VIEW_MODES.SCROLL,
-  renderFrameId: null,
   lastCanvasWidth: 0,
   lastCanvasHeight: 0,
   isInitialized: false,
+  totalTime: 0, // Track total elapsed time for animations
 };
-let islands = [];
-const islandAnimationData = [];
 
+/**
+ * Initialize island bobbing animation
+ */
 function initIslandBobbing(islands) {
-  islands.forEach((island, index) => {
-    // Save initial position
-    const initialY = island.position.y;
-
-    // Add animation data with randomized parameters for varied motion
+  islands.forEach(() => {
     islandAnimationData.push({
-      initialY: initialY,
-      amplitude: 0.2 + Math.random() * 0.15, // Random amplitude between 0.2-0.35
-      frequency: 0.5 + Math.random() * 0.3, // Random frequency between 0.5-0.8
-      offset: Math.random() * Math.PI * 2, // Random phase offset for variation
+      initialY: islands[islandAnimationData.length].position.y,
+      amplitude: 0.2 + Math.random() * 0.15,
+      frequency: 0.5 + Math.random() * 0.3,
+      offset: Math.random() * Math.PI * 2,
     });
   });
 }
 
 /**
- * Update island bobbing with smooth animation
- * @param {Array} islands - Array of island objects
- * @param {number} deltaTime - Delta time in milliseconds
+ * Update island bobbing animation
+ * @param {number} deltaTime - Delta time in seconds
  */
-function updateIslandBobbing(islands, deltaTime) {
-  const time = gameTime.getElapsedTime(); // Get current elapsed time
+function updateIslandBobbing(deltaTime) {
+  // Use the consistent deltaTime to update total time
+  gameState.totalTime += deltaTime;
 
-  islands.forEach((island, index) => {
-    if (islandAnimationData[index]) {
-      const data = islandAnimationData[index];
-
-      // Calculate new Y position using sine wave with smoother frequency
+  // Use gameState.totalTime for consistent animation timing
+  islands.forEach((island, i) => {
+    if (islandAnimationData[i]) {
+      const data = islandAnimationData[i];
       const newY =
         data.initialY +
-        Math.sin(time * data.frequency + data.offset) * data.amplitude;
+        Math.sin(gameState.totalTime * data.frequency + data.offset) *
+          data.amplitude;
 
-      // Add subtle lerp for extra smoothness
-      island.position.y += (newY - island.position.y) * 0.05;
+      // Scale the smoothing factor by deltaTime for consistent movement speed
+      const smoothingFactor = 0.05 * Math.min(1, deltaTime * 60); // 60fps normalization
+      island.position.y += (newY - island.position.y) * smoothingFactor;
     }
   });
 }
 
 /**
- * Initialize game scene using the ThreeJS manager
+ * Initialize game scene
  */
 export function initGameScene() {
-  gameTime.start();
-
-  // Now we'll use the scene from ThreeJS manager instead of creating our own
+  gameState.totalTime = 0; // Initialize total time
   const gameScene = getScene();
 
+  // Create reusable geometries and materials
   const cloudGeometry = new SphereGeometry(1, 7, 7);
   const cloudMaterial = new MeshStandardMaterial({
-    color: colors.clouds,
+    color: COLORS.clouds,
     flatShading: true,
     transparent: true,
     opacity: 0.9,
@@ -157,68 +139,48 @@ export function initGameScene() {
 
   const islandBaseGeometry = new CylinderGeometry(2, 1.5, 2, 8);
   const islandBaseMaterial = new MeshStandardMaterial({
-    color: colors.islandSide,
+    color: COLORS.islandSide,
     flatShading: true,
   });
 
   const islandTopGeometry = new CylinderGeometry(2, 2, 0.5, 8);
   const islandTopMaterial = new MeshStandardMaterial({
-    color: colors.islandTop,
+    color: COLORS.islandTop,
     flatShading: true,
   });
 
-  // Create containers for scene objects
-  const clouds = [];
-
-  // Create islands using ISLAND_DATA from world.js
-  for (let i = 0; i < ISLAND_DATA.length; i++) {
+  // Create islands
+  ISLAND_DATA.forEach((islandInfo) => {
     const islandGroup = new Group();
-    const islandInfo = ISLAND_DATA[i];
 
-    // Create geometries with randomized dimensions
+    // Randomize dimensions
     const baseSize = 2 + Math.random() * 0.5;
     const topSize = 2 + Math.random() * 0.5;
 
-    // Clone and modify geometries for variation
-    const customBaseGeometry = islandBaseGeometry.clone();
-    customBaseGeometry.scale(baseSize / 2, 1, baseSize / 2);
-
-    const customTopGeometry = islandTopGeometry.clone();
-    customTopGeometry.scale(topSize / 2, 1, topSize / 2);
-
     // Create island parts
-    const base = new Mesh(customBaseGeometry, islandBaseMaterial);
+    const base = new Mesh(islandBaseGeometry.clone(), islandBaseMaterial);
+    base.scale.set(baseSize / 2, 1, baseSize / 2);
 
-    const top = new Mesh(customTopGeometry, islandTopMaterial);
+    const top = new Mesh(islandTopGeometry.clone(), islandTopMaterial);
+    top.scale.set(topSize / 2, 1, topSize / 2);
     top.position.y = 1;
 
-    // Add island parts to group
     islandGroup.add(base, top);
-
-    // Use position from ISLAND_DATA
     islandGroup.position.copy(islandInfo.position);
-
-    // Store section information in userData for navigation
-    islandGroup.userData.type = islandInfo.section;
-    islandGroup.userData.name = islandInfo.name;
+    islandGroup.userData = {
+      type: islandInfo.section,
+      name: islandInfo.name,
+    };
 
     gameScene.add(islandGroup);
     islands.push(islandGroup);
-  }
+  });
 
-  // Create clouds more efficiently
+  // Create clouds (reduced count for performance)
   for (let i = 0; i < 8; i++) {
-    // Clone and modify geometry for each cloud
-    const customGeometry = cloudGeometry.clone();
-    customGeometry.scale(
-      1 + Math.random(),
-      1 + Math.random(),
-      1 + Math.random()
-    );
-
-    const cloud = new Mesh(customGeometry, cloudMaterial);
-
+    const cloud = new Mesh(cloudGeometry.clone(), cloudMaterial);
     const scale = 0.8 + Math.random() * 1.5;
+
     cloud.position.set(
       (Math.random() - 0.5) * 40,
       5 + Math.random() * 8,
@@ -227,29 +189,24 @@ export function initGameScene() {
 
     cloud.scale.set(scale, scale * 0.6, scale);
     gameScene.add(cloud);
-    clouds.push(cloud);
   }
 
-  // Create player model using the imported function
+  // Create player
   playerEntity = createPlayerModel();
 
-  // Start player at home island position + offset for height
+  // Position player
   const homeIsland = ISLAND_DATA.find((island) => island.section === "home");
-  if (homeIsland) {
-    playerEntity.position.set(
-      homeIsland.position.x,
-      homeIsland.position.y + 2, // Offset player above island
-      homeIsland.position.z
-    );
-  } else {
-    playerEntity.position.set(0, 2, 0); // Fallback position
-  }
+  playerEntity.position.set(
+    homeIsland?.position.x || 0,
+    (homeIsland?.position.y || 0) + 2,
+    homeIsland?.position.z || 0
+  );
 
   gameScene.add(playerEntity);
   initIslandBobbing(islands);
-  // Initialize player controls
   initPlayerControls();
 
+  // Setup camera
   thirdPersonCamera = new PerspectiveCamera(
     C.DEFAULT_FOV,
     window.innerWidth / window.innerHeight,
@@ -259,167 +216,84 @@ export function initGameScene() {
   thirdPersonCamera.position.set(0, 2, 5);
   thirdPersonCamera.lookAt(0, 2, 0);
 
-  // Initialize orbit controller for camera follow
   camController = createCameraController(thirdPersonCamera, playerEntity);
 
-  // Get the game canvas context
-  const mainGameCanvas = document.getElementById("main-game-canvas");
-  const gameCanvasContext = mainGameCanvas
-    ? mainGameCanvas.getContext("2d")
-    : null;
-
-  // Register camera with ThreeJS manager instead of camera-registry
+  // Register camera with manager
   cameraIndex = registerCamera(
     thirdPersonCamera,
-    // Don't pass camController directly, use a function that calls it
-    function () {
-      if (cameraFollowActive && camController) {
-        camController();
-      }
-    },
-    gameCanvasContext,
+    () => cameraFollowActive && camController?.(),
+    document.getElementById("main-game-canvas")?.getContext("2d"),
     {
       type: CAMERA_SECTIONS.GAME,
       elementId: "game-view",
       section: CAMERA_SECTIONS.GAME,
     },
-    false // Initially not active
+    false
   );
-
-  console.log("Game camera registered with index:", cameraIndex);
 }
 
 /**
- * Get the third person camera
- * @returns {PerspectiveCamera} The third person camera
+ * Update game loop
  */
-export function getThirdPersonCamera() {
-  return thirdPersonCamera;
-}
+function updateGameLoop(timestamp) {
+  if (gameState.viewMode !== VIEW_MODES.GAME) return;
 
-/**
- * Toggle camera follow mode
- * @param {boolean} active - Whether camera follow should be active
- */
-export function toggleCameraFollow(active) {
-  cameraFollowActive = active !== undefined ? active : !cameraFollowActive;
-  return cameraFollowActive;
-}
-
-/**
- * Get game's clock
- * @returns {Clock} The game clock
- */
-export function getGameClock() {
-  return gameTime;
-}
-
-/**
- * Initialize the game module
- * @returns {Object} - Game module API
- */
-export function initGame() {
-  if (gameState.isInitialized) return getPublicAPI();
-
-  // Setup DOM elements
-  const elements = {
-    viewToggleBtn: document.getElementById("view-toggle-btn"),
-    mainGameCanvas: document.getElementById("main-game-canvas"),
-    gameViewContainer: document.getElementById("game-view-container"),
-    sidebar: document.querySelector(".sidebar"),
-    body: document.body,
-  };
-
-  // Check if all required elements exist
-  if (
-    !elements.viewToggleBtn ||
-    !elements.mainGameCanvas ||
-    !elements.gameViewContainer ||
-    !elements.sidebar
-  ) {
-    console.error(
-      "Game view initialization failed: Required DOM elements not found"
-    );
-    return getPublicAPI();
+  const timeInfo = TimeManager.update(timestamp, "game");
+  if (timeInfo.skipFrame) {
+    gameAnimationFrameId = requestAnimationFrame(updateGameLoop);
+    return;
   }
 
-  // Initialize game scene
-  initGameScene();
+  // Use deltaTime directly from TimeManager for consistent timing
+  const deltaTime = timeInfo.deltaTime;
 
-  // Hide game view initially
-  elements.gameViewContainer.style.display = "none";
+  // Update player
+  if (playerEntity) {
+    playerEntity.visible = true;
+    updatePlayer(deltaTime);
+  }
 
-  // Set up event handlers
-  elements.viewToggleBtn.addEventListener("click", () => {
-    toggleGameView(elements);
-  });
+  // Update camera
+  if (thirdPersonCamera && playerEntity && cameraFollowActive) {
+    updateCamera(thirdPersonCamera, playerEntity, deltaTime);
+  }
 
-  // Set main game canvas
-  setMainGameCanvas(elements.mainGameCanvas);
+  // Update islands
+  updateIslandBobbing(deltaTime);
 
-  // Make canvas globally accessible if needed by external code
-  window.mainGameCanvas = elements.mainGameCanvas;
+  // Update debug overlay if available
+  if (typeof updateDebugOverlay === "function") {
+    updateDebugOverlay(playerEntity?.__controls || window._playerControls);
+  }
 
-  // Setup resize handling
-  setupGameCanvasResize(elements);
+  // Force redraw and schedule next frame
+  if (cameraIndex >= 0 && isCameraActive(cameraIndex)) {
+    forceRedraw(cameraIndex);
+  }
 
-  // Set global API for backward compatibility
-  window.isGameViewActive = () => gameState.viewMode === VIEW_MODES.GAME;
-  window.toggleGameView = () => toggleGameView(elements);
-  window.updateGameViewSize = (width, height) =>
-    updateGameViewSize(elements, width, height);
-
-  gameState.isInitialized = true;
-  return getPublicAPI();
+  gameAnimationFrameId = requestAnimationFrame(updateGameLoop);
 }
 
-/**
- * Get the public API for the game module
- * @returns {Object} - Public API
- */
-function getPublicAPI() {
-  return {
-    getViewMode: () => gameState.viewMode,
-    isGameViewActive: () => gameState.viewMode === VIEW_MODES.GAME,
-    toggleGameView: (elements) => toggleGameView(elements),
-    updateGameViewSize,
-    hasWebGLSupport,
-    getPerfLevel,
-    getThirdPersonCamera,
-    getPlayerModel,
-    toggleCameraFollow,
-  };
-}
+// Camera follow state
+let cameraFollowActive = true;
 
 /**
- * Set the main game canvas
- * @param {HTMLCanvasElement} canvas - The canvas element
- */
-export function setMainGameCanvas(canvas) {
-  mainGameCanvas = canvas;
-}
-
-/**
- * Toggle between scroll and game view modes
- * @param {Object} elements - DOM elements
- * @returns {boolean} - Is game view active
+ * Toggle game view
  */
 export function toggleGameView(elements) {
-  if (!elements) {
-    console.error("Toggle game view failed: elements object is required");
-    return false;
-  }
-
-  const { body, viewToggleBtn, gameViewContainer, sidebar } = elements;
-
-  if (!body || !viewToggleBtn || !gameViewContainer || !sidebar) {
+  if (
+    !elements?.body ||
+    !elements?.viewToggleBtn ||
+    !elements?.gameViewContainer ||
+    !elements?.sidebar
+  ) {
     console.error("Toggle game view failed: missing required elements");
     return false;
   }
 
-  const viewLabel = viewToggleBtn.querySelector(".view-label");
+  const viewLabel = elements.viewToggleBtn.querySelector(".view-label");
   if (!viewLabel) {
-    console.error("Toggle game view failed: view-label element not found");
+    console.error("Toggle game view failed: view-label not found");
     return false;
   }
 
@@ -430,19 +304,18 @@ export function toggleGameView(elements) {
       : VIEW_MODES.GAME;
   const isGameView = gameState.viewMode === VIEW_MODES.GAME;
 
-  // Use the ThreeJS manager's camera visibility
+  // Update camera visibility
   if (cameraIndex >= 0) {
     setCameraVisible(cameraIndex, isGameView);
   }
 
   if (isGameView) {
     // Switch to game view
-    body.classList.add("game-mode");
+    elements.body.classList.add("game-mode");
     viewLabel.textContent = "Scroll View";
 
-    // Position and show game container
-    const sidebarWidth = sidebar.offsetWidth;
-    Object.assign(gameViewContainer.style, {
+    const sidebarWidth = elements.sidebar.offsetWidth;
+    Object.assign(elements.gameViewContainer.style, {
       position: "fixed",
       top: "0",
       left: sidebarWidth + "px",
@@ -452,199 +325,142 @@ export function toggleGameView(elements) {
       display: "block",
     });
 
-    // Initialize canvas size
     updateGameViewSize(elements);
 
-    // Ensure camera controller is properly connected to player
-    if (thirdPersonCamera && playerEntity) {
-      if (!camController) {
-        console.log("Recreating camera controller");
-        camController = createCameraController(thirdPersonCamera, playerEntity);
-      }
-
-      // Activate camera follow
-      cameraFollowActive = true;
-
-      // Force an immediate camera update
-      if (camController) camController();
+    // Ensure camera controller is working
+    if (!camController && thirdPersonCamera && playerEntity) {
+      camController = createCameraController(thirdPersonCamera, playerEntity);
     }
 
-    // Start game update loop - we're no longer handling the rendering directly
-    startGameLoop();
+    cameraFollowActive = true;
+    camController?.();
+
+    // Start game loop
+    if (gameAnimationFrameId) cancelAnimationFrame(gameAnimationFrameId);
+    gameAnimationFrameId = requestAnimationFrame(updateGameLoop);
   } else {
     // Switch to scroll view
-    body.classList.remove("game-mode");
+    elements.body.classList.remove("game-mode");
     viewLabel.textContent = "Game View";
 
-    // Hide game container
-    Object.assign(gameViewContainer.style, {
-      position: "",
-      top: "",
-      left: "",
-      width: "",
-      height: "",
-      zIndex: "",
-      display: "none",
-    });
+    elements.gameViewContainer.style.display = "none";
 
     // Stop game loop
-    stopGameLoop();
+    if (gameAnimationFrameId) {
+      cancelAnimationFrame(gameAnimationFrameId);
+      gameAnimationFrameId = null;
+    }
   }
 
-  // Notify interaction system
   handleUserInteraction();
-
-  // Force redraw the camera
-  if (cameraIndex >= 0) {
-    forceRedraw(cameraIndex);
-  }
+  if (cameraIndex >= 0) forceRedraw(cameraIndex);
 
   return isGameView;
 }
 
 /**
- * Update game view canvas size
- * @param {Object} elements - DOM elements
- * @param {number} [width] - Optional explicit width
- * @param {number} [height] - Optional explicit height
+ * Update game view size
  */
 export function updateGameViewSize(elements, width, height) {
-  const { mainGameCanvas, sidebar } = elements;
-  if (!mainGameCanvas) return;
+  const canvas = elements?.mainGameCanvas;
+  if (!canvas) return;
 
   // Calculate dimensions if not provided
   if (!width || !height) {
-    const sidebarWidth = sidebar?.offsetWidth || 0;
+    const sidebarWidth = elements?.sidebar?.offsetWidth || 0;
     width = window.innerWidth - sidebarWidth || 1;
     height = window.innerHeight || 1;
   }
 
-  // Update canvas dimensions if changed
-  if (mainGameCanvas.width !== width || mainGameCanvas.height !== height) {
-    mainGameCanvas.width = width;
-    mainGameCanvas.height = height;
+  // Only update if changed
+  if (canvas.width !== width || canvas.height !== height) {
+    canvas.width = width;
+    canvas.height = height;
     gameState.lastCanvasWidth = width;
     gameState.lastCanvasHeight = height;
 
-    // Update camera aspect ratio
     if (thirdPersonCamera) {
       thirdPersonCamera.aspect = width / height;
       thirdPersonCamera.updateProjectionMatrix();
     }
 
-    // Force redraw with the threejs-manager
-    if (cameraIndex >= 0) {
-      forceRedraw(cameraIndex);
-    }
+    if (cameraIndex >= 0) forceRedraw(cameraIndex);
   }
 }
 
 /**
- * Start game update loop - this no longer handles rendering directly
+ * Initialize game module
  */
-export function startGameLoop() {
-  // Stop any existing loop
-  stopGameLoop();
+export function initGame() {
+  if (gameState.isInitialized) return getPublicAPI();
 
-  // Reset the last frame time
-  gameState.lastFrameTime = null;
+  // Get required DOM elements
+  const elements = {
+    viewToggleBtn: document.getElementById("view-toggle-btn"),
+    mainGameCanvas: document.getElementById("main-game-canvas"),
+    gameViewContainer: document.getElementById("game-view-container"),
+    sidebar: document.querySelector(".sidebar"),
+    body: document.body,
+  };
 
-  // Start new game loop with requestAnimationFrame
-  gameAnimationFrameId = requestAnimationFrame(updateGameLoop);
-}
-
-/**
- * Game update loop - only handles game logic, not rendering
- */
-function updateGameLoop(timestamp) {
-  if (gameState.viewMode !== VIEW_MODES.GAME) return;
-
-  // Store last frame time if not set
-  if (!gameState.lastFrameTime) {
-    gameState.lastFrameTime = timestamp;
+  // Validate elements
+  if (
+    !elements.viewToggleBtn ||
+    !elements.mainGameCanvas ||
+    !elements.gameViewContainer ||
+    !elements.sidebar
+  ) {
+    console.error(
+      "Game initialization failed: Required DOM elements not found"
+    );
+    return getPublicAPI();
   }
 
-  // Calculate precise delta time
-  const deltaTime = timestamp - gameState.lastFrameTime;
-  gameState.lastFrameTime = timestamp;
+  // Initialize game
+  initGameScene();
+  elements.gameViewContainer.style.display = "none";
 
-  // Ensure we use a consistent delta time for physics if frame rate drops
-  const clampedDeltaTime = Math.min(deltaTime, 33.33); // Cap at ~30 FPS equivalent
+  // Set up event listeners
+  elements.viewToggleBtn.addEventListener("click", () =>
+    toggleGameView(elements)
+  );
 
-  if (playerEntity) {
-    // Force player visibility
-    playerEntity.visible = true;
-    updatePlayerMovement(clampedDeltaTime);
-  }
-
-  // Update camera when camera follow is active
-  if (thirdPersonCamera && playerEntity && cameraFollowActive) {
-    updateCamera(thirdPersonCamera, playerEntity);
-  }
-
-  // Update island animations with the same deltaTime for consistency
-  updateIslandBobbing(islands, clampedDeltaTime);
-
-  // Force camera to update
-  if (cameraIndex >= 0 && isCameraActive(cameraIndex)) {
-    forceRedraw(cameraIndex);
-  }
-
-  // Schedule next frame using requestAnimationFrame
-  gameAnimationFrameId = requestAnimationFrame(updateGameLoop);
-}
-
-/**
- * Stop game loop
- */
-export function stopGameLoop() {
-  if (gameAnimationFrameId) {
-    clearTimeout(gameAnimationFrameId);
-    cancelAnimationFrame(gameAnimationFrameId);
-    gameAnimationFrameId = null;
-  }
-}
-
-/**
- * Setup game canvas resize handling
- * @param {Object} [elements] - Optional DOM elements
- */
-export function setupGameCanvasResize(elements) {
-  // If elements provided, use game controller approach
-  if (elements) {
-    setupGameControllerResize(elements);
-  }
-}
-
-/**
- * Set up canvas resize handling using game controller approach
- * @param {Object} elements - DOM elements
- */
-function setupGameControllerResize(elements) {
-  const { mainGameCanvas, sidebar } = elements;
-  if (!mainGameCanvas || !sidebar) return;
-
-  // Set initial size
+  // Set up resize handling
   updateGameViewSize(elements);
+  window.addEventListener(
+    "resize",
+    debounce(() => {
+      if (gameState.viewMode === VIEW_MODES.GAME) {
+        updateGameViewSize(elements);
+      }
+    }, 200)
+  );
 
-  // Create resize handler
-  const handleResize = debounce(() => {
-    if (gameState.viewMode !== VIEW_MODES.GAME) return;
+  // Expose global API
+  window.isGameViewActive = () => gameState.viewMode === VIEW_MODES.GAME;
+  window.toggleGameView = () => toggleGameView(elements);
+  window.updateGameViewSize = (w, h) => updateGameViewSize(elements, w, h);
 
-    const sidebarWidth = sidebar.offsetWidth;
-    const width = window.innerWidth - sidebarWidth || 1;
-    const height = window.innerHeight || 1;
+  gameState.isInitialized = true;
+  return getPublicAPI();
+}
 
-    // Only update if dimensions changed significantly
-    if (
-      Math.abs(gameState.lastCanvasWidth - width) > 1 ||
-      Math.abs(gameState.lastCanvasHeight - height) > 1
-    ) {
-      console.log(`Resizing game canvas: ${width}x${height}`);
-      updateGameViewSize(elements, width, height);
-    }
-  }, 200);
-
-  // Set up resize listener
-  window.addEventListener("resize", handleResize);
+/**
+ * Get public API
+ */
+function getPublicAPI() {
+  return {
+    getViewMode: () => gameState.viewMode,
+    isGameViewActive: () => gameState.viewMode === VIEW_MODES.GAME,
+    toggleGameView,
+    updateGameViewSize,
+    hasWebGLSupport,
+    getPerfLevel,
+    getThirdPersonCamera: () => thirdPersonCamera,
+    getPlayerModel,
+    toggleCameraFollow: (active) => {
+      cameraFollowActive = active !== undefined ? active : !cameraFollowActive;
+      return cameraFollowActive;
+    },
+  };
 }

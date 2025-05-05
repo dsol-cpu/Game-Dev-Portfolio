@@ -1,6 +1,6 @@
 /**
  * @fileoverview Project card scene and canvas management
- * Optimized ThreeJS implementation
+ * Optimized ThreeJS implementation leveraging threejs-manager
  */
 
 import { C } from "../constants/constants.js";
@@ -14,18 +14,14 @@ import {
   getFallbackCube,
   getModel,
   getModelPosition,
-  markModelUnused,
 } from "./model-manager.js";
 import {
   orbitControlsConfig,
   patchOrbitControls,
 } from "./orbit-controls-helper.js";
-import {
-  setCameraVisible,
-  getScene,
-  registerCamera,
-} from "./threejs-manager.js";
+import { forceRedraw, getScene, registerCamera } from "./threejs-manager.js";
 
+// Scene reference
 let scene = null;
 
 /**
@@ -44,113 +40,91 @@ export function initProjectCardScene() {
 }
 
 /**
- * Get models from visible project cards
- */
-export function getVisibleProjectModels() {
-  const visibleModels = [];
-  const portfolioItems = document.querySelectorAll(".portfolio-item");
-
-  // Add models visible in viewport
-  portfolioItems.forEach((item) => {
-    if (isElementInViewport(item)) {
-      const modelName = item.getAttribute("data-model");
-      if (modelName && !visibleModels.includes(modelName)) {
-        visibleModels.push(modelName);
-      }
-    }
-  });
-
-  // Add priority models
-  for (
-    let i = 0;
-    i < Math.min(C.VISIBLE_PRIORITY_COUNT, portfolioItems.length);
-    i++
-  ) {
-    const modelName = portfolioItems[i]?.getAttribute("data-model");
-    if (modelName && !visibleModels.includes(modelName)) {
-      visibleModels.push(modelName);
-    }
-  }
-
-  return visibleModels;
-}
-
-/**
  * Initialize portfolio canvases
  */
 export function initPortfolioCanvases() {
   const portfolioItems = document.querySelectorAll(".portfolio-item");
-  if (portfolioItems.length) setupVisibleProjectCameras(portfolioItems);
+  if (portfolioItems.length) setupProjectCameras(portfolioItems);
 }
 
 /**
- * Setup visible project cameras with intersection observer
+ * Setup project cameras for portfolio items
+ * Leverages the threejs-manager's intersection observer
  */
-export function setupVisibleProjectCameras(portfolioItems) {
+export function setupProjectCameras(portfolioItems) {
   if (!portfolioItems.length) return;
 
-  // Create intersection observer
-  const observer = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry) => {
-        const item = entry.target;
-        const cameraIndex = parseInt(item.dataset.cameraIndex);
-
-        if (entry.isIntersecting) {
-          // Item is visible
-          if (!isNaN(cameraIndex)) {
-            // Camera exists, enable it
-            setCameraVisible(cameraIndex, true);
-            handleUserInteraction();
-          } else {
-            // Create camera directly - no need for idle scheduling
-            setupProjectCamera(item).then((newCameraIndex) => {
-              if (newCameraIndex !== null) {
-                item.dataset.cameraIndex = newCameraIndex;
-                setCameraVisible(newCameraIndex, true);
-                handleUserInteraction();
-              }
-            });
-          }
-        } else {
-          // Item not visible, disable camera
-          if (!isNaN(cameraIndex)) {
-            setCameraVisible(cameraIndex, false);
-          }
-
-          // Mark model as unused
-          const modelName = item.getAttribute("data-model");
-          if (modelName) {
-            markModelUnused(modelName);
-          }
-        }
-      });
-    },
-    {
-      threshold: C.INTERSECTION_THRESHOLD,
-      rootMargin: C.INTERSECTION_MARGIN,
-    }
-  );
-
   // Setup priority items first
-  let visibleCount = 0;
   const setupPromises = [];
   const maxVisible = C.VISIBLE_PRIORITY_COUNT;
+  let visibleCount = 0;
 
-  portfolioItems.forEach((item) => {
-    if (isElementInViewport(item) && visibleCount < maxVisible) {
+  portfolioItems.forEach((item, index) => {
+    // Set index for camera angle calculation
+    item.dataset.index = index;
+
+    // Setup priority items immediately
+    const isPriority = isElementInViewport(item) && visibleCount < maxVisible;
+
+    if (isPriority) {
       setupPromises.push(
         setupProjectCamera(item).then((cameraIndex) => {
           if (cameraIndex !== null) {
             item.dataset.cameraIndex = cameraIndex;
-            setCameraVisible(cameraIndex, true);
+            // No need to manually set camera visible - intersection observer will handle this
           }
           return cameraIndex;
         })
       );
       visibleCount++;
+    } else {
+      // Setup intersection observer for non-priority items
+      const observer = new IntersectionObserver(
+        (entries) => {
+          const entry = entries[0];
+          if (!entry) return;
+
+          if (entry.isIntersecting && !item.dataset.cameraIndex) {
+            setupProjectCamera(item).then((cameraIndex) => {
+              if (cameraIndex !== null) {
+                item.dataset.cameraIndex = cameraIndex;
+                // Camera visibility will be handled by threejs-manager's observer
+                handleUserInteraction();
+              }
+              observer.disconnect(); // Only need to observe until camera is created
+            });
+          }
+        },
+        { threshold: 0.1 }
+      );
+
+      observer.observe(item);
+
+      // Handle click events for immediate setup
+      item.addEventListener(
+        "click",
+        () => {
+          if (!item.dataset.cameraIndex) {
+            setupProjectCamera(item).then((cameraIndex) => {
+              if (cameraIndex !== null) {
+                item.dataset.cameraIndex = cameraIndex;
+                // Force redraw on click for immediate feedback
+                forceRedraw(cameraIndex);
+                handleUserInteraction();
+              }
+            });
+          } else {
+            // Camera already exists, just force a redraw
+            const cameraIndex = parseInt(item.dataset.cameraIndex);
+            if (!isNaN(cameraIndex)) {
+              forceRedraw(cameraIndex);
+              handleUserInteraction();
+            }
+          }
+        },
+        { passive: true }
+      );
     }
-    observer.observe(item);
   });
 
   Promise.all(setupPromises).catch((err) =>
@@ -231,7 +205,7 @@ export async function setupProjectCamera(item) {
   const model = await ensureModelInScene(modelName);
   const target = model.position.clone();
 
-  // Create camera directly - no initProjectCameras dependency
+  // Create camera
   const camera = new PerspectiveCamera(
     C.DEFAULT_FOV,
     width / height,
@@ -285,12 +259,48 @@ export async function setupProjectCamera(item) {
   }
 
   try {
-    // Register camera directly with threejs-manager
-    const cameraIndex = registerCamera(camera, controls, ctx, true);
+    // Register with threejs-manager, which will handle visibility and rendering
+    const metadata = { modelName, itemId: item.id };
+    // Pass true to mark as initially active
+    const cameraIndex = registerCamera(camera, controls, ctx, metadata, true);
     canvas._cameraIndex = cameraIndex;
+
+    // Return camera index for reference
     return cameraIndex;
   } catch (e) {
     console.error("Camera registration error:", e);
     return null;
   }
+}
+
+/**
+ * Get models from visible project cards - utility for prefetching
+ */
+export function getVisibleProjectModels() {
+  const visibleModels = [];
+  const portfolioItems = document.querySelectorAll(".portfolio-item");
+
+  // Add models visible in viewport
+  portfolioItems.forEach((item) => {
+    if (isElementInViewport(item)) {
+      const modelName = item.getAttribute("data-model");
+      if (modelName && !visibleModels.includes(modelName)) {
+        visibleModels.push(modelName);
+      }
+    }
+  });
+
+  // Add priority models
+  for (
+    let i = 0;
+    i < Math.min(C.VISIBLE_PRIORITY_COUNT, portfolioItems.length);
+    i++
+  ) {
+    const modelName = portfolioItems[i]?.getAttribute("data-model");
+    if (modelName && !visibleModels.includes(modelName)) {
+      visibleModels.push(modelName);
+    }
+  }
+
+  return visibleModels;
 }

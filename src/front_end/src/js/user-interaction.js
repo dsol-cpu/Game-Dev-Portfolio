@@ -3,16 +3,19 @@
  */
 
 // Constants
-const INTERACTION_TIMEOUT = 3000; // ms before switching to idle framerate
+const INTERACTION_TIMEOUT = 6000; // ms before switching to idle framerate
 const INTERACTION_THROTTLE = 16; // ~60fps
+const KEY_PRESS_TIMEOUT = 1000; // ms to consider user actively typing
 
 // Global state
 let lastInteractionTime = 0;
 let lastInteractionCallTime = 0;
+let lastKeyPressTime = 0;
 let userActive = false;
 let onInteractionCallbacks = new Set();
 let onIdleStateChangeCallbacks = new Set();
 let isCurrentlyIdle = false;
+let windowHasFocus = true;
 
 /**
  * Initialize user interaction tracking
@@ -25,7 +28,7 @@ export function initUserInteraction() {
   window.addEventListener("blur", handleWindowBlur, passiveOpts);
   document.addEventListener("mousemove", handleUserInteraction, passiveOpts);
   document.addEventListener("touchstart", handleUserInteraction, passiveOpts);
-  document.addEventListener("keydown", handleUserInteraction, passiveOpts);
+  document.addEventListener("keydown", handleKeyPress, passiveOpts);
   document.addEventListener("scroll", handleUserInteraction, passiveOpts);
   document.addEventListener("wheel", handleUserInteraction, passiveOpts);
   document.addEventListener("click", handleUserInteraction, passiveOpts);
@@ -35,6 +38,7 @@ export function initUserInteraction() {
 
   // Initialize state
   userActive = !document.hidden;
+  windowHasFocus = document.hasFocus();
 
   // Consider user active initially
   handleUserInteraction();
@@ -67,6 +71,7 @@ export function onIdleStateChange(callback) {
  * Handle window focus
  */
 function handleWindowFocus() {
+  windowHasFocus = true;
   userActive = true;
   notifyInteraction();
 }
@@ -75,7 +80,17 @@ function handleWindowFocus() {
  * Handle window blur
  */
 function handleWindowBlur() {
+  windowHasFocus = false;
   userActive = false;
+}
+
+/**
+ * Handle key presses and track typing activity
+ * @param {KeyboardEvent} event - Keyboard event
+ */
+function handleKeyPress(event) {
+  lastKeyPressTime = performance.now();
+  handleUserInteraction(event);
 }
 
 /**
@@ -88,7 +103,9 @@ export function handleUserInteraction(event) {
   // Throttle frequent events like mousemove
   if (
     event &&
-    (event.type === "mousemove" || event.type === "wheel") &&
+    (event.type === "mousemove" ||
+      event.type === "wheel" ||
+      event.type === "keypress") &&
     now - lastInteractionCallTime < INTERACTION_THROTTLE
   ) {
     return;
@@ -120,10 +137,25 @@ function notifyInteraction() {
 }
 
 /**
+ * Check if user is actively typing
+ * @returns {boolean} True if user is actively typing
+ */
+function isActivelyTyping() {
+  return (
+    windowHasFocus && performance.now() - lastKeyPressTime < KEY_PRESS_TIMEOUT
+  );
+}
+
+/**
  * Check if we should be in idle mode (lower framerate)
  * @returns {boolean} True if in idle mode
  */
 export function isIdle() {
+  // User is not idle if they're actively typing with window focus
+  if (isActivelyTyping()) {
+    return false;
+  }
+
   return (
     !userActive ||
     document.hidden ||
@@ -188,7 +220,7 @@ export function cleanupUserInteraction() {
   window.removeEventListener("blur", handleWindowBlur);
   document.removeEventListener("mousemove", handleUserInteraction);
   document.removeEventListener("touchstart", handleUserInteraction);
-  document.removeEventListener("keydown", handleUserInteraction);
+  document.removeEventListener("keydown", handleKeyPress);
   document.removeEventListener("scroll", handleUserInteraction);
   document.removeEventListener("wheel", handleUserInteraction);
   document.removeEventListener("click", handleUserInteraction);

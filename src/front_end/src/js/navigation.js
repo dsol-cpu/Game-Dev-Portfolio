@@ -34,7 +34,7 @@ function scrollToSection(sectionId) {
   });
 
   // Direct function calls instead of window checks
-  window.setActiveCamerasBySection?.(sectionId);
+  // window.setActiveCamerasBySection?.(sectionId);
   window.handleUserInteraction?.();
 }
 

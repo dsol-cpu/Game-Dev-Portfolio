@@ -52,7 +52,7 @@ export function createCameraController(camera, target) {
  * @param {PerspectiveCamera} camera - The camera to update
  * @param {Group} target - The target to follow
  */
-export function updateCamera(camera, target) {
+export function updateCamera(camera, target, deltaTime = 1 / 60) {
   if (!camera || !target || !cameraState) return;
 
   // Get player position and update target position in state
@@ -74,8 +74,15 @@ export function updateCamera(camera, target) {
     cameraState.targetPosition.z + offsetZ
   );
 
-  // Smoothly move camera to calculated position
-  camera.position.lerp(tempCameraPosition, CAMERA.SMOOTHING);
+  // IMPORTANT FIX: Use time-based interpolation for camera movement
+  // Calculate smoothing factor based on delta time
+  const smoothingFactor = Math.min(
+    1.0,
+    CAMERA.SMOOTHING * (deltaTime / (1 / 60))
+  );
+
+  // Smoothly move camera to calculated position with time-based interpolation
+  camera.position.lerp(tempCameraPosition, smoothingFactor);
 
   // Calculate target position at the player position plus height offset
   tempTargetPosition.copy(cameraState.targetPosition);
@@ -84,7 +91,6 @@ export function updateCamera(camera, target) {
   // Make camera look at target
   camera.lookAt(tempTargetPosition);
 }
-
 /**
  * Set up mouse controls for zoom
  */
