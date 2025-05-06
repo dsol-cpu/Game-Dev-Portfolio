@@ -4,7 +4,6 @@
 
 import { CAMERA_SECTIONS } from "../data/sections.js";
 import {
-  Clock,
   CylinderGeometry,
   Group,
   Mesh,
@@ -14,13 +13,10 @@ import {
   Vector3,
 } from "../extern/three/three.module.min.js";
 import { handleUserInteraction } from "../user-interaction.js";
-import { getPerfLevel, hasWebGLSupport } from "../utils/device.js";
 import { debounce } from "../utils/helper.js";
-import { TimeManager } from "./time-manager.js";
 import { createCameraController, updateCamera } from "./camera-follow.js";
 import {
   createPlayerModel,
-  getPlayerModel,
   initPlayerControls,
   updatePlayer,
 } from "./player-model.js";
@@ -31,6 +27,7 @@ import {
   registerCamera,
   setCameraVisible,
 } from "./threejs-manager.js";
+import { TimeManager } from "./time-manager.js";
 
 // Constants
 const C = { DEFAULT_FOV: 75, NEAR: 0.1, FAR: 1000 },
@@ -209,16 +206,11 @@ export function initGameScene() {
 /**
  * Update game loop
  */
-function updateGameLoop(timestamp) {
+export function updateGameLoop(deltaTime) {
   if (gameState.viewMode !== VIEW_MODES.GAME) return;
 
-  const timeInfo = TimeManager.update(timestamp, "game");
-  if (timeInfo.skipFrame) {
-    gameAnimationFrameId = requestAnimationFrame(updateGameLoop);
-    return;
-  }
-
-  const deltaTime = timeInfo.deltaTime;
+  const timeInfo = TimeManager.update(deltaTime, "game");
+  if (timeInfo.skipFrame) return;
 
   // Update entities
   playerEntity && ((playerEntity.visible = true), updatePlayer(deltaTime));
@@ -229,16 +221,15 @@ function updateGameLoop(timestamp) {
   updateIslandBobbing(deltaTime);
 
   // Update debug overlay if available
-  typeof updateDebugOverlay === "function" &&
-    updateDebugOverlay(playerEntity?.__controls || window._playerControls);
+  updateDebugOverlay(playerEntity?.__controls || window._playerControls);
 
   // Force redraw
   cameraIndex >= 0 && isCameraActive(cameraIndex) && forceRedraw(cameraIndex);
 
   // Apply frame capping before scheduling next frame
-  TimeManager.applyFrameCapping().then(() => {
-    gameAnimationFrameId = requestAnimationFrame(updateGameLoop);
-  });
+  // TimeManager.applyFrameCapping().then(() => {
+  //   gameAnimationFrameId = requestAnimationFrame(updateGameLoop);
+  // });
 }
 
 /**
@@ -352,7 +343,7 @@ export function updateGameViewSize(elements, width, height) {
  * Initialize game module
  */
 export function initGame() {
-  if (gameState.isInitialized) return getPublicAPI();
+  if (gameState.isInitialized) return;
 
   // Get required DOM elements
   const elements = {
@@ -373,7 +364,7 @@ export function initGame() {
     console.error(
       "Game initialization failed: Required DOM elements not found"
     );
-    return getPublicAPI();
+    return;
   }
 
   // Initialize game
@@ -394,31 +385,5 @@ export function initGame() {
     }, 200)
   );
 
-  // Expose global API
-  window.isGameViewActive = () => gameState.viewMode === VIEW_MODES.GAME;
-  window.toggleGameView = () => toggleGameView(elements);
-  window.updateGameViewSize = (w, h) => updateGameViewSize(elements, w, h);
-
   gameState.isInitialized = true;
-  return getPublicAPI();
-}
-
-/**
- * Get public API
- */
-function getPublicAPI() {
-  return {
-    getViewMode: () => gameState.viewMode,
-    isGameViewActive: () => gameState.viewMode === VIEW_MODES.GAME,
-    toggleGameView,
-    updateGameViewSize,
-    hasWebGLSupport,
-    getPerfLevel,
-    getThirdPersonCamera: () => thirdPersonCamera,
-    getPlayerModel,
-    toggleCameraFollow: (active) => {
-      cameraFollowActive = active !== undefined ? active : !cameraFollowActive;
-      return cameraFollowActive;
-    },
-  };
 }

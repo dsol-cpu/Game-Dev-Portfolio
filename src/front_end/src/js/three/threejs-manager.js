@@ -21,26 +21,26 @@ const MAX_DELTA_TIME = 1 / 30;
 const TEMP_VEC2 = new Vector2();
 
 // PRE-ALLOCATED SINGLETON
-const mgr = {
-  r: null, // renderer
-  s: null, // scene
+const manager = {
+  renderer: null, // renderer
+  scene: null, // scene
   rafId: 0,
-  rendering: false,
+  isRendering: false,
   lastTs: 0,
   dimCache: new Map(),
   // TypedArrays for memory efficiency
-  a: new Uint8Array(MAX_CAMERAS), // active
-  v: new Uint8Array(MAX_CAMERAS), // visible
-  d: new Uint8Array(MAX_CAMERAS), // dirty
-  lr: new Float32Array(MAX_CAMERAS), // lastRender
-  n: 0, // count
+  activeCams: new Uint8Array(MAX_CAMERAS), // active
+  visibleCams: new Uint8Array(MAX_CAMERAS), // visible
+  dirtyCams: new Uint8Array(MAX_CAMERAS), // dirty
+  lastRender: new Float32Array(MAX_CAMERAS), // lastRender
+  count: 0, // count
   // Flat arrays for better iteration
-  c: Array(MAX_CAMERAS).fill(null), // cameras
-  t: Array(MAX_CAMERAS).fill(null), // controls
-  x: Array(MAX_CAMERAS).fill(null), // contexts
-  m: Array(MAX_CAMERAS).fill(null), // metadata
+  cameras: Array(MAX_CAMERAS).fill(null), // cameras
+  controls: Array(MAX_CAMERAS).fill(null), // controls
+  contexts: Array(MAX_CAMERAS).fill(null), // contexts
+  metadata: Array(MAX_CAMERAS).fill(null), // metadata
   // Observers and metrics
-  o: [], // observers
+  observers: [], // observers
   metrics: {
     frames: 0,
     lastFpsTime: 0,
@@ -60,9 +60,7 @@ const mgr = {
  * Initialize the ThreeJS manager
  */
 export function initThreeJSManager() {
-  disposeThreeJSManager();
-
-  mgr.r = new WebGLRenderer({
+  manager.renderer = new WebGLRenderer({
     alpha: true,
     antialias: false,
     preserveDrawingBuffer: false,
@@ -74,7 +72,7 @@ export function initThreeJSManager() {
     premultipliedAlpha: false,
   });
 
-  const r = mgr.r;
+  const r = manager.renderer;
   r.setClearColor(0x000000, 0);
   r.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
   r.shadowMap.enabled = false;
@@ -86,11 +84,11 @@ export function initThreeJSManager() {
   r.autoClear = false;
 
   // Create scene
-  mgr.s = new Scene();
-  mgr.s.matrixAutoUpdate = false;
-  mgr.s.autoUpdate = false;
-  mgr.s.background = null;
-  mgr.s.add(getFallbackCube());
+  manager.scene = new Scene();
+  manager.scene.matrixAutoUpdate = false;
+  manager.scene.autoUpdate = false;
+  manager.scene.background = null;
+  manager.scene.add(getFallbackCube());
 
   // Add lights
   const ambient = new AmbientLight(0xffffff, 0.5);
@@ -100,15 +98,15 @@ export function initThreeJSManager() {
   direct.castShadow = false;
   direct.matrixAutoUpdate = false;
   direct.updateMatrix();
-  mgr.s.add(ambient);
-  mgr.s.add(direct);
+  manager.scene.add(ambient);
+  manager.scene.add(direct);
 
   // Reset state
-  mgr.a.fill(0);
-  mgr.v.fill(0);
-  mgr.d.fill(0);
-  mgr.lr.fill(0);
-  mgr.n = 0;
+  manager.activeCams.fill(0);
+  manager.visibleCams.fill(0);
+  manager.dirtyCams.fill(0);
+  manager.lastRender.fill(0);
+  manager.count = 0;
 
   // Event handlers
   document.addEventListener(
@@ -128,8 +126,8 @@ export function initThreeJSManager() {
       if (resizing) return;
       resizing = true;
       requestAnimationFrame(() => {
-        mgr.d.fill(1, 0, mgr.n);
-        mgr.f.needsFullRender = true;
+        manager.dirtyCams.fill(1, 0, manager.count);
+        manager.f.needsFullRender = true;
         resizing = false;
       });
     },
@@ -143,10 +141,10 @@ export function initThreeJSManager() {
 
   return {
     getStats: () => ({
-      fps: mgr.metrics.fps,
-      rendered: mgr.metrics.rendered,
-      skipped: mgr.metrics.skipped,
-      total: mgr.metrics.total,
+      fps: manager.metrics.fps,
+      rendered: manager.metrics.rendered,
+      skipped: manager.metrics.skipped,
+      total: manager.metrics.total,
     }),
   };
 }
@@ -161,21 +159,21 @@ export function registerCamera(
   metadata = {},
   active = true
 ) {
-  if (mgr.n >= MAX_CAMERAS)
+  if (manager.count >= MAX_CAMERAS)
     throw new Error(`Max cameras (${MAX_CAMERAS}) reached`);
 
-  const idx = mgr.n++;
+  const idx = manager.count++;
 
   // Store refs
-  mgr.c[idx] = camera;
-  mgr.t[idx] = controls;
-  mgr.x[idx] = context;
-  mgr.m[idx] = metadata;
+  manager.cameras[idx] = camera;
+  manager.controls[idx] = controls;
+  manager.contexts[idx] = context;
+  manager.metadata[idx] = metadata;
 
   // Set flags
-  mgr.a[idx] = active ? 1 : 0;
-  mgr.v[idx] = 1;
-  mgr.d[idx] = 1;
+  manager.activeCams[idx] = active ? 1 : 0;
+  manager.visibleCams[idx] = 1;
+  manager.dirtyCams[idx] = 1;
 
   // Optimize components
   if (camera?.isPerspectiveCamera) camera.matrixAutoUpdate = true;
@@ -209,14 +207,14 @@ export function registerCamera(
         const entry = entries[0];
         if (!entry) return;
 
-        const wasVisible = mgr.v[idx] === 1;
+        const wasVisible = manager.visibleCams[idx] === 1;
         const isVisible = entry.isIntersecting;
 
-        mgr.v[idx] = isVisible ? 1 : 0;
+        manager.visibleCams[idx] = isVisible ? 1 : 0;
 
         if (!wasVisible && isVisible) {
-          mgr.d[idx] = 1;
-          if (!mgr.rendering) startRendering();
+          manager.dirtyCams[idx] = 1;
+          if (!manager.isRendering) startRendering();
         }
       },
       {
@@ -226,7 +224,7 @@ export function registerCamera(
     );
 
     observer.observe(context.canvas);
-    mgr.o.push({ idx, observer });
+    manager.observers.push({ idx, observer });
   }
 
   return idx;
@@ -236,44 +234,44 @@ export function registerCamera(
  * Set camera visibility
  */
 export function setCameraVisible(idx, visible) {
-  if (idx < 0 || idx >= mgr.n) return;
+  if (idx < 0 || idx >= manager.count) return;
 
-  const prev = mgr.a[idx] === 1;
-  mgr.a[idx] = visible ? 1 : 0;
+  const prev = manager.activeCams[idx] === 1;
+  manager.activeCams[idx] = visible ? 1 : 0;
 
-  if (prev !== visible) mgr.d[idx] = 1;
+  if (prev !== visible) manager.dirtyCams[idx] = 1;
 
-  const ctx = mgr.x[idx];
+  const ctx = manager.contexts[idx];
   if (ctx?.canvas) ctx.canvas.style.display = visible ? "block" : "none";
 
-  if (visible && !mgr.rendering) startRendering();
+  if (visible && !manager.isRendering) startRendering();
 }
 
 /**
  * Get camera's active state
  */
 export function isCameraActive(idx) {
-  return idx >= 0 && idx < mgr.n && mgr.a[idx] === 1;
+  return idx >= 0 && idx < manager.count && manager.activeCams[idx] === 1;
 }
 
 /**
  * Update controls with consistent deltaTime
  */
 function updateControls(dt) {
-  mgr.f.hasActiveDrag = false;
+  manager.f.hasActiveDrag = false;
   let updated = false;
 
-  for (let i = 0; i < mgr.n; i++) {
-    if (mgr.a[i] !== 1 || mgr.v[i] !== 1) continue;
+  for (let i = 0; i < manager.count; i++) {
+    if (manager.activeCams[i] !== 1 || manager.visibleCams[i] !== 1) continue;
 
-    const ctrl = mgr.t[i];
+    const ctrl = manager.controls[i];
     if (!ctrl) continue;
 
-    if (ctrl._dragging) mgr.f.hasActiveDrag = true;
+    if (ctrl._dragging) manager.f.hasActiveDrag = true;
 
     if (ctrl.update) {
       ctrl.update(dt);
-      mgr.d[i] = 1;
+      manager.dirtyCams[i] = 1;
       updated = true;
     }
   }
@@ -285,10 +283,15 @@ function updateControls(dt) {
  * Render single camera
  */
 function renderCamera(idx, dt) {
-  if (mgr.a[idx] !== 1 || mgr.v[idx] !== 1 || mgr.d[idx] !== 1) return false;
+  if (
+    manager.activeCams[idx] !== 1 ||
+    manager.visibleCams[idx] !== 1 ||
+    manager.dirtyCams[idx] !== 1
+  )
+    return false;
 
-  const cam = mgr.c[idx];
-  const ctx = mgr.x[idx];
+  const cam = manager.cameras[idx];
+  const ctx = manager.contexts[idx];
 
   if (!cam || !ctx?.canvas?.isConnected) return false;
 
@@ -299,7 +302,7 @@ function renderCamera(idx, dt) {
   if (w <= 8 || h <= 8) return false;
 
   try {
-    const r = mgr.r;
+    const r = manager.renderer;
     if (!r) return false;
 
     r.setSize(w, h, false);
@@ -309,9 +312,9 @@ function renderCamera(idx, dt) {
     r.clear(true, true, false);
 
     cam.updateMatrixWorld(true);
-    mgr.s.updateMatrixWorld(true);
+    manager.scene.updateMatrixWorld(true);
 
-    r.render(mgr.s, cam);
+    r.render(manager.scene, cam);
 
     ctx.clearRect(0, 0, w, h);
     ctx.drawImage(
@@ -326,10 +329,10 @@ function renderCamera(idx, dt) {
       h
     );
 
-    mgr.lr[idx] = performance.now();
-    mgr.d[idx] = 0;
-    mgr.metrics.rendered++;
-    mgr.metrics.total++;
+    manager.lastRender[idx] = performance.now();
+    manager.dirtyCams[idx] = 0;
+    manager.metrics.rendered++;
+    manager.metrics.total++;
 
     return true;
   } catch {
@@ -341,10 +344,10 @@ function renderCamera(idx, dt) {
  * Batch render all cameras
  */
 function renderCameras(dt) {
-  const r = mgr.r;
+  const r = manager.renderer;
   if (!r) return 0;
 
-  mgr.metrics.rendered = 0;
+  manager.metrics.rendered = 0;
 
   try {
     r.autoClear = false;
@@ -352,7 +355,7 @@ function renderCameras(dt) {
 
     updateControls(dt);
 
-    const count = mgr.n;
+    const count = manager.count;
     let rendered = 0;
 
     for (let start = 0; start < count; start += BATCH_SIZE) {
@@ -363,10 +366,10 @@ function renderCameras(dt) {
     }
 
     r.scissorTest = false;
-    mgr.f.needsFullRender = false;
+    manager.f.needsFullRender = false;
     r.info.reset();
 
-    return mgr.metrics.rendered;
+    return manager.metrics.rendered;
   } catch {
     return 0;
   }
@@ -376,7 +379,7 @@ function renderCameras(dt) {
  * Update FPS counter
  */
 function updateFPS(now) {
-  const m = mgr.metrics;
+  const m = manager.metrics;
   m.frames++;
 
   if (now - m.lastFpsTime >= 1000) {
@@ -389,63 +392,54 @@ function updateFPS(now) {
 /**
  * Main render loop
  */
-function renderLoop(ts) {
-  if (!mgr.rendering) return;
+function renderLoop(deltaTime) {
+  if (!manager.isRendering) return;
 
-  const timeInfo = TimeManager.update(ts, "renderer");
+  const timeInfo = TimeManager.update(deltaTime, "renderer");
   const now = performance.now();
 
   // Get consistent dt and clamp
-  let dt = timeInfo.deltaTime;
-  dt = Math.max(MIN_DELTA_TIME, Math.min(dt, MAX_DELTA_TIME));
 
   // Handle idle state
   const idle = isIdle();
   if (idle) {
     const idleFrameSkip = 4; // ~15fps when idle
-    if (mgr.metrics.frames % idleFrameSkip !== 0) {
-      mgr.rafId = requestAnimationFrame(renderLoop);
+    if (manager.metrics.frames % idleFrameSkip !== 0) {
+      manager.rafId = requestAnimationFrame(renderLoop);
       return;
     }
   }
 
   // Render and update stats
-  renderCameras(dt);
+  renderCameras(deltaTime);
   updateFPS(now);
 
-  // Garbage collection
-  const gcInterval = 5000;
-  if (now - (mgr._lastGC || 0) > gcInterval) {
-    collectGarbage();
-    mgr._lastGC = now;
-  }
-
-  mgr.lastTs = ts;
-  mgr.rafId = requestAnimationFrame(renderLoop);
+  manager.lastTs = deltaTime;
+  manager.rafId = requestAnimationFrame(renderLoop);
 }
 
 /**
  * Start rendering
  */
 function startRendering() {
-  if (mgr.rendering) return;
+  if (manager.isRendering) return;
 
-  mgr.rendering = true;
-  mgr.lastTs = performance.now();
-  mgr.rafId = requestAnimationFrame(renderLoop);
+  manager.isRendering = true;
+  manager.lastTs = performance.now();
+  manager.rafId = requestAnimationFrame(renderLoop);
 }
 
 /**
  * Pause rendering
  */
 function pauseRendering() {
-  if (!mgr.rendering) return;
+  if (!manager.isRendering) return;
 
-  mgr.rendering = false;
+  manager.isRendering = false;
 
-  if (mgr.rafId) {
-    cancelAnimationFrame(mgr.rafId);
-    mgr.rafId = 0;
+  if (manager.rafId) {
+    cancelAnimationFrame(manager.rafId);
+    manager.rafId = 0;
   }
 }
 
@@ -453,42 +447,24 @@ function pauseRendering() {
  * Resume rendering
  */
 function resumeRendering() {
-  if (mgr.rendering) return;
+  if (manager.isRendering) return;
 
-  mgr.d.fill(1, 0, mgr.n);
-  mgr.rendering = true;
-  mgr.lastTs = performance.now();
-  mgr.rafId = requestAnimationFrame(renderLoop);
-}
-
-/**
- * Garbage collection
- */
-function collectGarbage(full = false) {
-  if (mgr.r) {
-    mgr.r.info.reset();
-    mgr.r.renderLists.dispose();
-
-    if (full) {
-      const gl = mgr.r.getContext();
-      const ext = gl?.getExtension("WEBGL_lose_context");
-      if (ext) gl.flush();
-    }
-  }
-
-  if (full) mgr.dimCache.clear();
+  manager.dirtyCams.fill(1, 0, manager.count);
+  manager.isRendering = true;
+  manager.lastTs = performance.now();
+  manager.rafId = requestAnimationFrame(renderLoop);
 }
 
 /**
  * Dispose a camera
  */
 export function disposeCamera(idx) {
-  if (idx < 0 || idx >= mgr.n) return;
+  if (idx < 0 || idx >= manager.count) return;
 
-  const ctrl = mgr.t[idx];
+  const ctrl = manager.controls[idx];
   if (ctrl?.dispose) ctrl.dispose();
 
-  const cam = mgr.c[idx];
+  const cam = manager.cameras[idx];
   if (cam?.userData?.disposables) {
     cam.userData.disposables.forEach((item) => {
       if (item?.dispose) item.dispose();
@@ -496,20 +472,20 @@ export function disposeCamera(idx) {
     cam.userData.disposables = [];
   }
 
-  mgr.c[idx] = null;
-  mgr.t[idx] = null;
-  mgr.x[idx] = null;
-  mgr.m[idx] = null;
+  manager.cameras[idx] = null;
+  manager.controls[idx] = null;
+  manager.contexts[idx] = null;
+  manager.metadata[idx] = null;
 
-  mgr.a[idx] = 0;
-  mgr.v[idx] = 0;
-  mgr.d[idx] = 0;
-  mgr.lr[idx] = 0;
+  manager.activeCams[idx] = 0;
+  manager.visibleCams[idx] = 0;
+  manager.dirtyCams[idx] = 0;
+  manager.lastRender[idx] = 0;
 
-  const obsIdx = mgr.o.findIndex((o) => o.idx === idx);
+  const obsIdx = manager.observers.findIndex((o) => o.idx === idx);
   if (obsIdx >= 0) {
-    mgr.o[obsIdx].observer.disconnect();
-    mgr.o.splice(obsIdx, 1);
+    manager.observers[obsIdx].observer.disconnect();
+    manager.observers.splice(obsIdx, 1);
   }
 }
 
@@ -518,37 +494,37 @@ export function disposeCamera(idx) {
  */
 export function performCleanup(force = false) {
   const now = performance.now();
-  if (!force && now - (mgr._lastCleanup || 0) < 30000) return;
+  if (!force && now - (manager._lastCleanup || 0) < 30000) return;
 
   // Compact arrays
   let writeIdx = 0;
-  for (let i = 0; i < mgr.n; i++) {
-    if (mgr.c[i] !== null) {
-      if (i !== writeIdx) {
-        mgr.c[writeIdx] = mgr.c[i];
-        mgr.t[writeIdx] = mgr.t[i];
-        mgr.x[writeIdx] = mgr.x[i];
-        mgr.m[writeIdx] = mgr.m[i];
-        mgr.a[writeIdx] = mgr.a[i];
-        mgr.v[writeIdx] = mgr.v[i];
-        mgr.d[writeIdx] = mgr.d[i];
-        mgr.lr[writeIdx] = mgr.lr[i];
+  for (let i = 0; i < manager.count; i++) {
+    if (manager.cameras[i] === null) continue;
 
-        const obsIdx = mgr.o.findIndex((o) => o.idx === i);
-        if (obsIdx >= 0) mgr.o[obsIdx].idx = writeIdx;
-
-        mgr.c[i] = null;
-        mgr.t[i] = null;
-        mgr.x[i] = null;
-        mgr.m[i] = null;
-      }
+    if (i === writeIdx) {
       writeIdx++;
+      continue;
     }
+
+    manager.cameras[writeIdx] = manager.cameras[i];
+    manager.controls[writeIdx] = manager.controls[i];
+    manager.contexts[writeIdx] = manager.contexts[i];
+    manager.metadata[writeIdx] = manager.metadata[i];
+    manager.activeCams[writeIdx] = manager.activeCams[i];
+    manager.visibleCams[writeIdx] = manager.visibleCams[i];
+    manager.dirtyCams[writeIdx] = manager.dirtyCams[i];
+    manager.lastRender[writeIdx] = manager.lastRender[i];
+
+    const obsIdx = manager.observers.findIndex((o) => o.idx === i);
+    if (obsIdx >= 0) manager.observers[obsIdx].idx = writeIdx;
+
+    manager.cameras[i] = null;
+    manager.controls[i] = null;
+    manager.contexts[i] = null;
+    manager.metadata[i] = null;
   }
 
-  mgr.n = writeIdx;
-  collectGarbage(true);
-  mgr._lastCleanup = now;
+  manager.count = writeIdx;
 }
 
 /**
@@ -557,34 +533,34 @@ export function performCleanup(force = false) {
 export function disposeThreeJSManager() {
   pauseRendering();
 
-  mgr.o.forEach(({ observer }) => observer.disconnect());
-  mgr.o.length = 0;
+  manager.observers.forEach(({ observer }) => observer.disconnect());
+  manager.observers.length = 0;
 
-  for (let i = 0; i < mgr.n; i++) {
-    const ctrl = mgr.t[i];
+  for (let i = 0; i < manager.count; i++) {
+    const ctrl = manager.controls[i];
     if (ctrl?.dispose) ctrl.dispose();
-    mgr.t[i] = null;
-    mgr.c[i] = null;
-    mgr.x[i] = null;
-    mgr.m[i] = null;
+    manager.controls[i] = null;
+    manager.cameras[i] = null;
+    manager.contexts[i] = null;
+    manager.metadata[i] = null;
   }
 
-  if (mgr.r) {
-    const gl = mgr.r.getContext();
+  if (manager.renderer) {
+    const gl = manager.renderer.getContext();
     const ext = gl?.getExtension("WEBGL_lose_context");
     if (ext) ext.loseContext();
 
-    mgr.r.dispose();
-    mgr.r.forceContextLoss();
-    mgr.r = null;
+    manager.renderer.dispose();
+    manager.renderer.forceContextLoss();
+    manager.renderer = null;
   }
 
-  if (mgr.s) {
-    while (mgr.s.children.length > 0) {
-      mgr.s.remove(mgr.s.children[0]);
+  if (manager.scene) {
+    while (manager.scene.children.length > 0) {
+      manager.scene.remove(manager.scene.children[0]);
     }
 
-    mgr.s.traverse((obj) => {
+    manager.scene.traverse((obj) => {
       if (obj.geometry?.dispose) obj.geometry.dispose();
 
       if (obj.material) {
@@ -614,19 +590,17 @@ export function disposeThreeJSManager() {
       }
     });
 
-    mgr.s = null;
+    manager.scene = null;
   }
 
-  collectGarbage(true);
+  manager.count = 0;
+  manager.dimCache.clear();
+  manager.activeCams.fill(0);
+  manager.visibleCams.fill(0);
+  manager.dirtyCams.fill(0);
+  manager.lastRender.fill(0);
 
-  mgr.n = 0;
-  mgr.dimCache.clear();
-  mgr.a.fill(0);
-  mgr.v.fill(0);
-  mgr.d.fill(0);
-  mgr.lr.fill(0);
-
-  Object.assign(mgr.metrics, {
+  Object.assign(manager.metrics, {
     frames: 0,
     lastFpsTime: 0,
     fps: 0,
@@ -640,7 +614,7 @@ export function disposeThreeJSManager() {
  * Get the scene instance
  */
 export function getScene() {
-  return mgr.s;
+  return manager.scene;
 }
 
 /**
@@ -648,14 +622,14 @@ export function getScene() {
  */
 export function getAllCameras() {
   const cameras = [];
-  for (let i = 0; i < mgr.n; i++) {
-    if (mgr.c[i]) {
+  for (let i = 0; i < manager.count; i++) {
+    if (manager.cameras[i]) {
       cameras.push({
         index: i,
-        camera: mgr.c[i],
-        metadata: mgr.m[i],
-        active: mgr.a[i] === 1,
-        visible: mgr.v[i] === 1,
+        camera: manager.cameras[i],
+        metadata: manager.metadata[i],
+        active: manager.activeCams[i] === 1,
+        visible: manager.visibleCams[i] === 1,
       });
     }
   }
@@ -666,8 +640,8 @@ export function getAllCameras() {
  * Force redraw of a specific camera
  */
 export function forceRedraw(idx) {
-  if (idx < 0 || idx >= mgr.n) return;
-  mgr.d[idx] = 1;
+  if (idx < 0 || idx >= manager.count) return;
+  manager.dirtyCams[idx] = 1;
 
-  if (!mgr.rendering) startRendering();
+  if (!manager.isRendering) startRendering();
 }

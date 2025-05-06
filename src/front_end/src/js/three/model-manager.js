@@ -659,7 +659,7 @@ function trackModelMemory(modelName, model) {
         });
 
         // Count index buffer if present
-        if (geometry.index && geometry.index.array) {
+        if (geometry.index?.array) {
           geometryBytes += geometry.index.array.byteLength || 0;
         }
 
@@ -679,7 +679,7 @@ function trackModelMemory(modelName, model) {
 
           // Count textures
           Object.values(material).forEach((value) => {
-            if (value && value.isTexture && value.image) {
+            if (value?.isTexture && value.image) {
               // Estimate texture memory
               const width = value.image.width || 512;
               const height = value.image.height || 512;

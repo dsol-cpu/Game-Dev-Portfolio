@@ -93,7 +93,6 @@ function initNavigation() {
   handleInitialSection();
   window.addEventListener("popstate", handleInitialSection);
 
-  // Return minimal API
   return { scrollToSection };
 }
 
