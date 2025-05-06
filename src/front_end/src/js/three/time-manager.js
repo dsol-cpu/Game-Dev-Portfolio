@@ -1,101 +1,217 @@
 /**
- * TimeManager.js - Singleton time management system for game and rendering synchronization
- * Uses performance.now() for high-precision timing with reduced lag
+ * TimeManager.js - Optimized time management system for game and rendering synchronization
+ * Memory-efficient implementation with reduced heap allocations and improved performance
  */
 export const TimeManager = (function () {
-  // Private instance
   const instance = {
-    // Time tracking
+    // Core timing - use primitive values where possible
     lastFrameTime: 0,
-    deltaTime: 0,
-    fixedDeltaTime: 16.667, // 60fps in ms
-    maxDeltaTime: 25.0, // Cap at ~30 FPS equivalent
-    timeScale: 1.0, // For slow-mo effects if needed
+    deltaTime: 16.667, // Default to 60fps in ms
+    fixedDeltaTime: 16.667,
+    maxDeltaTime: 33.333, // ~30 FPS cap
+    timeScale: 1.0,
 
-    // REDUCED smoothing to minimize lag
-    smoothingFactor: 0.1, // Lower value reduces lag but may increase jitter
-    smoothedDeltaTime: 0,
-    previousDeltas: [], // Store recent deltas for median filtering
-    deltaSampleSize: 7, // Smaller sample reduces lag
+    // Simplified smoothing with smaller buffer
+    smoothingFactor: 0.2,
+    smoothedDeltaTime: 16.667,
+    deltas: new Float32Array(3), // Use typed array for better performance
+    deltasIndex: 0,
 
-    // Fixed timestep accumulation
+    // Fixed timestep and performance tracking
     timeAccumulator: 0,
-
-    // Performance monitoring
     frameCount: 0,
-    fpsUpdateInterval: 500, // Update FPS display every 500ms
+    fpsUpdateInterval: 1000, // Update FPS every second
     lastFpsUpdate: 0,
-    currentFps: 0,
+    currentFps: 60,
 
-    // History tracking for debugging
-    timeHistory: [],
-    maxHistorySize: 60, // 1 second at 60fps
+    // Reduced history tracking - use circular buffer with fixed size
+    timeHistory: null, // Will be initialized as typed array
+    historyIndex: 0,
+    historySize: 0,
+    maxHistorySize: 20,
+    lastHistoryCleanup: 0,
 
-    // Idle state handling - now relying on user-interaction.js
-    idleThreshold: 100, // Time in ms before considered idle
-    idleThrottle: 250, // Throttle to 4fps when idle
+    // Memory management
+    lastMemoryManagement: 0,
+
+    // State tracking
     isIdle: false,
     wasIdleLastFrame: false,
-
-    // Focus state tracking
-    hadFocus: true,
+    idleThreshold: 100,
+    idleThrottle: 250,
     hasFocus: true,
+    hadFocus: true,
     lastInteractionTime: 0,
 
-    // Direct timing mode - bypass smoothing when true
+    // Configuration flags - grouped for better cache locality
     directTimingMode: false,
+    driftDetected: false,
+    frameCapping: true,
+    isDisposed: false,
+
+    // FPS Cap settings - store as inverse for faster calculations
+    targetFPS: 60,
+    frameTimeLimit: 16.667,
+    lastFrameStartTime: 0,
+
+    // Event handling
+    eventHandlers: null, // Will be initialized when needed
+  };
+
+  // Pre-allocate history storage as typed arrays
+  const initializeHistoryStorage = () => {
+    // Use typed arrays for better memory performance
+    const size = instance.maxHistorySize;
+    // Store only timestamps and delta times
+    instance.timeHistory = {
+      timestamps: new Float32Array(size),
+      deltas: new Float32Array(size),
+    };
   };
 
   /**
-   * Apply median filtering to smooth out spikes
-   * @param {number} newDelta - The new delta time value to filter
+   * Efficient median filter implementation using insertion sort
+   * Avoids array copying and full sort operations
+   * @param {number} newDelta - The new delta time value
    * @returns {number} - Filtered delta time
    */
-  const applyMedianFilter = (newDelta) => {
-    // Add new delta to array
-    instance.previousDeltas.push(newDelta);
+  const getFilteredDelta = (newDelta) => {
+    // Store the new value in the circular buffer
+    instance.deltas[instance.deltasIndex] = newDelta;
+    instance.deltasIndex = (instance.deltasIndex + 1) % instance.deltas.length;
 
-    // Keep only the most recent samples
-    if (instance.previousDeltas.length > instance.deltaSampleSize) {
-      instance.previousDeltas.shift();
+    // For small arrays, insertion sort is faster than full sort
+    // Copy values to avoid modifying original array
+    const values = [];
+    for (let i = 0; i < instance.deltas.length; i++) {
+      values[i] = instance.deltas[i];
     }
 
-    // Sort a copy of the array to find median
-    const sortedDeltas = [...instance.previousDeltas].sort((a, b) => a - b);
-    const medianIndex = Math.floor(sortedDeltas.length / 2);
+    // Simple insertion sort (faster than Array.sort for very small arrays)
+    for (let i = 1; i < values.length; i++) {
+      const temp = values[i];
+      let j = i - 1;
+      while (j >= 0 && values[j] > temp) {
+        values[j + 1] = values[j];
+        j--;
+      }
+      values[j + 1] = temp;
+    }
 
-    return sortedDeltas[medianIndex];
+    // Return the median value
+    return values[Math.floor(values.length / 2)];
   };
 
   /**
-   * Apply exponential moving average to smooth delta time
-   * @param {number} newDelta - The new delta time value
-   * @returns {number} - Smoothed delta time
+   * Add data to history buffer using circular buffer pattern
+   * @param {number} timestamp - Current time
+   * @param {number} delta - Delta time for this frame
    */
-  const applyEMA = (newDelta) => {
-    if (instance.smoothedDeltaTime === 0) {
-      return newDelta; // First frame, no smoothing
-    }
+  const addToHistory = (timestamp, delta) => {
+    // Only record every 3rd frame to reduce memory pressure
+    if (instance.frameCount % 3 !== 0) return;
 
-    return (
-      instance.smoothingFactor * newDelta +
-      (1 - instance.smoothingFactor) * instance.smoothedDeltaTime
-    );
+    // Use circular buffer pattern to avoid array operations
+    instance.timeHistory.timestamps[instance.historyIndex] = timestamp;
+    instance.timeHistory.deltas[instance.historyIndex] = delta;
+
+    // Update index and size tracking
+    instance.historyIndex =
+      (instance.historyIndex + 1) % instance.maxHistorySize;
+    if (instance.historySize < instance.maxHistorySize) {
+      instance.historySize++;
+    }
   };
 
-  // Track window focus state
-  if (typeof window !== "undefined") {
-    window.addEventListener("focus", () => {
-      instance.hasFocus = true;
-      instance.lastInteractionTime = performance.now();
-    });
+  /**
+   * Detect timing drift without creating temporary arrays
+   * @returns {boolean} - Whether drift was detected
+   */
+  const hasDrift = () => {
+    // Quick return if not enough samples
+    if (instance.historySize < 10) return false;
 
-    window.addEventListener("blur", () => {
-      instance.hasFocus = false;
-    });
-  }
+    // Calculate average delta without creating a new array
+    let sum = 0;
+    let max = 0;
+    let count = Math.min(10, instance.historySize);
 
-  // Public interface
+    // Use the most recent entries from the circular buffer
+    for (let i = 0; i < count; i++) {
+      // Calculate correct index in circular buffer
+      const idx =
+        instance.historySize >= instance.maxHistorySize
+          ? (instance.historyIndex - 1 - i + instance.maxHistorySize) %
+            instance.maxHistorySize
+          : instance.historySize - 1 - i;
+
+      const delta = instance.timeHistory.deltas[idx];
+      sum += delta;
+      max = Math.max(max, delta);
+    }
+
+    const avg = sum / count;
+
+    // Check if max is significantly higher than average
+    return max > avg * 3 || max > 100;
+  };
+
+  /**
+   * Reset timing data without allocating new objects
+   * @param {number} currentTime - Current timestamp
+   */
+  const resetTiming = (currentTime) => {
+    instance.lastFrameTime = currentTime;
+
+    // Reset the circular buffer
+    const value = instance.fixedDeltaTime;
+    for (let i = 0; i < instance.deltas.length; i++) {
+      instance.deltas[i] = value;
+    }
+
+    instance.smoothedDeltaTime = value;
+    instance.driftDetected = false;
+  };
+
+  // Initialize event handlers only when needed
+  const initializeEventHandlers = () => {
+    if (instance.eventHandlers || typeof window === "undefined") {
+      return;
+    }
+
+    instance.eventHandlers = {
+      focus: () => {
+        instance.hasFocus = true;
+        instance.lastInteractionTime = performance.now();
+        resetTiming(performance.now());
+      },
+      blur: () => {
+        instance.hasFocus = false;
+      },
+    };
+
+    // Add event listeners
+    window.addEventListener("focus", instance.eventHandlers.focus);
+    window.addEventListener("blur", instance.eventHandlers.blur);
+  };
+
+  // Clean up event handlers
+  const cleanupEventHandlers = () => {
+    if (!instance.eventHandlers) return;
+
+    if (typeof window !== "undefined") {
+      window.removeEventListener("focus", instance.eventHandlers.focus);
+      window.removeEventListener("blur", instance.eventHandlers.blur);
+    }
+
+    instance.eventHandlers = null;
+  };
+
+  // Initialize data structures
+  initializeHistoryStorage();
+  initializeEventHandlers();
+
+  // Public interface - keep methods minimal
   return {
     /**
      * Update time values based on current timestamp
@@ -103,24 +219,32 @@ export const TimeManager = (function () {
      * @param {string} clientId - ID of the client requesting the update
      * @returns {Object} Time information for this frame
      */
-    update(timestamp, clientId = "unknown") {
-      // Get current high-precision timestamp if not provided
-      if (timestamp === undefined) {
-        timestamp = performance.now();
+    update(timestamp = performance.now(), clientId = "unknown") {
+      // Fast path for disposed state
+      if (instance.isDisposed) {
+        return { error: "TimeManager disposed" };
       }
 
-      // Initialize on first call
-      if (instance.lastFrameTime === 0) {
-        instance.lastFrameTime = timestamp;
-        instance.lastFpsUpdate = timestamp;
-        instance.smoothedDeltaTime = instance.fixedDeltaTime;
-        instance.lastInteractionTime = timestamp;
+      // Store frame start time for FPS capping
+      const frameStartTime = performance.now();
+      instance.lastFrameStartTime = frameStartTime;
 
-        // Initialize the previousDeltas array with a reasonable starting value
-        for (let i = 0; i < instance.deltaSampleSize; i++) {
-          instance.previousDeltas.push(instance.fixedDeltaTime);
+      // First frame initialization
+      if (instance.lastFrameTime === 0) {
+        const now = timestamp;
+        instance.lastFrameTime = now;
+        instance.lastFpsUpdate = now;
+        instance.smoothedDeltaTime = instance.fixedDeltaTime;
+        instance.lastInteractionTime = now;
+        instance.lastHistoryCleanup = now;
+        instance.lastMemoryManagement = now;
+
+        // Pre-fill the deltas array
+        for (let i = 0; i < instance.deltas.length; i++) {
+          instance.deltas[i] = instance.fixedDeltaTime;
         }
 
+        // Return default values
         return {
           deltaTime: instance.fixedDeltaTime / 1000,
           fixedDeltaTime: instance.fixedDeltaTime / 1000,
@@ -128,101 +252,99 @@ export const TimeManager = (function () {
         };
       }
 
-      // Calculate raw delta time
+      // Calculate raw delta time - avoid creating properties on function results
       const rawDeltaTime = timestamp - instance.lastFrameTime;
       instance.lastFrameTime = timestamp;
 
-      // Get idle state from user-interaction.js
-      instance.isIdle =
-        typeof isIdle === "function" ? isIdle() : instance.isIdle;
+      // Fast path for unreasonable delta times
+      if (rawDeltaTime > 500) {
+        resetTiming(timestamp);
+        return {
+          deltaTime: instance.fixedDeltaTime / 1000,
+          fixedDeltaTime: instance.fixedDeltaTime / 1000,
+          rawDeltaTime: instance.fixedDeltaTime / 1000,
+          timeAccumulator: instance.timeAccumulator / 1000,
+          isIdle: false,
+          fps: instance.currentFps,
+          client: clientId,
+          hasFocus: instance.hasFocus,
+          recovered: true,
+        };
+      }
+
+      // Fast path for idle state
+      if (instance.isIdle && rawDeltaTime < instance.idleThrottle) {
+        return { skipFrame: true, client: clientId };
+      }
 
       // Detect focus changes
       const focusChanged = instance.hasFocus !== instance.hadFocus;
       instance.hadFocus = instance.hasFocus;
 
-      // When focus is regained, force a non-idle state and reset the timer
-      if (focusChanged && instance.hasFocus) {
-        this.registerActivity();
-        instance.isIdle = false;
-        instance.wasIdleLastFrame = true; // Force delta reset on next frame
-      }
+      // Process delta time
+      let finalDelta;
 
-      // If idle and throttling enabled, check if we should skip this frame
-      // Don't skip frames immediately after regaining focus
-      if (
-        instance.isIdle &&
-        !focusChanged &&
-        rawDeltaTime < instance.idleThrottle
-      ) {
-        return { skipFrame: true, client: clientId };
-      }
-
-      // CRITICAL FIX: Direct timing mode skips all smoothing
+      // Direct timing mode - bypass smoothing
       if (instance.directTimingMode) {
-        // Just clamp the raw value to prevent extreme values
-        instance.deltaTime =
-          Math.min(
-            Math.max(rawDeltaTime, 1.0), // 1ms minimum
-            instance.maxDeltaTime
-          ) * instance.timeScale;
+        finalDelta =
+          Math.min(Math.max(rawDeltaTime, 1.0), instance.maxDeltaTime) *
+          instance.timeScale;
       }
-      // Handle transitions from idle state - prevent huge delta spikes
+      // Handle special cases that require timing reset
       else if (
-        (instance.wasIdleLastFrame && !instance.isIdle) ||
-        (focusChanged && instance.hasFocus) ||
-        rawDeltaTime > instance.maxDeltaTime * 2
+        instance.wasIdleLastFrame ||
+        focusChanged ||
+        rawDeltaTime > instance.maxDeltaTime * 2 ||
+        instance.driftDetected
       ) {
-        // We just came back from idle or window regained focus - use a reasonable delta instead of the actual time
+        resetTiming(timestamp);
         instance.wasIdleLastFrame = false;
-        instance.deltaTime = instance.fixedDeltaTime;
-
-        // Reset the smoothing history to prevent old values from causing lag
-        instance.previousDeltas = Array(instance.deltaSampleSize).fill(
-          instance.fixedDeltaTime
-        );
-        instance.smoothedDeltaTime = instance.fixedDeltaTime;
-      } else {
-        // Normal frame processing
-        // Clamp delta time to prevent spiral of death at low framerates
-        // Also enforce a minimum deltaTime to ensure movement never stalls
-        const MINIMUM_DELTA_TIME = 1.0; // 1ms minimum (before timeScale)
-
-        // Store idle state for next frame
+        finalDelta = instance.fixedDeltaTime;
+      }
+      // Normal smoothing path
+      else {
         instance.wasIdleLastFrame = instance.isIdle;
 
-        // Apply clamping to raw delta time
+        // Apply constraint to raw delta
         const clampedDelta = Math.min(
-          Math.max(rawDeltaTime, MINIMUM_DELTA_TIME),
+          Math.max(rawDeltaTime, 1.0),
           instance.maxDeltaTime
         );
 
-        // Apply median filter to remove outliers
-        const medianFilteredDelta = applyMedianFilter(clampedDelta);
+        // Apply filtering - efficient implementation
+        const filteredDelta = getFilteredDelta(clampedDelta);
 
-        // Apply exponential moving average for final smoothing
-        instance.smoothedDeltaTime = applyEMA(medianFilteredDelta);
+        // Apply exponential smoothing - avoid creating extra variables
+        instance.smoothedDeltaTime =
+          instance.smoothingFactor * filteredDelta +
+          (1 - instance.smoothingFactor) * instance.smoothedDeltaTime;
 
         // Apply time scale
-        instance.deltaTime = instance.smoothedDeltaTime * instance.timeScale;
+        finalDelta = instance.smoothedDeltaTime * instance.timeScale;
       }
 
-      // Update time accumulator for fixed timestep simulation
-      instance.timeAccumulator += instance.deltaTime;
+      // Update final delta time and accumulator
+      instance.deltaTime = finalDelta;
+      instance.timeAccumulator += finalDelta;
 
-      // Track history for debugging
-      instance.timeHistory.push({
-        timestamp,
-        raw: rawDeltaTime,
-        smoothed: instance.smoothedDeltaTime,
-        final: instance.deltaTime,
-      });
+      // Create return object - reuse same structure for GC efficiency
+      const frameData = {
+        deltaTime: finalDelta / 1000,
+        fixedDeltaTime: instance.fixedDeltaTime / 1000,
+        rawDeltaTime: rawDeltaTime / 1000,
+        timeAccumulator: instance.timeAccumulator / 1000,
+        isIdle: instance.isIdle,
+        fps: instance.currentFps,
+        client: clientId,
+        hasFocus: instance.hasFocus,
+        // FPS capping info
+        frameCappingActive: instance.frameCapping,
+      };
 
-      // Keep history at reasonable size
-      if (instance.timeHistory.length > instance.maxHistorySize) {
-        instance.timeHistory.shift();
-      }
+      // Update history storage
+      addToHistory(timestamp, finalDelta);
 
-      // Update FPS counter
+      // Update FPS counter - do less frequently
       instance.frameCount++;
       if (timestamp - instance.lastFpsUpdate > instance.fpsUpdateInterval) {
         instance.currentFps = Math.round(
@@ -232,18 +354,24 @@ export const TimeManager = (function () {
         instance.frameCount = 0;
       }
 
-      const safetyDeltaTime = Math.max(instance.deltaTime / 1000, 0.00001); // Never return less than 0.00001s
+      // Periodic drift detection - only check occasionally
+      if (timestamp - instance.lastMemoryManagement > 30000) {
+        if (hasDrift()) {
+          resetTiming(timestamp);
+        }
+        instance.lastMemoryManagement = timestamp;
+      }
 
-      return {
-        deltaTime: safetyDeltaTime, // Ensure non-zero value
-        fixedDeltaTime: instance.fixedDeltaTime / 1000,
-        rawDeltaTime: rawDeltaTime / 1000,
-        timeAccumulator: instance.timeAccumulator / 1000,
-        isIdle: instance.isIdle,
-        fps: instance.currentFps,
-        client: clientId,
-        hasFocus: instance.hasFocus,
-      };
+      // Calculate frame timing delay for FPS capping
+      if (instance.frameCapping) {
+        const processingTime = performance.now() - frameStartTime;
+        frameData.frameCappingDelay = Math.max(
+          0,
+          instance.frameTimeLimit - processingTime
+        );
+      }
+
+      return frameData;
     },
 
     /**
@@ -251,6 +379,8 @@ export const TimeManager = (function () {
      * @returns {boolean} - Whether there's enough accumulated time for a physics step
      */
     consumeFixedTimestep() {
+      if (instance.isDisposed) return false;
+
       if (instance.timeAccumulator >= instance.fixedDeltaTime) {
         instance.timeAccumulator -= instance.fixedDeltaTime;
         return true;
@@ -260,17 +390,14 @@ export const TimeManager = (function () {
 
     /**
      * Register user activity
-     * Updates last interaction time and forwards to user-interaction.js if available
      */
     registerActivity() {
-      // Update internal interaction time
-      instance.lastInteractionTime = performance.now();
+      if (instance.isDisposed) return this;
 
-      // If handleUserInteraction is available, use it
-      if (typeof handleUserInteraction === "function") {
-        handleUserInteraction();
-      }
-      return this; // For chaining
+      instance.lastInteractionTime = performance.now();
+      instance.isIdle = false;
+
+      return this;
     },
 
     /**
@@ -278,75 +405,66 @@ export const TimeManager = (function () {
      * @param {Object} options - Configuration options
      */
     configure(options = {}) {
-      // Apply options if provided
-      if (options.fixedDeltaTime !== undefined)
+      if (instance.isDisposed) return this;
+
+      // Only update properties that exist in options
+      // Use direct property access rather than conditionals for better performance
+      if ("fixedDeltaTime" in options)
         instance.fixedDeltaTime = options.fixedDeltaTime;
-      if (options.maxDeltaTime !== undefined)
+      if ("maxDeltaTime" in options)
         instance.maxDeltaTime = options.maxDeltaTime;
-      if (options.timeScale !== undefined)
-        instance.timeScale = options.timeScale;
-      if (options.idleThrottle !== undefined)
+      if ("timeScale" in options) instance.timeScale = options.timeScale;
+      if ("idleThrottle" in options)
         instance.idleThrottle = options.idleThrottle;
-      if (options.smoothingFactor !== undefined)
+      if ("smoothingFactor" in options)
         instance.smoothingFactor = options.smoothingFactor;
-      if (options.deltaSampleSize !== undefined) {
-        instance.deltaSampleSize = options.deltaSampleSize;
-        // Resize the previousDeltas array if needed
-        instance.previousDeltas = instance.previousDeltas.slice(
-          -instance.deltaSampleSize
-        );
-        // Fill with fixedDeltaTime if array is smaller than sample size
-        while (instance.previousDeltas.length < instance.deltaSampleSize) {
-          instance.previousDeltas.unshift(instance.fixedDeltaTime);
-        }
-      }
-      // NEW OPTION: directTimingMode - bypass smoothing
-      if (options.directTimingMode !== undefined)
+      if ("directTimingMode" in options)
         instance.directTimingMode = options.directTimingMode;
 
-      return this; // For chaining
+      // Handle special properties that require data structure updates
+      if ("deltaSampleSize" in options && options.deltaSampleSize > 0) {
+        const newSize = Math.min(options.deltaSampleSize, 5); // Limit maximum size
+        const newDeltas = new Float32Array(newSize);
+
+        // Copy existing values or fill with defaults
+        const defaultValue = instance.fixedDeltaTime;
+        for (let i = 0; i < newSize; i++) {
+          newDeltas[i] =
+            i < instance.deltas.length ? instance.deltas[i] : defaultValue;
+        }
+
+        instance.deltas = newDeltas;
+        instance.deltasIndex = 0;
+      }
+
+      // Update FPS capping settings
+      if ("targetFPS" in options && options.targetFPS > 0) {
+        instance.targetFPS = options.targetFPS;
+        instance.frameTimeLimit = 1000 / options.targetFPS;
+      }
+
+      if ("frameCapping" in options)
+        instance.frameCapping = !!options.frameCapping;
+
+      return this;
     },
 
     /**
-     * Get current time configuration
-     * @returns {Object} Current configuration
+     * Get current time configuration - create a minimal object
      */
     getConfig() {
+      if (instance.isDisposed) return { error: "TimeManager disposed" };
+
       return {
         fixedDeltaTime: instance.fixedDeltaTime,
         maxDeltaTime: instance.maxDeltaTime,
         timeScale: instance.timeScale,
         idleThrottle: instance.idleThrottle,
         smoothingFactor: instance.smoothingFactor,
-        deltaSampleSize: instance.deltaSampleSize,
         directTimingMode: instance.directTimingMode,
+        targetFPS: instance.targetFPS,
+        frameCapping: instance.frameCapping,
       };
-    },
-
-    /**
-     * Get current performance metrics
-     * @returns {Object} Performance data
-     */
-    getPerformanceMetrics() {
-      return {
-        fps: instance.currentFps,
-        isIdle: instance.isIdle,
-        timeScale: instance.timeScale,
-        hasFocus: instance.hasFocus,
-        rawDeltaHistory: instance.timeHistory.map((entry) => entry.raw),
-        smoothedDeltaHistory: instance.timeHistory.map(
-          (entry) => entry.smoothed
-        ),
-      };
-    },
-
-    /**
-     * Reset the time accumulator
-     * Useful when changing scenes or when game is paused
-     */
-    resetAccumulator() {
-      instance.timeAccumulator = 0;
-      return this; // For chaining
     },
 
     /**
@@ -355,6 +473,11 @@ export const TimeManager = (function () {
      * @param {Function} onIdleStateChangeFunction - Reference to register for idle state changes
      */
     setupUserInteractionIntegration(isIdleFunction, onIdleStateChangeFunction) {
+      if (instance.isDisposed) {
+        console.warn("TimeManager: Attempted to use after disposal");
+        return this;
+      }
+
       // Store reference to isIdle function if provided
       if (typeof isIdleFunction === "function") {
         this.isIdleFunction = isIdleFunction;
@@ -371,56 +494,142 @@ export const TimeManager = (function () {
     },
 
     /**
-     * Enable or disable direct timing mode
-     * When enabled, bypasses all smoothing to eliminate lag
-     * @param {boolean} enable - Whether to enable direct timing
+     * Get minimal performance metrics
      */
-    setDirectTimingMode(enable) {
-      instance.directTimingMode = enable;
+    getPerformanceMetrics() {
+      if (instance.isDisposed) return { error: "TimeManager disposed" };
 
-      // If enabling direct mode, reset smoothing history
-      if (enable) {
-        const currentTime = performance.now();
-        instance.lastFrameTime = currentTime;
-        instance.previousDeltas = Array(instance.deltaSampleSize).fill(
-          instance.fixedDeltaTime
-        );
-        instance.smoothedDeltaTime = instance.fixedDeltaTime;
-      }
-
-      return this; // For chaining
+      return {
+        fps: instance.currentFps,
+        isIdle: instance.isIdle,
+        hasFocus: instance.hasFocus,
+        driftDetected: instance.driftDetected,
+        targetFPS: instance.targetFPS,
+        frameCapping: instance.frameCapping,
+      };
     },
 
     /**
-     * Force a frame to be rendered regardless of idle state
-     * Useful when coming back from idle or blur
+     * Reset the time accumulator
      */
-    forceFrame() {
-      instance.wasIdleLastFrame = true; // This will trigger a fixed deltaTime on next frame
-      instance.isIdle = false; // Temporarily disable idle state
-      return this;
-    },
+    resetAccumulator() {
+      if (instance.isDisposed) return this;
 
-    /**
-     * Check if the window currently has focus
-     */
-    hasFocus() {
-      return instance.hasFocus;
-    },
-
-    /**
-     * Reset the time manager to eliminate any accumulated lag
-     * Call this when experiencing persistent lag issues
-     */
-    resetTiming() {
-      const currentTime = performance.now();
-      instance.lastFrameTime = currentTime;
-      instance.previousDeltas = Array(instance.deltaSampleSize).fill(
-        instance.fixedDeltaTime
-      );
-      instance.smoothedDeltaTime = instance.fixedDeltaTime;
       instance.timeAccumulator = 0;
       return this;
+    },
+
+    /**
+     * Set direct timing mode (bypass smoothing)
+     */
+    setDirectTimingMode(enable) {
+      if (instance.isDisposed) return this;
+
+      instance.directTimingMode = !!enable;
+      if (enable) resetTiming(performance.now());
+
+      return this;
+    },
+
+    /**
+     * Force a frame to be rendered
+     */
+    forceFrame() {
+      if (instance.isDisposed) return this;
+
+      instance.wasIdleLastFrame = true;
+      instance.isIdle = false;
+
+      return this;
+    },
+
+    /**
+     * Check if window has focus
+     */
+    hasFocus() {
+      return instance.isDisposed ? false : instance.hasFocus;
+    },
+
+    /**
+     * Reset timing to eliminate lag
+     */
+    resetTiming() {
+      if (instance.isDisposed) return this;
+
+      resetTiming(performance.now());
+      instance.timeAccumulator = 0;
+      instance.driftDetected = false;
+
+      return this;
+    },
+
+    /**
+     * Set target FPS for frame rate capping
+     */
+    setTargetFPS(fps) {
+      if (instance.isDisposed) return this;
+
+      if (fps <= 0) {
+        instance.frameCapping = false;
+        return this;
+      }
+
+      instance.targetFPS = fps;
+      instance.frameTimeLimit = 1000 / fps;
+      instance.frameCapping = true;
+
+      return this;
+    },
+
+    /**
+     * Apply frame rate capping
+     */
+    applyFrameCapping() {
+      if (instance.isDisposed || !instance.frameCapping) {
+        return Promise.resolve();
+      }
+
+      const frameTime = performance.now() - instance.lastFrameStartTime;
+      const delayNeeded = Math.max(0, instance.frameTimeLimit - frameTime);
+
+      if (delayNeeded <= 0) {
+        return Promise.resolve();
+      }
+
+      return new Promise((resolve) => {
+        setTimeout(resolve, delayNeeded);
+      });
+    },
+
+    /**
+     * Dispose all resources
+     */
+    dispose() {
+      if (instance.isDisposed) return this;
+
+      // Clean up event handlers
+      cleanupEventHandlers();
+
+      // Clear references
+      instance.timeHistory = null;
+      instance.deltas = null;
+      instance.isDisposed = true;
+
+      return this;
+    },
+
+    /**
+     * Check if the TimeManager has been disposed
+     */
+    isDisposed() {
+      return instance.isDisposed;
+    },
+
+    /**
+     * Check if drift has been detected
+     */
+    isDriftDetected() {
+      return instance.driftDetected;
     },
   };
 })();

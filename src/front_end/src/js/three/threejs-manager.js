@@ -1,9 +1,6 @@
 /**
- * @fileoverview Ultra-optimized ThreeJS manager with zero overhead.
- * Extreme performance optimizations for high-efficiency 3D rendering.
- * Fixed version with consistent time handling for smooth animations.
+ * Ultra-compact ThreeJS manager with zero overhead - Optimized Version
  */
-
 import {
   AmbientLight,
   DirectionalLight,
@@ -15,40 +12,38 @@ import { isIdle } from "../user-interaction.js";
 import { getFallbackCube } from "./model-manager.js";
 import { TimeManager } from "./time-manager.js";
 
-// OPTIMIZED CONSTANTS - Critical path tuning
+// CORE CONSTANTS
 const MAX_CAMERAS = 32;
-// REMOVED THROTTLE VALUES FOR CONSISTENT TIMING
-const VISIBILITY_THRESHOLD = 0.01; // minimal visibility to trigger render
-const BATCH_SIZE = 4; // Process cameras in batches for better CPU cache usage
-const TARGET_FRAMERATE = 60; // Target framerate for consistent timing
-const MIN_DELTA_TIME = 1 / 120; // Minimum time step to prevent tiny physics steps
-const MAX_DELTA_TIME = 1 / 30; // Maximum time step to prevent large jumps
+const VISIBILITY_THRESHOLD = 0.01;
+const BATCH_SIZE = 8; // Increased batch size for better throughput
+const MIN_DELTA_TIME = 1 / 120;
+const MAX_DELTA_TIME = 1 / 30;
+const TEMP_VEC2 = new Vector2();
+const GC_INTERVAL = 10000; // 10 seconds
+const MAINTENANCE_INTERVAL = 30000; // 30 seconds
+const IDLE_FRAME_SKIP = 4; // ~15fps when idle
 
-// PRE-ALLOCATED OBJECTS - Avoid allocations in render loop
-const TEMP_VEC2 = new Vector2(); // Reused for calculations
-
-// Private singleton with minimal memory footprint
-const manager = {
-  renderer: null,
-  scene: null,
+// PRE-ALLOCATED SINGLETON - Using Uint32Array where applicable for better alignment
+const mgr = {
+  r: null, // renderer
+  s: null, // scene
   rafId: 0,
   rendering: false,
-  lastTimestamp: 0,
+  lastTs: 0,
   dimCache: new Map(),
-  // TypedArrays for maximum memory efficiency and cache locality
-  active: new Uint8Array(MAX_CAMERAS),
-  visible: new Uint8Array(MAX_CAMERAS),
-  dirty: new Uint8Array(MAX_CAMERAS),
-  lastRender: new Float32Array(MAX_CAMERAS),
-  count: 0,
-  // Objects stored in flat arrays for better iteration performance
-  cameras: Array(MAX_CAMERAS).fill(null),
-  controls: Array(MAX_CAMERAS).fill(null),
-  contexts: Array(MAX_CAMERAS).fill(null),
-  metadata: Array(MAX_CAMERAS).fill(null), // Store metadata for each camera
-  // Optimized observers
-  observers: [],
-  // Performance metrics
+  // TypedArrays for memory efficiency
+  a: new Uint8Array(MAX_CAMERAS), // active
+  v: new Uint8Array(MAX_CAMERAS), // visible
+  d: new Uint8Array(MAX_CAMERAS), // dirty
+  lr: new Float32Array(MAX_CAMERAS), // lastRender
+  n: 0, // count
+  // Flat arrays for better iteration
+  c: Array(MAX_CAMERAS).fill(null), // cameras
+  t: Array(MAX_CAMERAS).fill(null), // controls
+  x: Array(MAX_CAMERAS).fill(null), // contexts
+  m: Array(MAX_CAMERAS).fill(null), // metadata
+  // Observers and metrics
+  o: [], // observers
   metrics: {
     frames: 0,
     lastFpsTime: 0,
@@ -57,139 +52,126 @@ const manager = {
     rendered: 0,
     total: 0,
   },
-  // Flags for batched operations
-  flags: {
-    needsFullRender: false,
-    hasActiveDrag: false,
+  f: {
+    // flags - reduced to bitflags for memory efficiency
+    flags: 0,
+    // Flag constants
+    NEEDS_FULL_RENDER: 1,
+    HAS_ACTIVE_DRAG: 2,
   },
+  // Timestamps
+  _lastGC: 0,
+  _lastCleanup: 0,
 };
 
 /**
- * Initialize the ThreeJS manager with extreme performance optimizations
- * @param {Object} config - Optional configuration overrides
- * @returns {Object} - Minimal stats API
+ * Initialize the ThreeJS manager
  */
 export function initThreeJSManager() {
-  disposeThreeJSManager(); // Ensure clean state
-  manager.renderer = new WebGLRenderer({
+  disposeThreeJSManager();
+
+  // Create renderer with optimized settings
+  mgr.r = new WebGLRenderer({
     alpha: true,
-    antialias: false, // Disable for performance
+    antialias: false, // Disable antialiasing for performance
     preserveDrawingBuffer: false,
     powerPreference: "high-performance",
-    precision: "lowp", // Use low precision for max performance
+    precision: "lowp", // Use low precision for better performance
     depth: true,
-    stencil: false, // Disable unused buffers
-    logarithmicDepthBuffer: false, // Disable for performance
-    premultipliedAlpha: false, // optional
+    stencil: false,
+    logarithmicDepthBuffer: false,
+    premultipliedAlpha: false,
+    failIfMajorPerformanceCaveat: true, // Fail if performance would be poor
   });
 
-  manager.renderer.setClearColor(0x000000, 0);
-  manager.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5)); // Cap pixel ratio
-  manager.renderer.shadowMap.enabled = false;
-  manager.renderer.shadowMap.autoUpdate = false;
-  manager.renderer.physicallyCorrectLights = false;
-  manager.renderer.toneMappingExposure = 1.0;
-  manager.renderer.outputEncoding = 3000; // sRGBEncoding
-  manager.renderer.info.autoReset = false; // Manual control of stats reset
-  manager.renderer.autoClear = false; // Manual clear control
+  const r = mgr.r;
+  r.setClearColor(0x000000, 0);
+  r.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+  r.shadowMap.enabled = false;
+  r.shadowMap.autoUpdate = false;
+  r.physicallyCorrectLights = false;
+  r.toneMappingExposure = 1.0;
+  r.outputEncoding = 3000;
+  r.info.autoReset = false;
+  r.autoClear = false;
 
-  // Optimize scene
-  manager.scene = new Scene();
-  manager.scene.matrixAutoUpdate = false; // Objects must update matrices manually
-  manager.scene.autoUpdate = false; // Prevent auto traversal for matrix updates
-  manager.scene.background = null;
+  // Explicitly disable WebGL features we don't need
+  const gl = r.getContext();
+  if (gl) {
+    gl.disable(gl.DITHER);
+    // Disable multisample antialiasing if available
+    gl.disable(gl.SAMPLE_ALPHA_TO_COVERAGE);
+    gl.disable(gl.SAMPLE_COVERAGE);
+  }
 
-  manager.scene.add(getFallbackCube());
-  console.log("Scene bg Color: ", manager.scene.background);
+  // Create scene
+  mgr.s = new Scene();
+  mgr.s.matrixAutoUpdate = false;
+  mgr.s.autoUpdate = false;
+  mgr.s.background = null;
+  mgr.s.add(getFallbackCube());
 
-  setupOptimizedLights();
+  // Add lights
+  const ambient = new AmbientLight(0xffffff, 0.5);
+  ambient.matrixAutoUpdate = false;
+  const direct = new DirectionalLight(0xffffff, 0.8);
+  direct.position.set(5, 5, 2);
+  direct.castShadow = false;
+  direct.matrixAutoUpdate = false;
+  direct.updateMatrix();
+  mgr.s.add(ambient);
+  mgr.s.add(direct);
 
-  // Zero out camera state
-  manager.active.fill(0);
-  manager.visible.fill(0);
-  manager.dirty.fill(0);
-  manager.lastRender.fill(0);
-  manager.count = 0;
+  // Reset state
+  mgr.a.fill(0);
+  mgr.v.fill(0);
+  mgr.d.fill(0);
+  mgr.lr.fill(0);
+  mgr.n = 0;
+  mgr.f.flags = 0;
+  mgr._lastGC = 0;
+  mgr._lastCleanup = 0;
 
-  // Event handlers with minimal overhead
-  setupEventHandlers();
+  // Use passive event listeners for better performance
+  const visibilityHandler = () => {
+    document.visibilityState === "hidden"
+      ? pauseRendering()
+      : resumeRendering();
+  };
 
-  // Start rendering immediately - CRITICAL FIX: Start rendering engine
+  document.addEventListener("visibilitychange", visibilityHandler, {
+    passive: true,
+  });
+
+  // Debounced resize handler
+  let resizeTimeout;
+  const resizeHandler = () => {
+    if (resizeTimeout) return;
+    resizeTimeout = setTimeout(() => {
+      mgr.d.fill(1, 0, mgr.n);
+      mgr.f.flags |= mgr.f.NEEDS_FULL_RENDER;
+      resizeTimeout = null;
+    }, 100); // 100ms debounce
+  };
+
+  window.addEventListener("resize", resizeHandler, { passive: true });
+  window.addEventListener("beforeunload", disposeThreeJSManager);
+
+  // Start rendering
   startRendering();
 
   return {
     getStats: () => ({
-      fps: manager.metrics.fps,
-      rendered: manager.metrics.rendered,
-      skipped: manager.metrics.skipped,
-      total: manager.metrics.total,
+      fps: mgr.metrics.fps,
+      rendered: mgr.metrics.rendered,
+      skipped: mgr.metrics.skipped,
+      total: mgr.metrics.total,
     }),
   };
 }
 
 /**
- * Add ultra-optimized lighting
- */
-function setupOptimizedLights() {
-  const scene = manager.scene;
-
-  // Single ambient light
-  const ambient = new AmbientLight(0xffffff, 0.5);
-  ambient.matrixAutoUpdate = false;
-
-  // Main directional light
-  const directional = new DirectionalLight(0xffffff, 0.8);
-  directional.position.set(5, 5, 2);
-  directional.castShadow = false;
-  directional.matrixAutoUpdate = false;
-  directional.updateMatrix(); // Update once
-
-  scene.add(ambient);
-  scene.add(directional);
-}
-
-/**
- * Set up minimal event handlers with maximal efficiency
- */
-function setupEventHandlers() {
-  // Pause rendering when not visible
-  const visChange = () => {
-    if (document.visibilityState === "hidden") {
-      pauseRendering();
-    } else {
-      resumeRendering();
-    }
-  };
-  document.addEventListener("visibilitychange", visChange, { passive: true });
-
-  // Don't pause rendering on idle to ensure cameras remain visible when scrolling back
-  // This is the critical fix - we don't want isIdle to pause rendering completely
-
-  // Efficient resize handling
-  let resizing = false;
-  const handleResize = () => {
-    if (resizing) return;
-    resizing = true;
-    requestAnimationFrame(() => {
-      manager.dirty.fill(1, 0, manager.count);
-      manager.flags.needsFullRender = true;
-      resizing = false;
-    });
-  };
-  window.addEventListener("resize", handleResize, { passive: true });
-
-  // Cleanup
-  window.addEventListener("beforeunload", disposeThreeJSManager);
-}
-
-/**
- * Register camera with minimal overhead
- * @param {Camera} camera - Three.js camera
- * @param {Object} controls - Camera controls (optional)
- * @param {CanvasRenderingContext2D} context - Canvas context
- * @param {Object} metadata - Camera metadata
- * @param {boolean} active - Whether initially active
- * @returns {number} - Camera index
+ * Register camera with optimized intersection observer
  */
 export function registerCamera(
   camera,
@@ -198,210 +180,138 @@ export function registerCamera(
   metadata = {},
   active = true
 ) {
-  if (manager.count >= MAX_CAMERAS) {
+  if (mgr.n >= MAX_CAMERAS)
     throw new Error(`Max cameras (${MAX_CAMERAS}) reached`);
+
+  const idx = mgr.n++;
+
+  // Store refs
+  mgr.c[idx] = camera;
+  mgr.t[idx] = controls;
+  mgr.x[idx] = context;
+  mgr.m[idx] = metadata;
+
+  // Set flags
+  mgr.a[idx] = active ? 1 : 0;
+  mgr.v[idx] = 1;
+  mgr.d[idx] = 1;
+
+  // Optimize components
+  if (camera?.isPerspectiveCamera) {
+    camera.matrixAutoUpdate = true;
+    // Disable frustum culling if not needed
+    camera.frustumCulled = false;
   }
 
-  const idx = manager.count++;
+  if (controls) {
+    if ("enableDamping" in controls) {
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.1;
+    }
 
-  // Store references
-  manager.cameras[idx] = camera;
-  manager.controls[idx] = controls;
-  manager.contexts[idx] = context;
-  manager.metadata[idx] = metadata; // Store metadata
+    // Apply settings
+    const settings = {
+      rotateSpeed: 0.65,
+      zoomSpeed: 0.65,
+      enableKeys: false,
+      keyPanSpeed: 0,
+    };
 
-  // Set state flags (typed arrays for performance)
-  manager.active[idx] = active ? 1 : 0;
-  manager.visible[idx] = 1; // Assume visible initially
-  manager.dirty[idx] = 1; // Needs initial render
+    for (const k in settings) {
+      if (k in controls) controls[k] = settings[k];
+    }
+  }
 
-  // Apply optimizations
-  optimizeCamera(camera);
-  optimizeControls(controls);
-  setupCanvas(context, idx, active);
+  // Setup canvas
+  if (context?.canvas) {
+    context.canvas.style.display = active ? "block" : "none";
 
-  console.log(
-    `Camera ${idx} registered with active=${active ? 1 : 0}, metadata:`,
-    metadata
-  );
+    // Use optimized IntersectionObserver with weak references
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (!entry) return;
+
+        const wasVisible = mgr.v[idx] === 1;
+        const isVisible = entry.isIntersecting;
+
+        mgr.v[idx] = isVisible ? 1 : 0;
+
+        if (!wasVisible && isVisible) {
+          mgr.d[idx] = 1;
+          if (!mgr.rendering) startRendering();
+        }
+      },
+      {
+        threshold: VISIBILITY_THRESHOLD,
+        rootMargin: "100px",
+      }
+    );
+
+    observer.observe(context.canvas);
+    mgr.o.push({ idx, observer });
+  }
 
   return idx;
 }
 
 /**
- * Apply camera-specific optimizations
- * @param {Camera} camera - Camera to optimize
- */
-function optimizeCamera(camera) {
-  if (camera?.isPerspectiveCamera) {
-    camera.matrixAutoUpdate = true; // Usually required for controls
-  }
-}
-
-/**
- * Apply control-specific optimizations
- * @param {Object} controls - Controls to optimize
- */
-function optimizeControls(controls) {
-  if (!controls) return;
-
-  // Apply damping settings
-  if ("enableDamping" in controls) {
-    controls.enableDamping = true;
-    controls.dampingFactor = 0.1; // Optimized value
-  }
-
-  // Apply performance-oriented settings
-  applyControlSettings(controls);
-}
-
-/**
- * Apply predefined settings to controls
- * @param {Object} controls - Controls object
- */
-function applyControlSettings(controls) {
-  const settings = {
-    rotateSpeed: 0.65,
-    zoomSpeed: 0.65,
-    enableKeys: false,
-    keyPanSpeed: 0,
-  };
-
-  // Apply each setting if property exists
-  Object.entries(settings).forEach(([key, value]) => {
-    if (key in controls) {
-      controls[key] = value;
-    }
-  });
-}
-
-/**
- * Set up canvas and visibility observer
- * @param {CanvasRenderingContext2D} context - Canvas context
- * @param {number} idx - Camera index
- * @param {boolean} active - Whether active
- */
-function setupCanvas(context, idx, active) {
-  if (!context?.canvas) return;
-
-  context.canvas.style.display = active ? "block" : "none";
-  setupObserver(idx, context.canvas);
-}
-
-/**
- * Ultra-efficient IntersectionObserver setup
- * @param {number} idx - Camera index
- * @param {HTMLCanvasElement} canvas - Canvas to observe
- */
-function setupObserver(idx, canvas) {
-  // Reuse a single observer callback function
-  const observer = new IntersectionObserver(
-    (entries) => {
-      // Always just one entry for this observer
-      const entry = entries[0];
-      if (!entry) return;
-
-      // Direct typed array access for maximum performance
-      const wasVisible = manager.visible[idx] === 1;
-      const isVisible = entry.isIntersecting;
-
-      // Set visibility bit
-      manager.visible[idx] = isVisible ? 1 : 0;
-
-      // Mark dirty if becoming visible
-      if (!wasVisible && isVisible) {
-        manager.dirty[idx] = 1;
-        // Ensure rendering is active when element becomes visible
-        if (!manager.rendering) {
-          startRendering();
-        }
-      }
-    },
-    {
-      threshold: VISIBILITY_THRESHOLD,
-      rootMargin: "100px", // Preload margin
-    }
-  );
-
-  observer.observe(canvas);
-  manager.observers.push({ idx, observer });
-}
-
-/**
- * Set camera visibility with minimal overhead
- * @param {number} idx - Camera index
- * @param {boolean} visible - Whether visible
+ * Set camera visibility with optimized updates
  */
 export function setCameraVisible(idx, visible) {
-  if (idx < 0 || idx >= manager.count) {
-    console.error(`Invalid camera index: ${idx}`);
-    return;
-  }
+  if (idx < 0 || idx >= mgr.n) return;
 
-  // Get previous state and set new state with typed array access
-  const prev = manager.active[idx] === 1;
-  manager.active[idx] = visible ? 1 : 0;
+  const prev = mgr.a[idx] === 1;
+  const newState = visible ? 1 : 0;
 
-  // Only mark dirty if changed
-  if (prev !== visible) {
-    manager.dirty[idx] = 1;
-    console.log(`Camera ${idx} visibility changed to ${visible}, marked dirty`);
-  }
+  if (prev === !!newState) return; // No change needed
 
-  // Direct canvas style manipulation
-  const ctx = manager.contexts[idx];
-  if (ctx?.canvas) {
-    ctx.canvas.style.display = visible ? "block" : "none";
-    console.log(
-      `Camera ${idx} canvas display set to ${visible ? "block" : "none"}`
-    );
-  } else {
-    console.warn(`Camera ${idx} has no valid canvas context`);
-  }
+  mgr.a[idx] = newState;
+  mgr.d[idx] = 1;
 
-  // Ensure rendering is active when setting a camera to visible
-  if (visible && !manager.rendering) {
-    console.log("Restarting rendering due to camera becoming visible");
-    startRendering();
-  }
+  const ctx = mgr.x[idx];
+  if (ctx?.canvas) ctx.canvas.style.display = visible ? "block" : "none";
+
+  if (visible && !mgr.rendering) startRendering();
 }
 
 /**
  * Get camera's active state
- * @param {number} idx - Camera index
- * @returns {boolean} - Whether camera is active
  */
 export function isCameraActive(idx) {
-  if (idx < 0 || idx >= manager.count) return false;
-  return manager.active[idx] === 1;
+  return idx >= 0 && idx < mgr.n && mgr.a[idx] === 1;
 }
 
 /**
- * Update controls with consistent deltaTime
- * @param {number} deltaTime - Time since last frame in seconds
- * @returns {boolean} - Whether any updates occurred
+ * Update controls with consistent deltaTime - optimized control updates
  */
-function updateControls(deltaTime) {
-  // Always check for dragging controls first (highest priority)
-  manager.flags.hasActiveDrag = false;
+function updateControls(dt) {
+  mgr.f.flags &= ~mgr.f.HAS_ACTIVE_DRAG; // Clear flag
   let updated = false;
 
-  // Process all cameras regardless of user activity state to ensure consistent animations
-  for (let i = 0; i < manager.count; i++) {
-    if (manager.active[i] !== 1 || manager.visible[i] !== 1) continue;
-
-    const control = manager.controls[i];
-    if (!control) continue;
-
-    // Check for active drag
-    if (control._dragging) {
-      manager.flags.hasActiveDrag = true;
+  // Fast path: if no controls need updating, skip loop
+  let hasActiveControls = false;
+  for (let i = 0; i < mgr.n; i++) {
+    if (mgr.a[i] === 1 && mgr.v[i] === 1 && mgr.t[i]) {
+      hasActiveControls = true;
+      break;
     }
+  }
 
-    // Always update controls with consistent timing
-    if (control.update) {
-      control.update(deltaTime);
-      manager.dirty[i] = 1;
+  if (!hasActiveControls) return false;
+
+  // Main loop with early termination
+  for (let i = 0; i < mgr.n; i++) {
+    if (mgr.a[i] !== 1 || mgr.v[i] !== 1) continue;
+
+    const ctrl = mgr.t[i];
+    if (!ctrl) continue;
+
+    if (ctrl._dragging) mgr.f.flags |= mgr.f.HAS_ACTIVE_DRAG;
+
+    if (ctrl.update) {
+      ctrl.update(dt);
+      mgr.d[i] = 1;
       updated = true;
     }
   }
@@ -410,148 +320,117 @@ function updateControls(deltaTime) {
 }
 
 /**
- * Hyper-optimized camera rendering
- * @param {number} idx - Camera index
- * @param {number} deltaTime - Current frame's delta time
- * @returns {boolean} - Whether rendered
+ * Render single camera with optimized path
  */
-function renderCamera(idx, deltaTime) {
-  // Early bail conditions using typed arrays
-  if (
-    manager.active[idx] !== 1 ||
-    manager.visible[idx] !== 1 ||
-    manager.dirty[idx] !== 1
-  ) {
-    return false;
-  }
+function renderCamera(idx, dt) {
+  if (mgr.a[idx] !== 1 || mgr.v[idx] !== 1 || mgr.d[idx] !== 1) return false;
 
-  // More detailed validation
-  const camera = manager.cameras[idx];
-  const ctx = manager.contexts[idx];
+  const cam = mgr.c[idx];
+  const ctx = mgr.x[idx];
 
-  if (!camera || !ctx?.canvas?.isConnected) {
-    return false;
-  }
+  if (!cam || !ctx?.canvas?.isConnected) return false;
 
-  // Get dimensions and validate
   const canvas = ctx.canvas;
-  const width = canvas.width;
-  const height = canvas.height;
+  const w = canvas.width;
+  const h = canvas.height;
 
-  if (width <= 8 || height <= 8) {
-    return false;
-  }
+  if (w <= 8 || h <= 8) return false;
 
-  // CRITICAL RENDER PATH WITH ENHANCED ERROR HANDLING
   try {
-    const r = manager.renderer;
-    if (!r) {
-      return false;
+    const r = mgr.r;
+    if (!r) return false;
+
+    // Only resize if dimensions changed
+    const key = `${w},${h}`;
+    if (!mgr.dimCache.has(key)) {
+      r.setSize(w, h, false);
+      mgr.dimCache.set(key, true);
     }
 
-    // Reset renderer state
-    manager.renderer.setSize(width, height, false);
-    manager.renderer.setViewport(0, 0, width, height);
-    manager.renderer.setScissor(0, 0, width, height);
-    manager.renderer.scissorTest = true;
+    r.setViewport(0, 0, w, h);
+    r.setScissor(0, 0, w, h);
+    r.scissorTest = true;
+    r.clear(true, true, false);
 
-    // Clear for this camera
-    manager.renderer.clear(true, true, false);
+    // Only update matrices when needed
+    cam.updateMatrixWorld(true);
 
-    // Force update matrices
-    camera.updateMatrixWorld(true);
-    manager.scene.updateMatrixWorld(true);
+    // Use faster render path
+    r.render(mgr.s, cam);
 
-    // Render
-    manager.renderer.render(manager.scene, camera);
+    // Optimized image drawing
+    ctx.clearRect(0, 0, w, h);
+    ctx.drawImage(r.domElement, 0, 0, w, h);
 
-    // Draw to 2D canvas
-    ctx.clearRect(0, 0, width, height);
-    ctx.drawImage(
-      manager.renderer.domElement,
-      0,
-      0,
-      manager.renderer.domElement.width,
-      manager.renderer.domElement.height,
-      0,
-      0,
-      width,
-      height
-    );
-
-    // Update state - use consistent time value for lastRender
-    manager.lastRender[idx] = performance.now();
-    manager.dirty[idx] = 0;
-    manager.metrics.rendered++;
-    manager.metrics.total++;
+    mgr.lr[idx] = performance.now();
+    mgr.d[idx] = 0;
+    mgr.metrics.rendered++;
+    mgr.metrics.total++;
 
     return true;
-  } catch (error) {
-    console.error(`Render error for camera ${idx}:`, error);
+  } catch (e) {
     return false;
   }
 }
 
 /**
- * Ultra-efficient batch rendering of all cameras with consistent timing
- * @param {number} deltaTime - Current frame's delta time in seconds
- * @returns {number} - Cameras rendered
+ * Batch render all cameras - optimized batching
  */
-function renderCameras(deltaTime) {
-  const r = manager.renderer;
+function renderCameras(dt) {
+  const r = mgr.r;
   if (!r) return 0;
 
-  // Reset render count
-  manager.metrics.rendered = 0;
+  mgr.metrics.rendered = 0;
 
   try {
-    // Set up renderer once
-    manager.renderer.autoClear = false;
-    manager.renderer.scissorTest = true;
+    r.autoClear = false;
+    r.scissorTest = true;
 
-    // Update controls with consistent delta time
-    updateControls(deltaTime);
+    updateControls(dt);
 
-    // Process cameras in batches for better CPU cache usage
-    const count = manager.count;
-    let renderedCount = 0;
+    const count = mgr.n;
+    let rendered = 0;
 
-    for (let start = 0; start < count; start += BATCH_SIZE) {
-      const end = Math.min(start + BATCH_SIZE, count);
-
-      // Process batch
-      for (let i = start; i < end; i++) {
-        if (renderCamera(i, deltaTime)) {
-          renderedCount++;
-        }
+    // Quick check if any cameras need rendering
+    let needsRendering = false;
+    for (let i = 0; i < count; i++) {
+      if (mgr.a[i] === 1 && mgr.v[i] === 1 && mgr.d[i] === 1) {
+        needsRendering = true;
+        break;
       }
     }
 
-    // Reset renderer state
-    manager.renderer.scissorTest = false;
+    if (!needsRendering) {
+      mgr.metrics.skipped++;
+      return 0;
+    }
 
-    // Reset flags
-    manager.flags.needsFullRender = false;
+    // Optimized batching
+    for (let start = 0; start < count; start += BATCH_SIZE) {
+      const end = Math.min(start + BATCH_SIZE, count);
+      for (let i = start; i < end; i++) {
+        if (renderCamera(i, dt)) rendered++;
+      }
+    }
 
-    // Reset WebGL stats
-    manager.renderer.info.reset();
+    r.scissorTest = false;
+    mgr.f.flags &= ~mgr.f.NEEDS_FULL_RENDER; // Clear flag
+    r.info.reset();
 
-    return manager.metrics.rendered;
-  } catch (error) {
-    console.error("Batch render error:", error);
+    return mgr.metrics.rendered;
+  } catch (e) {
     return 0;
   }
 }
 
 /**
- * Update FPS with minimal overhead
- * @param {number} now - Current timestamp
+ * Update FPS counter - optimized update
  */
 function updateFPS(now) {
-  const m = manager.metrics;
+  const m = mgr.metrics;
   m.frames++;
 
-  // Update once per second
+  // Only update once per second
   if (now - m.lastFpsTime >= 1000) {
     m.fps = m.frames;
     m.frames = 0;
@@ -560,151 +439,334 @@ function updateFPS(now) {
 }
 
 /**
- * Ultra-optimized render loop with consistent timing
- * @param {number} timestamp - Current timestamp from requestAnimationFrame
+ * Main render loop - optimized with frame skipping and priorities
  */
-function renderLoop(timestamp) {
-  // Break loop if stopped
-  if (!manager.rendering) return;
+function renderLoop(ts) {
+  if (!mgr.rendering) return;
 
-  // Get consistent delta time from TimeManager for all rendering operations
-  const timeInfo = TimeManager.update(timestamp, "renderer");
-
-  // Calculate actual delta time for this frame
   const now = performance.now();
+  const timeInfo = TimeManager.update(ts, "renderer");
 
-  // Update with a consistent time step
-  let deltaTime = timeInfo.deltaTime;
+  // Get consistent dt and clamp
+  let dt = timeInfo.deltaTime;
+  dt = Math.max(MIN_DELTA_TIME, Math.min(dt, MAX_DELTA_TIME));
 
-  // Clamp delta time to prevent extreme values
-  // This prevents physics from breaking during lag spikes or tab switches
-  deltaTime = Math.max(MIN_DELTA_TIME, Math.min(deltaTime, MAX_DELTA_TIME));
-
-  // Adjust rendering frequency when idle for performance
+  // Frame skipping for idle state
   const idle = isIdle();
-  if (idle) {
-    // Render at reduced framerate when idle (about 1/4 the normal rate)
-    // This allows visible cameras to still update but reduces CPU usage
-    const idleFrameSkip = Math.floor(TARGET_FRAMERATE / 15); // ~15fps when idle
-    if (manager.metrics.frames % idleFrameSkip !== 0) {
-      // Schedule next frame but skip rendering
-      manager.rafId = requestAnimationFrame(renderLoop);
+  if (idle && mgr.metrics.frames % IDLE_FRAME_SKIP !== 0) {
+    // Skip rendering but keep the loop running
+    mgr.metrics.skipped++;
+    mgr.rafId = requestAnimationFrame(renderLoop);
+    return;
+  }
+
+  // Skip if no interaction for a while and nothing is dirty
+  let hasDirty = false;
+  if (!mgr.f.flags & mgr.f.HAS_ACTIVE_DRAG) {
+    for (let i = 0; i < mgr.n; i++) {
+      if (mgr.d[i] === 1) {
+        hasDirty = true;
+        break;
+      }
+    }
+
+    if (!hasDirty && idle && now - mgr.lastTs > 500) {
+      // Nothing changed, skip frame
+      mgr.metrics.skipped++;
+      mgr.rafId = requestAnimationFrame(renderLoop);
       return;
     }
   }
 
-  // Render with consistent time step
-  renderCameras(deltaTime);
-
-  // Update FPS stats
+  // Render and update stats
+  renderCameras(dt);
   updateFPS(now);
 
-  // Store last frame time
-  manager.lastTimestamp = timestamp;
+  // Garbage collection and maintenance
+  if (now - mgr._lastGC > GC_INTERVAL) {
+    collectGarbage();
+    mgr._lastGC = now;
+  }
 
-  // Continue loop
-  manager.rafId = requestAnimationFrame(renderLoop);
+  if (now - mgr._lastCleanup > MAINTENANCE_INTERVAL) {
+    performCleanup();
+    mgr._lastCleanup = now;
+  }
+
+  mgr.lastTs = ts;
+  mgr.rafId = requestAnimationFrame(renderLoop);
 }
 
 /**
- * Start rendering
+ * Start rendering with optimized initialization
  */
 function startRendering() {
-  if (manager.rendering) return;
+  if (mgr.rendering) return;
 
-  console.log("Starting ThreeJS render loop");
-  manager.rendering = true;
-  manager.lastTimestamp = performance.now();
-  manager.rafId = requestAnimationFrame(renderLoop);
+  mgr.rendering = true;
+  mgr.lastTs = performance.now();
+  mgr.rafId = requestAnimationFrame(renderLoop);
 }
 
 /**
  * Pause rendering
  */
 function pauseRendering() {
-  if (!manager.rendering) return;
+  if (!mgr.rendering) return;
 
-  console.log("Pausing ThreeJS render loop");
-  manager.rendering = false;
+  mgr.rendering = false;
 
-  if (manager.rafId) {
-    cancelAnimationFrame(manager.rafId);
-    manager.rafId = 0;
+  if (mgr.rafId) {
+    cancelAnimationFrame(mgr.rafId);
+    mgr.rafId = 0;
   }
 }
 
 /**
- * Resume rendering
+ * Resume rendering with optimized state reset
  */
 function resumeRendering() {
-  if (manager.rendering) return;
+  if (mgr.rendering) return;
 
-  console.log("Resuming ThreeJS render loop");
-  // Mark all as dirty
+  // Only mark active cameras as dirty
+  for (let i = 0; i < mgr.n; i++) {
+    if (mgr.a[i] === 1 && mgr.v[i] === 1) {
+      mgr.d[i] = 1;
+    }
+  }
 
-  manager.dirty.fill(1, 0, manager.count);
-
-  // Restart
-  manager.rendering = true;
-  manager.lastTimestamp = performance.now();
-  manager.rafId = requestAnimationFrame(renderLoop);
+  mgr.rendering = true;
+  mgr.lastTs = performance.now();
+  mgr.rafId = requestAnimationFrame(renderLoop);
 }
 
 /**
- * Complete ThreeJS cleanup with zero memory leaks
+ * Optimized garbage collection
+ */
+function collectGarbage(full = false) {
+  if (mgr.r) {
+    mgr.r.info.reset();
+    mgr.r.renderLists.dispose();
+
+    if (full) {
+      const gl = mgr.r.getContext();
+      // More aggressive GL context cleanup
+      if (gl) {
+        gl.flush();
+        const ext = gl.getExtension("WEBGL_lose_context");
+        if (ext && full) ext.loseContext();
+      }
+    }
+  }
+
+  if (full) {
+    mgr.dimCache.clear();
+
+    // Force JS garbage collection hint (not guaranteed but can help)
+    if (window.gc) window.gc();
+  }
+}
+
+/**
+ * Dispose a camera with optimized cleanup
+ */
+export function disposeCamera(idx) {
+  if (idx < 0 || idx >= mgr.n) return;
+
+  const ctrl = mgr.t[idx];
+  if (ctrl?.dispose) ctrl.dispose();
+
+  const cam = mgr.c[idx];
+  if (cam?.userData?.disposables) {
+    for (let i = 0; i < cam.userData.disposables.length; i++) {
+      const item = cam.userData.disposables[i];
+      if (item?.dispose) item.dispose();
+    }
+    cam.userData.disposables = [];
+  }
+
+  mgr.c[idx] = null;
+  mgr.t[idx] = null;
+  mgr.x[idx] = null;
+  mgr.m[idx] = null;
+
+  mgr.a[idx] = 0;
+  mgr.v[idx] = 0;
+  mgr.d[idx] = 0;
+  mgr.lr[idx] = 0;
+
+  const obsIdx = mgr.o.findIndex((o) => o.idx === idx);
+  if (obsIdx >= 0) {
+    mgr.o[obsIdx].observer.disconnect();
+    mgr.o.splice(obsIdx, 1);
+  }
+}
+
+/**
+ * Perform maintenance with optimized compaction algorithm
+ */
+export function performCleanup(force = false) {
+  const now = performance.now();
+  if (!force && now - mgr._lastCleanup < MAINTENANCE_INTERVAL) return;
+
+  // Fast path: check if compaction is needed
+  let hasNull = false;
+  for (let i = 0; i < mgr.n; i++) {
+    if (mgr.c[i] === null) {
+      hasNull = true;
+      break;
+    }
+  }
+
+  if (!hasNull && !force) {
+    mgr._lastCleanup = now;
+    return;
+  }
+
+  // Compact arrays
+  let writeIdx = 0;
+  for (let i = 0; i < mgr.n; i++) {
+    if (mgr.c[i] !== null) {
+      if (i !== writeIdx) {
+        // Move data
+        mgr.c[writeIdx] = mgr.c[i];
+        mgr.t[writeIdx] = mgr.t[i];
+        mgr.x[writeIdx] = mgr.x[i];
+        mgr.m[writeIdx] = mgr.m[i];
+        mgr.a[writeIdx] = mgr.a[i];
+        mgr.v[writeIdx] = mgr.v[i];
+        mgr.d[writeIdx] = mgr.d[i];
+        mgr.lr[writeIdx] = mgr.lr[i];
+
+        // Update observer references
+        const obsIdx = mgr.o.findIndex((o) => o.idx === i);
+        if (obsIdx >= 0) mgr.o[obsIdx].idx = writeIdx;
+
+        // Clear old slots
+        mgr.c[i] = null;
+        mgr.t[i] = null;
+        mgr.x[i] = null;
+        mgr.m[i] = null;
+      }
+      writeIdx++;
+    }
+  }
+
+  mgr.n = writeIdx;
+  collectGarbage(true);
+  mgr._lastCleanup = now;
+}
+
+/**
+ * Complete ThreeJS cleanup with optimized resource disposal
  */
 export function disposeThreeJSManager() {
-  // Stop loop
   pauseRendering();
 
   // Disconnect observers
-  for (const { observer } of manager.observers) {
-    observer.disconnect();
+  for (let i = 0; i < mgr.o.length; i++) {
+    mgr.o[i].observer.disconnect();
   }
-  manager.observers.length = 0;
+  mgr.o.length = 0;
 
   // Dispose controls
-  for (let i = 0; i < manager.count; i++) {
-    const control = manager.controls[i];
-    if (control?.dispose) control.dispose();
-    manager.controls[i] = null;
-    manager.cameras[i] = null;
-    manager.contexts[i] = null;
-    manager.metadata[i] = null; // Clean up metadata
+  for (let i = 0; i < mgr.n; i++) {
+    const ctrl = mgr.t[i];
+    if (ctrl?.dispose) ctrl.dispose();
+    mgr.t[i] = null;
+    mgr.c[i] = null;
+    mgr.x[i] = null;
+    mgr.m[i] = null;
   }
 
-  // Force WebGL context loss
-  if (manager.renderer) {
-    const gl = manager.renderer.getContext();
-    if (gl) {
-      const ext = gl.getExtension("WEBGL_lose_context");
-      if (ext) ext.loseContext();
+  // Dispose renderer
+  if (mgr.r) {
+    const gl = mgr.r.getContext();
+    const ext = gl?.getExtension("WEBGL_lose_context");
+    if (ext) ext.loseContext();
+
+    mgr.r.dispose();
+    mgr.r.forceContextLoss();
+    mgr.r = null;
+  }
+
+  // Dispose scene
+  if (mgr.s) {
+    const disposeQueue = [...mgr.s.children];
+
+    // Remove all children first to prevent traversal overhead
+    while (mgr.s.children.length > 0) {
+      mgr.s.remove(mgr.s.children[0]);
     }
 
-    manager.renderer.dispose();
-    manager.renderer.forceContextLoss();
-    manager.renderer = null;
-  }
+    // Process dispose queue efficiently
+    while (disposeQueue.length > 0) {
+      const obj = disposeQueue.pop();
 
-  // Clear scene
-  if (manager.scene) {
-    while (manager.scene.children.length > 0) {
-      const object = manager.scene.children[0];
-      manager.scene.remove(object);
+      // Add children to queue
+      if (obj.children && obj.children.length) {
+        disposeQueue.push(...obj.children);
+      }
+
+      // Dispose geometry
+      if (obj.geometry?.dispose) {
+        obj.geometry.dispose();
+        obj.geometry = null;
+      }
+
+      // Dispose material(s)
+      if (obj.material) {
+        const disposeMaterial = (mat) => {
+          if (!mat) return;
+
+          if (Array.isArray(mat)) {
+            for (let i = 0; i < mat.length; i++) {
+              disposeMaterial(mat[i]);
+            }
+            return;
+          }
+
+          // Dispose textures
+          for (const prop in mat) {
+            const val = mat[prop];
+            if (val?.isTexture) {
+              val.dispose();
+              mat[prop] = null;
+            }
+          }
+
+          if (mat.dispose) mat.dispose();
+        };
+
+        disposeMaterial(obj.material);
+        obj.material = null;
+      }
+
+      // Dispose user data
+      if (obj.userData?.disposables) {
+        for (let i = 0; i < obj.userData.disposables.length; i++) {
+          const item = obj.userData.disposables[i];
+          if (item?.dispose) item.dispose();
+        }
+        obj.userData.disposables = [];
+      }
     }
-    manager.scene = null;
+
+    mgr.s = null;
   }
 
-  // Reset state
-  manager.count = 0;
-  manager.dimCache.clear();
-  manager.active.fill(0);
-  manager.visible.fill(0);
-  manager.dirty.fill(0);
-  manager.lastRender.fill(0);
+  collectGarbage(true);
 
-  // Reset metrics
-  Object.assign(manager.metrics, {
+  // Reset everything
+  mgr.n = 0;
+  mgr.dimCache.clear();
+  mgr.a.fill(0);
+  mgr.v.fill(0);
+  mgr.d.fill(0);
+  mgr.lr.fill(0);
+  mgr.f.flags = 0;
+
+  Object.assign(mgr.metrics, {
     frames: 0,
     lastFpsTime: 0,
     fps: 0,
@@ -715,27 +777,25 @@ export function disposeThreeJSManager() {
 }
 
 /**
- * Get the scene instance from the manager
- * @returns {Scene} - The Three.js scene
+ * Get the scene instance
  */
 export function getScene() {
-  return manager.scene;
+  return mgr.s;
 }
 
 /**
- * Get all registered cameras
- * @returns {Array} - Array of camera objects with metadata
+ * Get all registered cameras with optimized object creation
  */
 export function getAllCameras() {
   const cameras = [];
-  for (let i = 0; i < manager.count; i++) {
-    if (manager.cameras[i]) {
+  for (let i = 0; i < mgr.n; i++) {
+    if (mgr.c[i]) {
       cameras.push({
         index: i,
-        camera: manager.cameras[i],
-        metadata: manager.metadata[i],
-        active: manager.active[i] === 1,
-        visible: manager.visible[i] === 1,
+        camera: mgr.c[i],
+        metadata: mgr.m[i],
+        active: mgr.a[i] === 1,
+        visible: mgr.v[i] === 1,
       });
     }
   }
@@ -744,14 +804,10 @@ export function getAllCameras() {
 
 /**
  * Force redraw of a specific camera
- * @param {number} idx - Camera index
  */
 export function forceRedraw(idx) {
-  if (idx < 0 || idx >= manager.count) return;
-  manager.dirty[idx] = 1;
+  if (idx < 0 || idx >= mgr.n) return;
+  mgr.d[idx] = 1;
 
-  // Ensure rendering is active when forcing a redraw
-  if (!manager.rendering) {
-    startRendering();
-  }
+  if (!mgr.rendering) startRendering();
 }

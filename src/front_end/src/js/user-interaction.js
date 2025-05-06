@@ -105,7 +105,8 @@ export function handleUserInteraction(event) {
     event &&
     (event.type === "mousemove" ||
       event.type === "wheel" ||
-      event.type === "keypress") &&
+      event.type === "keydown" ||
+      event.type === "keyup") &&
     now - lastInteractionCallTime < INTERACTION_THROTTLE
   ) {
     return;

@@ -161,6 +161,7 @@ async function loadModel(modelName) {
  */
 async function preloadProjectModels(priorityModels = [], allModelNames = []) {
   if (allModelNames.length === 0) return;
+  setPriorityModels(priorityModels);
 
   // Create load queue with priority models first
   const loadQueue = [
@@ -368,9 +369,9 @@ function markModelUnused(modelName) {
 }
 
 /**
- * Dispose of a 3D model and free memory
- * @param {string} modelName - The name of the model to dispose
- * @param {THREE.Scene} scene - Optional scene to remove the model from
+ *Enhanced model disposal with better memory cleanup
+ *@param {string} modelName - The name of the model to dispose
+ *@param {THREE.Scene} scene - Optional scene to remove the model from
  */
 function disposeModel(modelName, scene = null) {
   if (!models[modelName] || disposedModels.has(modelName)) return;
@@ -382,27 +383,52 @@ function disposeModel(modelName, scene = null) {
     scene.remove(model);
   }
 
-  // Dispose geometries and materials
+  // Dispose geometries and materials with thorough cleanup
   model.traverse((child) => {
     if (child.isMesh) {
       if (child.geometry) {
+        // Clear geometry buffers
+        const attributes = child.geometry.attributes;
+        for (const name in attributes) {
+          child.geometry.deleteAttribute(name);
+        }
+
+        if (child.geometry.index) {
+          child.geometry.index = null;
+        }
+
         child.geometry.dispose();
+        child.geometry = null;
       }
 
       if (child.material) {
         if (Array.isArray(child.material)) {
-          child.material.forEach(disposeMaterial);
+          child.material.forEach((material) => {
+            disposeMaterialEnhanced(material);
+          });
         } else {
-          disposeMaterial(child.material);
+          disposeMaterialEnhanced(child.material);
         }
+        child.material = null;
       }
     }
+
+    // Clear any animations, event listeners, or user data
+    if (child.animations) {
+      child.animations = null;
+    }
+
+    child.userData = {};
   });
 
-  // Mark as disposed but keep reference for reloading
+  // Remove from memory tracking and model cache
+  untrackModelMemory(modelName);
+  modelCache.delete(modelName);
+  delete models[modelName];
+
+  // Mark as disposed
   disposedModels.add(modelName);
 
-  // Log memory cleanup
   console.log(`Disposed model: ${modelName}`);
 }
 
@@ -507,10 +533,374 @@ function updateModelScale(modelName, scale) {
   }
 }
 
+// Memory tracking variables
+const memoryUsage = {
+  models: {},
+  totalBytes: 0,
+  lastCleanup: Date.now(),
+};
+
+const MEMORY_THRESHOLD = 100 * 1024 * 1024; // 100MB
+const AUTO_GC_INTERVAL = 60000; // 1 minute
+let gcIntervalId = null;
+
+/**
+ * Start automatic garbage collection
+ */
+function startAutoGarbageCollection() {
+  if (gcIntervalId) return;
+
+  gcIntervalId = setInterval(() => {
+    // Only run GC if memory usage is high
+    if (memoryUsage.totalBytes > MEMORY_THRESHOLD) {
+      collectGarbage();
+    }
+  }, AUTO_GC_INTERVAL);
+
+  // Add event listeners for detecting when page is hidden
+  if (typeof document !== "undefined") {
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("blur", () => scheduleGarbageCollection());
+  }
+}
+
+/**
+ * Handle page visibility changes
+ */
+function handleVisibilityChange() {
+  if (document.hidden) {
+    scheduleGarbageCollection();
+  }
+}
+
+/**
+ * Schedule garbage collection for next idle period
+ */
+function scheduleGarbageCollection() {
+  if (window.requestIdleCallback) {
+    window.requestIdleCallback(() => collectGarbage());
+  } else {
+    setTimeout(() => collectGarbage(), 1000);
+  }
+}
+
+/**
+ * Run garbage collection on all unused models
+ * @param {boolean} aggressive - Whether to use aggressive collection
+ */
+function collectGarbage(aggressive = false) {
+  const now = Date.now();
+  const unusedThreshold = aggressive ? 3000 : MODEL_CLEANUP_THRESHOLD;
+
+  console.log(`Running garbage collection. Aggressive: ${aggressive}`);
+
+  // Find models to dispose
+  const modelsToDispose = Object.keys(models).filter((modelName) => {
+    // Always keep priority models
+    if (priorityModelSet.has(modelName)) return false;
+
+    // Check if model has been accessed recently
+    const lastUsed = modelLastAccessed[modelName] || 0;
+    return now - lastUsed > unusedThreshold;
+  });
+
+  // Dispose models
+  modelsToDispose.forEach((modelName) => {
+    disposeModel(modelName);
+  });
+
+  // Force browser garbage collection when possible
+  if (window.gc) {
+    try {
+      window.gc();
+    } catch (e) {
+      console.log("Manual GC not available");
+    }
+  }
+
+  memoryUsage.lastCleanup = now;
+  estimateMemoryUsage();
+
+  console.log(
+    `GC complete. Disposed ${
+      modelsToDispose.length
+    } models. Current memory: ${Math.round(
+      memoryUsage.totalBytes / 1024 / 1024
+    )}MB`
+  );
+}
+
+/**
+ * Track model memory usage
+ * @param {string} modelName - Name of the model
+ * @param {Object3D} model - The 3D model
+ */
+function trackModelMemory(modelName, model) {
+  // Initialize tracking
+  memoryUsage.models[modelName] = { bytes: 0, meshCount: 0, materialCount: 0 };
+  const stats = memoryUsage.models[modelName];
+
+  // Traverse model to calculate memory usage
+  model.traverse((node) => {
+    if (node.isMesh) {
+      stats.meshCount++;
+
+      // Calculate geometry memory
+      if (node.geometry) {
+        const geometry = node.geometry;
+        let geometryBytes = 0;
+
+        // Count attribute buffers
+        Object.values(geometry.attributes).forEach((attribute) => {
+          if (attribute.array) {
+            geometryBytes += attribute.array.byteLength || 0;
+          }
+        });
+
+        // Count index buffer if present
+        if (geometry.index && geometry.index.array) {
+          geometryBytes += geometry.index.array.byteLength || 0;
+        }
+
+        stats.bytes += geometryBytes;
+      }
+
+      // Calculate material memory (approximation)
+      if (node.material) {
+        const materials = Array.isArray(node.material)
+          ? node.material
+          : [node.material];
+        stats.materialCount += materials.length;
+
+        materials.forEach((material) => {
+          // Rough estimate for material (base + textures)
+          let materialBytes = 1024; // Base size
+
+          // Count textures
+          Object.values(material).forEach((value) => {
+            if (value && value.isTexture && value.image) {
+              // Estimate texture memory
+              const width = value.image.width || 512;
+              const height = value.image.height || 512;
+              const bytesPerPixel = 4; // RGBA
+              materialBytes += width * height * bytesPerPixel;
+            }
+          });
+
+          stats.bytes += materialBytes;
+        });
+      }
+    }
+  });
+
+  // Update total memory usage
+  updateTotalMemoryUsage();
+}
+
+/**
+ * Update total memory usage
+ */
+function updateTotalMemoryUsage() {
+  memoryUsage.totalBytes = Object.values(memoryUsage.models).reduce(
+    (total, model) => total + (model.bytes || 0),
+    0
+  );
+}
+
+/**
+ * Remove model from memory tracking
+ * @param {string} modelName - Name of the model to remove
+ */
+function untrackModelMemory(modelName) {
+  if (memoryUsage.models[modelName]) {
+    memoryUsage.totalBytes -= memoryUsage.models[modelName].bytes || 0;
+    delete memoryUsage.models[modelName];
+  }
+}
+
+/**
+ * Estimate current memory usage across all loaded models
+ */
+function estimateMemoryUsage() {
+  let totalBytes = 0;
+
+  Object.keys(models).forEach((modelName) => {
+    const model = models[modelName];
+    if (!memoryUsage.models[modelName]) {
+      trackModelMemory(modelName, model);
+    }
+    totalBytes += memoryUsage.models[modelName].bytes || 0;
+  });
+
+  memoryUsage.totalBytes = totalBytes;
+
+  return {
+    totalMB: Math.round((totalBytes / 1024 / 1024) * 100) / 100,
+    modelCount: Object.keys(models).length,
+    details: memoryUsage.models,
+  };
+}
+
+// Track when models were last accessed
+const modelLastAccessed = {};
+const priorityModelSet = new Set();
+
+/**
+ * Mark model as recently used
+ * @param {string} modelName - Name of the model that was accessed
+ */
+function markModelAccessed(modelName) {
+  modelLastAccessed[modelName] = Date.now();
+}
+
+/**
+ * Set priority models that should not be garbage collected
+ * @param {Array<string>} modelNames - Array of model names to prioritize
+ */
+function setPriorityModels(modelNames = []) {
+  priorityModelSet.clear();
+  modelNames.forEach((name) => priorityModelSet.add(name));
+
+  // Reset access time for priority models
+  modelNames.forEach((name) => {
+    modelLastAccessed[name] = Date.now();
+  });
+}
+
+/**
+ * Enhanced material disposal
+ * @param {Material} material - The material to dispose
+ */
+function disposeMaterialEnhanced(material) {
+  if (!material) return;
+
+  // Dispose all textures and properties
+  Object.keys(material).forEach((prop) => {
+    if (!material[prop]) return;
+
+    if (material[prop].isTexture) {
+      // Clear source image data if possible
+      const texture = material[prop];
+      if (texture.image) {
+        texture.image = null;
+      }
+
+      texture.dispose();
+      material[prop] = null;
+    } else if (
+      material[prop].dispose &&
+      typeof material[prop].dispose === "function"
+    ) {
+      // Dispose any disposable properties
+      material[prop].dispose();
+      material[prop] = null;
+    }
+  });
+
+  // Dispose material
+  material.dispose();
+}
+
+/**
+ * Stop automatic garbage collection
+ */
+function stopAutoGarbageCollection() {
+  if (gcIntervalId) {
+    clearInterval(gcIntervalId);
+    gcIntervalId = null;
+  }
+
+  if (typeof document !== "undefined") {
+    document.removeEventListener("visibilitychange", handleVisibilityChange);
+    window.removeEventListener("blur", () => scheduleGarbageCollection());
+  }
+}
+
+/**
+ * Performance-optimized geometry instance sharing
+ * @param {Object} geometries - Shared geometries cache
+ */
+function optimizeGeometrySharing(geometries) {
+  const candidates = {};
+
+  // Find geometry candidates with similar vertex counts
+  Object.entries(geometries).forEach(([id, geometry]) => {
+    const vertexCount = geometry.attributes?.position?.count || 0;
+    if (!vertexCount) return;
+
+    // Group by vertex count ranges (within 5% of each other)
+    const range = Math.floor(vertexCount / 50) * 50;
+    if (!candidates[range]) candidates[range] = [];
+    candidates[range].push({ id, geometry, vertexCount });
+  });
+
+  // Find potential duplicate geometries and merge them
+  let optimizationCount = 0;
+
+  Object.values(candidates).forEach((group) => {
+    if (group.length < 2) return;
+
+    // Compare geometries in the same vertex count range
+    for (let i = 0; i < group.length; i++) {
+      const a = group[i];
+      if (!geometries[a.id]) continue; // Already optimized
+
+      for (let j = i + 1; j < group.length; j++) {
+        const b = group[j];
+        if (!geometries[b.id]) continue; // Already optimized
+
+        // Check if geometries are similar enough to share
+        if (areGeometriesSimilar(a.geometry, b.geometry)) {
+          // Replace b with a
+          geometries[b.id] = geometries[a.id];
+          optimizationCount++;
+        }
+      }
+    }
+  });
+
+  console.log(`Optimized ${optimizationCount} similar geometries`);
+}
+
+/**
+ * Check if two geometries are similar enough to share
+ * @param {BufferGeometry} a - First geometry
+ * @param {BufferGeometry} b - Second geometry
+ * @returns {boolean} True if geometries are similar
+ */
+function areGeometriesSimilar(a, b) {
+  // Must have same attributes
+  const aAttribs = Object.keys(a.attributes).sort();
+  const bAttribs = Object.keys(b.attributes).sort();
+
+  if (aAttribs.length !== bAttribs.length) return false;
+  if (!aAttribs.every((attr, i) => attr === bAttribs[i])) return false;
+
+  // Must have same number of vertices
+  if (a.attributes.position.count !== b.attributes.position.count) return false;
+
+  // Must have similar bounding spheres
+  if (!a.boundingSphere) a.computeBoundingSphere();
+  if (!b.boundingSphere) b.computeBoundingSphere();
+
+  const aSphere = a.boundingSphere;
+  const bSphere = b.boundingSphere;
+
+  const radiusDiff =
+    Math.abs(aSphere.radius - bSphere.radius) /
+    Math.max(aSphere.radius, bSphere.radius);
+  const centerDist = aSphere.center.distanceTo(bSphere.center);
+
+  // Similar if radius difference < 10% and centers are close relative to radius
+  return radiusDiff < 0.1 && centerDist < aSphere.radius * 0.2;
+}
+
 /**
  * Initialize the model manager
  */
 function initModelManager() {
+  startAutoGarbageCollection();
+
   getFallbackCube();
   calculateModelPositions();
 }

@@ -33,46 +33,38 @@ import {
 } from "./threejs-manager.js";
 
 // Constants
-const C = {
-  DEFAULT_FOV: 75,
-  NEAR: 0.1,
-  FAR: 1000,
-};
-
-// Colors for scene objects
-const COLORS = {
-  clouds: 0xffffff,
-  islandSide: 0x8b4513,
-  islandTop: 0x228b22,
-  shipBody: 0x3366cc,
-  shipAccent: 0x66ccff,
-};
-
-// Island data
-const ISLAND_DATA = [
-  { position: new Vector3(0, 0, 0), section: "home", name: "Home Island" },
-  {
-    position: new Vector3(10, 0, 10),
-    section: "explore",
-    name: "Exploration Island",
+const C = { DEFAULT_FOV: 75, NEAR: 0.1, FAR: 1000 },
+  COLORS = {
+    clouds: 0xffffff,
+    islandSide: 0x8b4513,
+    islandTop: 0x228b22,
+    shipBody: 0x3366cc,
+    shipAccent: 0x66ccff,
   },
-  {
-    position: new Vector3(-10, 0, -15),
-    section: "adventure",
-    name: "Adventure Island",
-  },
-];
-
-// View modes
-const VIEW_MODES = { SCROLL: "scroll", GAME: "game" };
+  ISLAND_DATA = [
+    { position: new Vector3(0, 0, 0), section: "home", name: "Home Island" },
+    {
+      position: new Vector3(10, 0, 10),
+      section: "explore",
+      name: "Exploration Island",
+    },
+    {
+      position: new Vector3(-10, 0, -15),
+      section: "adventure",
+      name: "Adventure Island",
+    },
+  ],
+  VIEW_MODES = { SCROLL: "scroll", GAME: "game" };
 
 // Game state & objects
 let thirdPersonCamera,
   camController,
-  cameraIndex = -1;
-let playerEntity, gameAnimationFrameId;
-let islands = [];
-const islandAnimationData = [];
+  cameraIndex = -1,
+  playerEntity,
+  gameAnimationFrameId,
+  islands = [],
+  islandAnimationData = [],
+  cameraFollowActive = true;
 
 // Game controller state
 const gameState = {
@@ -80,32 +72,28 @@ const gameState = {
   lastCanvasWidth: 0,
   lastCanvasHeight: 0,
   isInitialized: false,
-  totalTime: 0, // Track total elapsed time for animations
+  totalTime: 0,
 };
 
 /**
  * Initialize island bobbing animation
  */
 function initIslandBobbing(islands) {
-  islands.forEach(() => {
+  islands.forEach(() =>
     islandAnimationData.push({
       initialY: islands[islandAnimationData.length].position.y,
       amplitude: 0.2 + Math.random() * 0.15,
       frequency: 0.5 + Math.random() * 0.3,
       offset: Math.random() * Math.PI * 2,
-    });
-  });
+    })
+  );
 }
 
 /**
  * Update island bobbing animation
- * @param {number} deltaTime - Delta time in seconds
  */
 function updateIslandBobbing(deltaTime) {
-  // Use the consistent deltaTime to update total time
   gameState.totalTime += deltaTime;
-
-  // Use gameState.totalTime for consistent animation timing
   islands.forEach((island, i) => {
     if (islandAnimationData[i]) {
       const data = islandAnimationData[i];
@@ -113,9 +101,7 @@ function updateIslandBobbing(deltaTime) {
         data.initialY +
         Math.sin(gameState.totalTime * data.frequency + data.offset) *
           data.amplitude;
-
-      // Scale the smoothing factor by deltaTime for consistent movement speed
-      const smoothingFactor = 0.05 * Math.min(1, deltaTime * 60); // 60fps normalization
+      const smoothingFactor = 0.05 * Math.min(1, deltaTime * 60);
       island.position.y += (newY - island.position.y) * smoothingFactor;
     }
   });
@@ -125,52 +111,43 @@ function updateIslandBobbing(deltaTime) {
  * Initialize game scene
  */
 export function initGameScene() {
-  gameState.totalTime = 0; // Initialize total time
+  gameState.totalTime = 0;
   const gameScene = getScene();
 
   // Create reusable geometries and materials
-  const cloudGeometry = new SphereGeometry(1, 7, 7);
-  const cloudMaterial = new MeshStandardMaterial({
-    color: COLORS.clouds,
-    flatShading: true,
-    transparent: true,
-    opacity: 0.9,
-  });
-
-  const islandBaseGeometry = new CylinderGeometry(2, 1.5, 2, 8);
-  const islandBaseMaterial = new MeshStandardMaterial({
-    color: COLORS.islandSide,
-    flatShading: true,
-  });
-
-  const islandTopGeometry = new CylinderGeometry(2, 2, 0.5, 8);
-  const islandTopMaterial = new MeshStandardMaterial({
-    color: COLORS.islandTop,
-    flatShading: true,
-  });
+  const cloudGeometry = new SphereGeometry(1, 7, 7),
+    cloudMaterial = new MeshStandardMaterial({
+      color: COLORS.clouds,
+      flatShading: true,
+      transparent: true,
+      opacity: 0.9,
+    }),
+    islandBaseGeometry = new CylinderGeometry(2, 1.5, 2, 8),
+    islandBaseMaterial = new MeshStandardMaterial({
+      color: COLORS.islandSide,
+      flatShading: true,
+    }),
+    islandTopGeometry = new CylinderGeometry(2, 2, 0.5, 8),
+    islandTopMaterial = new MeshStandardMaterial({
+      color: COLORS.islandTop,
+      flatShading: true,
+    });
 
   // Create islands
-  ISLAND_DATA.forEach((islandInfo) => {
-    const islandGroup = new Group();
+  ISLAND_DATA.forEach(({ position, section, name }) => {
+    const islandGroup = new Group(),
+      baseSize = 2 + Math.random() * 0.5,
+      topSize = 2 + Math.random() * 0.5,
+      base = new Mesh(islandBaseGeometry.clone(), islandBaseMaterial),
+      top = new Mesh(islandTopGeometry.clone(), islandTopMaterial);
 
-    // Randomize dimensions
-    const baseSize = 2 + Math.random() * 0.5;
-    const topSize = 2 + Math.random() * 0.5;
-
-    // Create island parts
-    const base = new Mesh(islandBaseGeometry.clone(), islandBaseMaterial);
     base.scale.set(baseSize / 2, 1, baseSize / 2);
-
-    const top = new Mesh(islandTopGeometry.clone(), islandTopMaterial);
     top.scale.set(topSize / 2, 1, topSize / 2);
     top.position.y = 1;
 
     islandGroup.add(base, top);
-    islandGroup.position.copy(islandInfo.position);
-    islandGroup.userData = {
-      type: islandInfo.section,
-      name: islandInfo.name,
-    };
+    islandGroup.position.copy(position);
+    islandGroup.userData = { type: section, name };
 
     gameScene.add(islandGroup);
     islands.push(islandGroup);
@@ -178,24 +155,21 @@ export function initGameScene() {
 
   // Create clouds (reduced count for performance)
   for (let i = 0; i < 8; i++) {
-    const cloud = new Mesh(cloudGeometry.clone(), cloudMaterial);
-    const scale = 0.8 + Math.random() * 1.5;
+    const cloud = new Mesh(cloudGeometry.clone(), cloudMaterial),
+      scale = 0.8 + Math.random() * 1.5;
 
     cloud.position.set(
       (Math.random() - 0.5) * 40,
       5 + Math.random() * 8,
       (Math.random() - 0.5) * 40
     );
-
     cloud.scale.set(scale, scale * 0.6, scale);
     gameScene.add(cloud);
   }
 
   // Create player
   playerEntity = createPlayerModel();
-
-  // Position player
-  const homeIsland = ISLAND_DATA.find((island) => island.section === "home");
+  const homeIsland = ISLAND_DATA.find(({ section }) => section === "home");
   playerEntity.position.set(
     homeIsland?.position.x || 0,
     (homeIsland?.position.y || 0) + 2,
@@ -244,38 +218,28 @@ function updateGameLoop(timestamp) {
     return;
   }
 
-  // Use deltaTime directly from TimeManager for consistent timing
   const deltaTime = timeInfo.deltaTime;
 
-  // Update player
-  if (playerEntity) {
-    playerEntity.visible = true;
-    updatePlayer(deltaTime);
-  }
-
-  // Update camera
-  if (thirdPersonCamera && playerEntity && cameraFollowActive) {
+  // Update entities
+  playerEntity && ((playerEntity.visible = true), updatePlayer(deltaTime));
+  thirdPersonCamera &&
+    playerEntity &&
+    cameraFollowActive &&
     updateCamera(thirdPersonCamera, playerEntity, deltaTime);
-  }
-
-  // Update islands
   updateIslandBobbing(deltaTime);
 
   // Update debug overlay if available
-  if (typeof updateDebugOverlay === "function") {
+  typeof updateDebugOverlay === "function" &&
     updateDebugOverlay(playerEntity?.__controls || window._playerControls);
-  }
 
-  // Force redraw and schedule next frame
-  if (cameraIndex >= 0 && isCameraActive(cameraIndex)) {
-    forceRedraw(cameraIndex);
-  }
+  // Force redraw
+  cameraIndex >= 0 && isCameraActive(cameraIndex) && forceRedraw(cameraIndex);
 
-  gameAnimationFrameId = requestAnimationFrame(updateGameLoop);
+  // Apply frame capping before scheduling next frame
+  TimeManager.applyFrameCapping().then(() => {
+    gameAnimationFrameId = requestAnimationFrame(updateGameLoop);
+  });
 }
-
-// Camera follow state
-let cameraFollowActive = true;
 
 /**
  * Toggle game view
@@ -305,9 +269,7 @@ export function toggleGameView(elements) {
   const isGameView = gameState.viewMode === VIEW_MODES.GAME;
 
   // Update camera visibility
-  if (cameraIndex >= 0) {
-    setCameraVisible(cameraIndex, isGameView);
-  }
+  cameraIndex >= 0 && setCameraVisible(cameraIndex, isGameView);
 
   if (isGameView) {
     // Switch to game view
@@ -328,32 +290,31 @@ export function toggleGameView(elements) {
     updateGameViewSize(elements);
 
     // Ensure camera controller is working
-    if (!camController && thirdPersonCamera && playerEntity) {
-      camController = createCameraController(thirdPersonCamera, playerEntity);
-    }
+    !camController &&
+      thirdPersonCamera &&
+      playerEntity &&
+      (camController = createCameraController(thirdPersonCamera, playerEntity));
 
     cameraFollowActive = true;
     camController?.();
 
     // Start game loop
-    if (gameAnimationFrameId) cancelAnimationFrame(gameAnimationFrameId);
+    gameAnimationFrameId && cancelAnimationFrame(gameAnimationFrameId);
     gameAnimationFrameId = requestAnimationFrame(updateGameLoop);
   } else {
     // Switch to scroll view
     elements.body.classList.remove("game-mode");
     viewLabel.textContent = "Game View";
-
     elements.gameViewContainer.style.display = "none";
 
     // Stop game loop
-    if (gameAnimationFrameId) {
-      cancelAnimationFrame(gameAnimationFrameId);
-      gameAnimationFrameId = null;
-    }
+    gameAnimationFrameId &&
+      (cancelAnimationFrame(gameAnimationFrameId),
+      (gameAnimationFrameId = null));
   }
 
   handleUserInteraction();
-  if (cameraIndex >= 0) forceRedraw(cameraIndex);
+  cameraIndex >= 0 && forceRedraw(cameraIndex);
 
   return isGameView;
 }
@@ -379,12 +340,11 @@ export function updateGameViewSize(elements, width, height) {
     gameState.lastCanvasWidth = width;
     gameState.lastCanvasHeight = height;
 
-    if (thirdPersonCamera) {
-      thirdPersonCamera.aspect = width / height;
-      thirdPersonCamera.updateProjectionMatrix();
-    }
+    thirdPersonCamera &&
+      ((thirdPersonCamera.aspect = width / height),
+      thirdPersonCamera.updateProjectionMatrix());
 
-    if (cameraIndex >= 0) forceRedraw(cameraIndex);
+    cameraIndex >= 0 && forceRedraw(cameraIndex);
   }
 }
 
@@ -430,9 +390,7 @@ export function initGame() {
   window.addEventListener(
     "resize",
     debounce(() => {
-      if (gameState.viewMode === VIEW_MODES.GAME) {
-        updateGameViewSize(elements);
-      }
+      gameState.viewMode === VIEW_MODES.GAME && updateGameViewSize(elements);
     }, 200)
   );
 

@@ -1,5 +1,5 @@
 /**
- * @fileoverview Optimized compact player model and controls - Fixed version
+ * @fileoverview Memory-optimized compact player model and controls
  */
 
 import {
@@ -16,10 +16,18 @@ import {
 } from "../extern/three/three.module.min.js";
 import { handleUserInteraction } from "../user-interaction.js";
 
-// State
-let playerControls = null;
-let playerModel = null;
-let playerHeight = 10;
+// Singleton state
+const playerState = {
+  model: null,
+  controls: null,
+  height: 10,
+};
+
+// Reusable objects to avoid allocations during updates
+const _vector = new Vector3();
+const _tempVector = new Vector3(); // Additional temp vector for operations
+const _euler = new Euler();
+const _quaternion = new Quaternion();
 
 // Constants
 const SHIP = {
@@ -53,6 +61,12 @@ const CONTROL_KEYS = [
   "ControlRight",
 ];
 
+// Pre-define cardinal directions array to avoid recreation
+const CARDINAL_DIRECTIONS = ["S", "SW", "W", "NW", "N", "NE", "E", "SE", "S"];
+const VEC_3_ZERO = new Vector3(0, 0, 0);
+const MOBILE_MOVE_THRESHOLD = 0.2;
+
+// Create materials only once and share them
 const MATERIALS = {
   SHIP_BODY: new MeshPhongMaterial({
     color: 0x3366cc,
@@ -75,109 +89,102 @@ const MATERIALS = {
   }),
 };
 
+// Cache geometries to reuse them
+const GEOMETRIES = {
+  BODY: new CylinderGeometry(MOBILE_MOVE_THRESHOLD, 0.5, 2, 8),
+  COCKPIT: new SphereGeometry(0.3, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2),
+  WINGS: new BoxGeometry(1.6, 0.1, 0.6),
+  ENGINE: new CylinderGeometry(0.15, 0.15, 0.3, 8),
+  GLOW: new ConeGeometry(0.1, 0.4, 8),
+};
+
 /**
- * Calculate cardinal direction from rotation
+ * Calculate cardinal direction from rotation - optimized
  */
 function calculateCardinalDirection(rotation) {
   const normalized = ((rotation % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
-  const directions = ["S", "SW", "W", "NW", "N", "NE", "E", "SE", "S"];
-  return directions[Math.floor(((normalized * 180) / Math.PI + 22.5) / 45) % 8];
+  return CARDINAL_DIRECTIONS[
+    Math.floor(((normalized * 180) / Math.PI + 22.5) / 45) % 8
+  ];
 }
 
 /**
  * Get level orientation (keeping only Y rotation)
+ * Uses cached objects to avoid allocations
  */
 function getLevelOrientation(quaternion) {
-  const euler = new Euler().setFromQuaternion(quaternion, "YXZ");
-  return new Quaternion().setFromEuler(new Euler(0, euler.y, 0, "YXZ"));
+  _euler.setFromQuaternion(quaternion, "YXZ");
+  return _quaternion.setFromEuler(new Euler(0, _euler.y, 0, "YXZ"));
 }
 
-// Create a spaceship model
+// Create a spaceship model - optimized for memory
 export function createPlayerModel() {
+  // Don't recreate if already exists
+  if (playerState.model) return playerState.model;
+
   const shipGroup = new Group();
 
   // Ship body
-  const body = new Mesh(
-    new CylinderGeometry(0.2, 0.5, 2, 8),
-    MATERIALS.SHIP_BODY
-  );
+  const body = new Mesh(GEOMETRIES.BODY, MATERIALS.SHIP_BODY);
   body.rotation.x = Math.PI / 2;
 
   // Cockpit
-  const cockpit = new Mesh(
-    new SphereGeometry(0.3, 16, 16, 0, Math.PI * 2, 0, Math.PI / 2),
-    MATERIALS.COCKPIT
-  );
+  const cockpit = new Mesh(GEOMETRIES.COCKPIT, MATERIALS.COCKPIT);
   cockpit.position.set(0, 0, -0.7);
   cockpit.rotation.x = -Math.PI / 2;
 
   // Wings
-  const wings = new Mesh(new BoxGeometry(1.6, 0.1, 0.6), MATERIALS.WINGS);
-  wings.position.z = 0.2;
+  const wings = new Mesh(GEOMETRIES.WINGS, MATERIALS.WINGS);
+  wings.position.z = MOBILE_MOVE_THRESHOLD;
 
-  // Engines and glow
-  const engineGeometry = new CylinderGeometry(0.15, 0.15, 0.3, 8);
-  const glowGeometry = new ConeGeometry(0.1, 0.4, 8);
-
+  // Create engines and glow
   const createEngine = (x) => {
-    const engine = new Mesh(engineGeometry, MATERIALS.ENGINE);
+    const engine = new Mesh(GEOMETRIES.ENGINE, MATERIALS.ENGINE);
     engine.position.set(x, 0, 0.5);
     engine.rotation.x = Math.PI / 2;
 
-    const glow = new Mesh(glowGeometry, MATERIALS.GLOW);
+    const glow = new Mesh(GEOMETRIES.GLOW, MATERIALS.GLOW);
     glow.position.set(x, 0, 0.8);
     glow.rotation.x = -Math.PI / 2;
 
-    return [engine, glow];
+    shipGroup.add(engine, glow);
   };
 
-  const [leftEngine, leftGlow] = createEngine(-0.5);
-  const [rightEngine, rightGlow] = createEngine(0.5);
+  createEngine(-0.5);
+  createEngine(0.5);
 
-  shipGroup.add(
-    body,
-    cockpit,
-    wings,
-    leftEngine,
-    rightEngine,
-    leftGlow,
-    rightGlow
-  );
+  shipGroup.add(body, cockpit, wings);
   shipGroup.position.set(0, HEIGHT.MIN, 0);
 
-  playerModel = shipGroup;
-  return playerModel;
+  playerState.model = shipGroup;
+  return playerState.model;
 }
 
 export function getPlayerModel() {
-  return playerModel;
+  return playerState.model;
 }
 
 export function setPlayerHeight(height) {
-  playerHeight = Math.max(HEIGHT.MIN, Math.min(HEIGHT.MAX, height));
+  playerState.height = Math.max(HEIGHT.MIN, Math.min(HEIGHT.MAX, height));
 }
 
 export function getPlayerHeight() {
-  return playerHeight;
+  return playerState.height;
 }
+
+// Event handlers - defined outside to avoid recreation
+const gameControlHandlers = {
+  keyDown: null,
+  keyUp: null,
+  preventDefaults: null,
+};
 
 export function initPlayerControls() {
   // Clean up existing handlers
-  if (window._gameControlsHandlers) {
-    const handlers = window._gameControlsHandlers;
-    window.removeEventListener("keydown", handlers.keyDown);
-    window.removeEventListener("keyup", handlers.keyUp);
-    document.removeEventListener("keydown", handlers.preventDefaults, {
-      capture: true,
-    });
-    document.removeEventListener("keyup", handlers.preventDefaults, {
-      capture: true,
-    });
-    document.removeEventListener("contextmenu", handlers.preventDefaults);
-  }
+  disposePlayerControls();
 
-  // Base controls object
-  const controls = {
+  // Base controls object - reuse if possible
+  const controls = playerState.controls || {
     keysPressed: {},
     currentVelocity: 0,
     currentVerticalVelocity: 0,
@@ -195,13 +202,13 @@ export function initPlayerControls() {
     mobileAltitudeChange: 0,
     isArrived: false,
     lastHoverOffset: 0,
-    lastHoverTime: performance.now() / 1000, // Added to track hover time consistently
+    lastHoverTime: performance.now() / 1000,
   };
 
-  // Event handlers
+  // Define handlers only once
   const isGameActive = () => window.isGameViewActive?.();
 
-  const handleKeyDown = (e) => {
+  gameControlHandlers.keyDown = (e) => {
     if (isGameActive() && CONTROL_KEYS.includes(e.code)) {
       e.preventDefault();
       e.stopPropagation();
@@ -217,7 +224,7 @@ export function initPlayerControls() {
     }
   };
 
-  const handleKeyUp = (e) => {
+  gameControlHandlers.keyUp = (e) => {
     if (isGameActive() && CONTROL_KEYS.includes(e.code)) {
       e.preventDefault();
       e.stopPropagation();
@@ -226,7 +233,7 @@ export function initPlayerControls() {
     }
   };
 
-  const preventBrowserShortcuts = (e) => {
+  gameControlHandlers.preventDefaults = (e) => {
     if (
       isGameActive() &&
       (e.type === "contextmenu" || CONTROL_KEYS.includes(e.code))
@@ -236,23 +243,20 @@ export function initPlayerControls() {
     }
   };
 
-  // Store handlers
-  window._gameControlsHandlers = {
-    keyDown: handleKeyDown,
-    keyUp: handleKeyUp,
-    preventDefaults: preventBrowserShortcuts,
-  };
-
   // Add event listeners
-  window.addEventListener("keydown", handleKeyDown, { capture: true });
-  window.addEventListener("keyup", handleKeyUp, { capture: true });
-  document.addEventListener("keydown", preventBrowserShortcuts, {
+  window.addEventListener("keydown", gameControlHandlers.keyDown, {
     capture: true,
   });
-  document.addEventListener("keyup", preventBrowserShortcuts, {
+  window.addEventListener("keyup", gameControlHandlers.keyUp, {
     capture: true,
   });
-  document.addEventListener("contextmenu", preventBrowserShortcuts);
+  document.addEventListener("keydown", gameControlHandlers.preventDefaults, {
+    capture: true,
+  });
+  document.addEventListener("keyup", gameControlHandlers.preventDefaults, {
+    capture: true,
+  });
+  document.addEventListener("contextmenu", gameControlHandlers.preventDefaults);
 
   // Make canvas focusable
   const gameCanvas = document.getElementById("main-game-canvas");
@@ -261,13 +265,12 @@ export function initPlayerControls() {
     gameCanvas.addEventListener("click", () => gameCanvas.focus());
   }
 
-  // Build controls object with methods
-  playerControls = {
-    ...controls,
-    update: (deltaTime) => updatePlayerMovement(deltaTime),
+  // Methods object - simplified to avoid duplicating functions
+  const controlMethods = {
+    update: updatePlayerMovement,
     updateCamera,
     startOrientationReset,
-    updateOrientationReset: (deltaTime) => updateOrientationReset(deltaTime),
+    updateOrientationReset,
     getDebugInfo: () => ({
       keysPressed: Object.keys(controls.keysPressed).filter(
         (key) => controls.keysPressed[key]
@@ -275,71 +278,63 @@ export function initPlayerControls() {
       velocity: controls.currentVelocity,
       verticalVelocity: controls.currentVerticalVelocity,
       turnRate: controls.currentTurnRate,
-      position: playerModel
+      position: playerState.model
         ? [
-            playerModel.position.x,
-            playerModel.position.y,
-            playerModel.position.z,
+            playerState.model.position.x,
+            playerState.model.position.y,
+            playerState.model.position.z,
           ]
         : null,
       direction: controls.cardinalDirection,
     }),
-    dispose: () => {
-      const handlers = window._gameControlsHandlers;
-      window.removeEventListener("keydown", handlers.keyDown, {
-        capture: true,
-      });
-      window.removeEventListener("keyup", handlers.keyUp, { capture: true });
-      document.removeEventListener("keydown", handlers.preventDefaults, {
-        capture: true,
-      });
-      document.removeEventListener("keyup", handlers.preventDefaults, {
-        capture: true,
-      });
-      document.removeEventListener("contextmenu", handlers.preventDefaults);
-    },
   };
 
-  return playerControls;
+  // Store the combined object
+  playerState.controls = Object.assign(controls, controlMethods);
+  return playerState.controls;
 }
 
 export function updatePlayerMovement(deltaTime) {
-  if (!playerModel || !playerControls) return false;
-  if (window.isGameViewActive && !window.isGameViewActive()) return false;
-  if (playerControls.resetOrientationInProgress) return false;
+  const model = playerState.model;
+  const controls = playerState.controls;
 
-  // Get directional vector
-  const shipForward = new Vector3(0, 0, -1)
-    .applyQuaternion(playerControls.shipYawRotation)
+  if (!model || !controls) return false;
+  if (window.isGameViewActive && !window.isGameViewActive()) return false;
+  if (controls.resetOrientationInProgress) return false;
+
+  // Reuse cached _vector for ship forward direction instead of creating new
+  const shipForward = _vector
+    .set(0, 0, -1)
+    .applyQuaternion(controls.shipYawRotation)
     .normalize();
 
-  if (playerControls.lastPosition) {
-    const current = playerModel.position.clone();
+  if (controls.lastPosition) {
     if (
-      current.distanceTo(playerControls.lastPosition) > 5 &&
-      playerControls.isArrived
+      model.position.distanceTo(controls.lastPosition) > 5 &&
+      controls.isArrived
     ) {
-      playerControls.isArrived = false;
+      controls.isArrived = false;
     }
+  } else {
+    controls.lastPosition = new Vector3();
   }
-  playerControls.lastPosition = playerModel.position.clone();
+  controls.lastPosition.copy(model.position);
 
-  // Movement vector
+  // Create a movement vector to store all changes
   const moveVector = new Vector3(0, 0, 0);
-  const keys = playerControls.keysPressed;
-  const speedMult = playerControls.speedMultiplier;
+  const keys = controls.keysPressed;
+  const speedMult = controls.speedMultiplier;
 
   // Process different movement types
   processForwardMovement(keys, speedMult, deltaTime, moveVector, shipForward);
   processVerticalMovement(keys, speedMult, deltaTime, moveVector);
-  processTurning(keys, speedMult, deltaTime); // Removed moveVector parameter to match original behavior
+  processTurning(keys, speedMult, deltaTime);
 
   // Apply position change
-  if (!moveVector.equals(new Vector3(0, 0, 0))) {
-    // Removed console.log to prevent performance spikes
-    playerModel.position.add(moveVector);
-    setPlayerHeight(playerModel.position.y);
-    if (playerControls.isArrived) playerControls.isArrived = false;
+  if (!moveVector.equals(VEC_3_ZERO)) {
+    model.position.add(moveVector);
+    setPlayerHeight(model.position.y);
+    if (controls.isArrived) controls.isArrived = false;
   }
 
   // Update ship tilt
@@ -358,28 +353,34 @@ function processForwardMovement(
   moveVector,
   shipForward
 ) {
+  const controls = playerState.controls;
   const maxSpeed = SHIP.MAX_SPEED * speedMult * deltaTime;
   const acceleration = SHIP.ACCELERATION * speedMult * deltaTime;
   const deceleration = SHIP.DECELERATION * speedMult * deltaTime;
 
   const movingForward =
-    keys["ArrowUp"] || keys["KeyW"] || playerControls.mobileMovementY > 0.2;
+    keys["ArrowUp"] ||
+    keys["KeyW"] ||
+    controls.mobileMovementY > MOBILE_MOVE_THRESHOLD;
   const movingBackward =
-    keys["ArrowDown"] || keys["KeyS"] || playerControls.mobileMovementY < -0.2;
+    keys["ArrowDown"] ||
+    keys["KeyS"] ||
+    controls.mobileMovementY < -MOBILE_MOVE_THRESHOLD;
 
-  let velocity = playerControls.currentVelocity;
-
+  let velocity = controls.currentVelocity;
   if (movingForward) {
     const inputStrength = Math.max(
       keys["ArrowUp"] || keys["KeyW"] ? 1 : 0,
-      playerControls.mobileMovementY > 0.2 ? playerControls.mobileMovementY : 0
+      controls.mobileMovementY > MOBILE_MOVE_THRESHOLD
+        ? controls.mobileMovementY
+        : 0
     );
     velocity = Math.min(maxSpeed * inputStrength, velocity + acceleration);
   } else if (movingBackward) {
     const inputStrength = Math.max(
       keys["ArrowDown"] || keys["KeyS"] ? 1 : 0,
-      playerControls.mobileMovementY < -0.2
-        ? -playerControls.mobileMovementY
+      controls.mobileMovementY < -MOBILE_MOVE_THRESHOLD
+        ? -controls.mobileMovementY
         : 0
     );
     velocity = Math.max(-maxSpeed * inputStrength, velocity - acceleration);
@@ -392,36 +393,41 @@ function processForwardMovement(
         : velocity + deceleration;
   }
 
-  playerControls.currentVelocity = velocity;
+  controls.currentVelocity = velocity;
   if (velocity !== 0) {
-    moveVector.add(shipForward.clone().multiplyScalar(velocity));
+    // Use _tempVector for calculations to avoid creating new objects
+    _tempVector.copy(shipForward).multiplyScalar(velocity);
+    moveVector.add(_tempVector);
   }
 }
 
 function processVerticalMovement(keys, speedMult, deltaTime, moveVector) {
+  const model = playerState.model;
+  const controls = playerState.controls;
+
   const vertMaxSpeed = SHIP.VERTICAL_MAX_SPEED * speedMult * deltaTime;
   const vertAccel = SHIP.VERTICAL_ACCELERATION * speedMult * deltaTime;
   const vertDecel = SHIP.VERTICAL_DECELERATION * speedMult * deltaTime;
 
   const movingUp =
-    (keys["Space"] || playerControls.mobileAltitudeChange > 0) &&
-    playerModel.position.y < HEIGHT.MAX;
+    (keys["Space"] || controls.mobileAltitudeChange > 0) &&
+    model.position.y < HEIGHT.MAX;
   const movingDown =
     (keys["ShiftLeft"] ||
       keys["ShiftRight"] ||
-      playerControls.mobileAltitudeChange < 0) &&
-    playerModel.position.y > HEIGHT.MIN;
+      controls.mobileAltitudeChange < 0) &&
+    model.position.y > HEIGHT.MIN;
 
-  let vertVelocity = playerControls.currentVerticalVelocity;
-  const velocity = playerControls.currentVelocity;
+  let vertVelocity = controls.currentVerticalVelocity;
+  const velocity = controls.currentVelocity;
 
   if (movingUp) {
     vertVelocity = Math.min(vertMaxSpeed, vertVelocity + vertAccel);
-    playerControls.targetPitch =
+    controls.targetPitch =
       velocity > 0 ? SHIP.TILT_AMOUNT : velocity < 0 ? -SHIP.TILT_AMOUNT : 0;
   } else if (movingDown) {
     vertVelocity = Math.max(-vertMaxSpeed, vertVelocity - vertAccel);
-    playerControls.targetPitch =
+    controls.targetPitch =
       velocity > 0 ? -SHIP.TILT_AMOUNT : velocity < 0 ? SHIP.TILT_AMOUNT : 0;
   } else {
     vertVelocity =
@@ -430,54 +436,63 @@ function processVerticalMovement(keys, speedMult, deltaTime, moveVector) {
         : vertVelocity > 0
         ? vertVelocity - vertDecel
         : vertVelocity + vertDecel;
-    playerControls.targetPitch = 0;
+    controls.targetPitch = 0;
   }
 
   // Enforce height limits
   if (
-    (playerModel.position.y >= HEIGHT.MAX && vertVelocity > 0) ||
-    (playerModel.position.y <= HEIGHT.MIN && vertVelocity < 0)
+    (model.position.y >= HEIGHT.MAX && vertVelocity > 0) ||
+    (model.position.y <= HEIGHT.MIN && vertVelocity < 0)
   ) {
     vertVelocity = 0;
   }
 
-  playerControls.currentVerticalVelocity = vertVelocity;
+  controls.currentVerticalVelocity = vertVelocity;
 
   if (vertVelocity !== 0) {
-    const nextHeight = playerModel.position.y + vertVelocity;
+    const nextHeight = model.position.y + vertVelocity;
     moveVector.y =
       nextHeight > HEIGHT.MAX
-        ? HEIGHT.MAX - playerModel.position.y
+        ? HEIGHT.MAX - model.position.y
         : nextHeight < HEIGHT.MIN
-        ? HEIGHT.MIN - playerModel.position.y
+        ? HEIGHT.MIN - model.position.y
         : vertVelocity;
   }
 }
 
-function processTurning(keys, speedMult, deltaTime, moveVector, shipForward) {
+function processTurning(keys, speedMult, deltaTime) {
+  const model = playerState.model;
+  const controls = playerState.controls;
+
   const turnAccel = 0.15 * speedMult * deltaTime;
   const maxTurnRate = SHIP.ROTATION_SPEED * speedMult * deltaTime;
   const turnDecel = 0.15 * speedMult * deltaTime;
 
   const turningLeft =
-    keys["ArrowLeft"] || keys["KeyA"] || playerControls.mobileMovementX < -0.2;
+    keys["ArrowLeft"] ||
+    keys["KeyA"] ||
+    controls.mobileMovementX < -MOBILE_MOVE_THRESHOLD;
   const turningRight =
-    keys["ArrowRight"] || keys["KeyD"] || playerControls.mobileMovementX > 0.2;
+    keys["ArrowRight"] ||
+    keys["KeyD"] ||
+    controls.mobileMovementX > MOBILE_MOVE_THRESHOLD;
 
-  let turnRate = playerControls.currentTurnRate;
+  let turnRate = controls.currentTurnRate;
 
   if (turningLeft) {
     const inputStrength = Math.max(
       keys["ArrowLeft"] || keys["KeyA"] ? 1 : 0,
-      playerControls.mobileMovementX < -0.2
-        ? -playerControls.mobileMovementX
+      controls.mobileMovementX < -MOBILE_MOVE_THRESHOLD
+        ? -controls.mobileMovementX
         : 0
     );
     turnRate = Math.min(maxTurnRate * inputStrength, turnRate + turnAccel);
   } else if (turningRight) {
     const inputStrength = Math.max(
       keys["ArrowRight"] || keys["KeyD"] ? 1 : 0,
-      playerControls.mobileMovementX > 0.2 ? playerControls.mobileMovementX : 0
+      controls.mobileMovementX > MOBILE_MOVE_THRESHOLD
+        ? controls.mobileMovementX
+        : 0
     );
     turnRate = Math.max(-maxTurnRate * inputStrength, turnRate - turnAccel);
   } else {
@@ -489,51 +504,45 @@ function processTurning(keys, speedMult, deltaTime, moveVector, shipForward) {
         : turnRate + turnDecel;
   }
 
-  playerControls.currentTurnRate = turnRate;
+  controls.currentTurnRate = turnRate;
 
   if (turnRate !== 0) {
-    if (playerControls.isArrived) playerControls.isArrived = false;
+    if (controls.isArrived) controls.isArrived = false;
 
-    const rotationY = new Quaternion().setFromAxisAngle(
-      new Vector3(0, 1, 0),
-      turnRate
-    );
-    playerModel.quaternion.premultiply(rotationY);
-    playerControls.shipYawRotation.premultiply(rotationY);
-    playerControls.cardinalDirection = calculateCardinalDirection(
-      playerModel.rotation.y
-    );
-
-    // Removed sideways movement during turning to match original behavior
+    // Reuse quaternion instead of creating new
+    _quaternion.setFromAxisAngle(new Vector3(0, 1, 0), turnRate);
+    model.quaternion.premultiply(_quaternion);
+    controls.shipYawRotation.premultiply(_quaternion);
+    controls.cardinalDirection = calculateCardinalDirection(model.rotation.y);
   }
 }
 
 function updateShipTilt(speedMult, deltaTime) {
+  const model = playerState.model;
+  const controls = playerState.controls;
+
   const tiltSpeed = SHIP.TILT_SPEED * speedMult * deltaTime;
   const newPitch =
-    playerControls.currentPitch +
-    (playerControls.targetPitch - playerControls.currentPitch) * tiltSpeed;
-  playerControls.currentPitch = newPitch;
+    controls.currentPitch +
+    (controls.targetPitch - controls.currentPitch) * tiltSpeed;
+  controls.currentPitch = newPitch;
 
-  const euler = new Euler().setFromQuaternion(
-    playerControls.shipYawRotation,
-    "YXZ"
-  );
-  playerModel.quaternion.copy(
-    new Quaternion().setFromEuler(new Euler(newPitch, euler.y, 0, "YXZ"))
-  );
+  // Reuse euler variable instead of creating new
+  _euler.setFromQuaternion(controls.shipYawRotation, "YXZ");
+  model.quaternion.setFromEuler(new Euler(newPitch, _euler.y, 0, "YXZ"));
 
   // Update cardinal direction
-  playerControls.cardinalDirection = calculateCardinalDirection(
-    playerModel.rotation.y
-  );
+  controls.cardinalDirection = calculateCardinalDirection(model.rotation.y);
 }
 
 function applyHoverEffect(deltaTime) {
+  const model = playerState.model;
+  const controls = playerState.controls;
+
   // Use delta time for consistent hover effect regardless of frame rate
   const currentTime = performance.now() / 1000;
-  const timeDelta = currentTime - playerControls.lastHoverTime;
-  playerControls.lastHoverTime = currentTime;
+  const timeDelta = currentTime - controls.lastHoverTime;
+  controls.lastHoverTime = currentTime;
 
   // Calculate hover with delta time to ensure consistent speed
   const hoverSpeed = 0.5 * Math.PI * 2; // Complete cycle every 2 seconds
@@ -541,92 +550,121 @@ function applyHoverEffect(deltaTime) {
   const newHoverOffset = Math.sin(hoverPhase) * 0.03;
 
   // Get base height without hover effect
-  const baseHeight = playerModel.position.y - playerControls.lastHoverOffset;
+  const baseHeight = model.position.y - controls.lastHoverOffset;
 
   // Apply new hover offset
-  playerModel.position.y = baseHeight + newHoverOffset;
-  playerControls.lastHoverOffset = newHoverOffset;
+  model.position.y = baseHeight + newHoverOffset;
+  controls.lastHoverOffset = newHoverOffset;
 }
 
 export function startOrientationReset() {
-  if (!playerModel || !playerControls) return;
+  const model = playerState.model;
+  const controls = playerState.controls;
 
-  playerControls.resetOrientationInProgress = true;
-  playerControls.originalOrientation = playerModel.quaternion.clone();
-  playerControls.currentTurnRate = 0;
+  if (!model || !controls) return;
+
+  controls.resetOrientationInProgress = true;
+  controls.originalOrientation.copy(model.quaternion);
+  controls.currentTurnRate = 0;
 }
 
 export function updateOrientationReset(deltaTime) {
-  if (!playerModel || !playerControls?.resetOrientationInProgress) return false;
+  const model = playerState.model;
+  const controls = playerState.controls;
+
+  if (!model || !controls?.resetOrientationInProgress) return false;
 
   const resetSpeed = SHIP.ORIENTATION_RESET_SPEED * (deltaTime / 1000);
-  const levelOrientation = getLevelOrientation(playerModel.quaternion);
 
-  playerModel.quaternion.slerp(levelOrientation, resetSpeed);
-  playerControls.shipYawRotation = levelOrientation.clone();
+  // Use shared quaternion instead of creating a new one
+  getLevelOrientation(model.quaternion);
+  const levelOrientation = _quaternion;
 
-  if (playerModel.quaternion.angleTo(levelOrientation) < 0.01) {
-    playerControls.resetOrientationInProgress = false;
-    playerModel.quaternion.copy(levelOrientation);
-    playerControls.shipYawRotation = levelOrientation.clone();
-    playerControls.currentPitch = 0;
-    playerControls.targetPitch = 0;
-    playerControls.cardinalDirection = calculateCardinalDirection(
-      playerModel.rotation.y
-    );
+  model.quaternion.slerp(levelOrientation, resetSpeed);
+  controls.shipYawRotation.copy(levelOrientation);
+
+  if (model.quaternion.angleTo(levelOrientation) < 0.01) {
+    controls.resetOrientationInProgress = false;
+    model.quaternion.copy(levelOrientation);
+    controls.shipYawRotation.copy(levelOrientation);
+    controls.currentPitch = 0;
+    controls.targetPitch = 0;
+    controls.cardinalDirection = calculateCardinalDirection(model.rotation.y);
   }
 
   return true;
 }
 
 export function updateCamera(camera) {
-  if (!playerModel || !playerControls || !camera) return;
+  const model = playerState.model;
+  const controls = playerState.controls;
 
-  const useRotation = playerControls.resetOrientationInProgress
-    ? playerModel.quaternion
-    : playerControls.shipYawRotation;
+  if (!model || !controls || !camera) return;
 
-  const shipForward = new Vector3(0, 0, -1)
-    .applyQuaternion(useRotation)
-    .normalize();
-  const shipUp = new Vector3(0, 1, 0);
+  const useRotation = controls.resetOrientationInProgress
+    ? model.quaternion
+    : controls.shipYawRotation;
 
-  camera.position.copy(
-    playerModel.position
-      .clone()
-      .add(shipForward.clone().multiplyScalar(-CAMERA.DISTANCE))
-      .add(shipUp.clone().multiplyScalar(CAMERA.HEIGHT))
-  );
+  // Reuse vectors instead of creating new ones
+  _vector.set(0, 0, -1).applyQuaternion(useRotation).normalize();
+  const shipForward = _vector;
 
-  camera.lookAt(
-    playerModel.position
-      .clone()
-      .add(shipForward.clone().multiplyScalar(CAMERA.LOOK_AHEAD))
-  );
+  // Calculate camera position
+  camera.position
+    .copy(model.position)
+    .add(shipForward.clone().multiplyScalar(-CAMERA.DISTANCE))
+    .add(new Vector3(0, CAMERA.HEIGHT, 0));
+
+  // Calculate look target
+  _vector
+    .copy(model.position)
+    .add(shipForward.multiplyScalar(CAMERA.LOOK_AHEAD));
+  camera.lookAt(_vector);
 }
 
 export function setMobileMovement(x, y) {
-  if (!playerControls) return;
-  playerControls.mobileMovementX = x;
-  playerControls.mobileMovementY = y;
+  if (!playerState.controls) return;
+  playerState.controls.mobileMovementX = x;
+  playerState.controls.mobileMovementY = y;
 }
 
 export function setMobileAltitudeChange(change) {
-  if (!playerControls) return;
-  playerControls.mobileAltitudeChange = change;
-  if (change !== 0 && playerControls.isArrived) {
-    playerControls.isArrived = false;
+  if (!playerState.controls) return;
+  playerState.controls.mobileAltitudeChange = change;
+  if (change !== 0 && playerState.controls.isArrived) {
+    playerState.controls.isArrived = false;
   }
 }
 
 export function disposePlayerControls() {
-  if (playerControls?.dispose) playerControls.dispose();
-  playerControls = null;
+  if (!playerState.controls) return;
+
+  // Remove event listeners
+  if (gameControlHandlers.keyDown) {
+    window.removeEventListener("keydown", gameControlHandlers.keyDown, {
+      capture: true,
+    });
+    window.removeEventListener("keyup", gameControlHandlers.keyUp, {
+      capture: true,
+    });
+    document.removeEventListener(
+      "keydown",
+      gameControlHandlers.preventDefaults,
+      { capture: true }
+    );
+    document.removeEventListener("keyup", gameControlHandlers.preventDefaults, {
+      capture: true,
+    });
+    document.removeEventListener(
+      "contextmenu",
+      gameControlHandlers.preventDefaults
+    );
+  }
 }
 
 export function updatePlayer(deltaTime) {
-  if (playerControls) {
-    playerControls.resetOrientationInProgress
+  if (playerState.controls) {
+    playerState.controls.resetOrientationInProgress
       ? updateOrientationReset(deltaTime)
       : updatePlayerMovement(deltaTime);
   }

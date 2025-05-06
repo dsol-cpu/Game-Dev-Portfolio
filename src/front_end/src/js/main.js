@@ -39,7 +39,9 @@ function initializeApp() {
 
   initProjectCards();
   // Only initialize the ThreeJS scenes and models if you don't have a doodoo computer
-  if (!isLowPoweredDevice()) {
+  if (isLowPoweredDevice()) {
+    document.getElementById("view-toggle-btn").style.display = "none";
+  } else {
     initThreeJSManager();
     initPortfolioCanvases();
     initProjectCardScene();

@@ -1,4 +1,3 @@
-// DeltaTimeMetrics.js
 import { TimeManager } from "./time-manager.js";
 
 export function createDeltaTimeMetricsOverlay() {
@@ -18,11 +17,9 @@ export function createDeltaTimeMetricsOverlay() {
   container.style.flexDirection = "column";
   container.style.alignItems = "flex-start";
 
-  // Create text info area
   const info = document.createElement("div");
   info.style.marginBottom = "4px";
 
-  // Create canvas graph
   const canvas = document.createElement("canvas");
   canvas.width = 200;
   canvas.height = 60;
@@ -32,22 +29,26 @@ export function createDeltaTimeMetricsOverlay() {
   container.appendChild(canvas);
   document.body.appendChild(container);
 
+  // For drawing FPS history instead of delta times
+  const fpsHistory = [];
+  const maxHistory = 60;
+
   function drawGraph(data, color = "#0f0") {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (!data || data.length === 0) return;
 
-    const maxValue = Math.max(...data, 16.667); // Keep scale reasonable
-    const scaleY = canvas.height / (maxValue * 1.2); // Add headroom
+    const maxValue = Math.max(...data, 60);
+    const scaleY = canvas.height / (maxValue * 1.2); // headroom
+    const step = canvas.width / (data.length - 1);
 
     ctx.beginPath();
     ctx.strokeStyle = color;
     ctx.lineWidth = 1;
 
-    const step = canvas.width / (data.length - 1);
     data.forEach((val, i) => {
       const x = i * step;
       const y = canvas.height - val * scaleY;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     });
 
     ctx.stroke();
@@ -55,21 +56,31 @@ export function createDeltaTimeMetricsOverlay() {
 
   function updateOverlay() {
     const metrics = TimeManager.getPerformanceMetrics();
+    if (!metrics || metrics.error) {
+      info.innerHTML = `<b>Δt Metrics</b><br/>Unavailable`;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
 
-    const latestRaw = metrics.rawDeltaHistory.at(-1) || 0;
-    const latestSmooth = metrics.smoothedDeltaHistory.at(-1) || 0;
+    // Update FPS history
+    if (typeof metrics.fps === "number") {
+      fpsHistory.push(metrics.fps);
+      if (fpsHistory.length > maxHistory) fpsHistory.shift();
+    }
 
     info.innerHTML = `
-      <b>Δt Metrics</b> | FPS: ${metrics.fps}<br/>
-      Raw: ${latestRaw.toFixed(2)} ms<br/>
-      Smoothed: ${latestSmooth.toFixed(2)} ms<br/>
-      Idle: ${metrics.isIdle ? "Yes" : "No"} | Focus: ${
-      metrics.hasFocus ? "Yes" : "No"
+      <b>Δt Metrics</b> | FPS: ${metrics.fps?.toFixed(1) || "N/A"}<br/>
+      Focus: ${metrics.hasFocus ? "Yes" : "No"} | Idle: ${
+      metrics.isIdle ? "Yes" : "No"
+    }<br/>
+      Drift: ${metrics.driftDetected ? "Yes" : "No"}<br/>
+      Target FPS: ${metrics.targetFPS} | Frame Capping: ${
+      metrics.frameCapping ? "Yes" : "No"
     }
     `;
 
-    drawGraph(metrics.smoothedDeltaHistory, "#0f0");
+    drawGraph(fpsHistory, "#0f0");
   }
 
-  setInterval(updateOverlay, 250); // Update every 250ms
+  setInterval(updateOverlay, 250);
 }

@@ -265,6 +265,28 @@ export async function setupProjectCamera(item) {
     const cameraIndex = registerCamera(camera, controls, ctx, metadata, true);
     canvas._cameraIndex = cameraIndex;
 
+    // Store reference to original parent item for isolation
+    if (camera) {
+      camera.userData = camera.userData || {};
+      camera.userData.parentElement = item;
+    }
+
+    // Add event listeners to handle details expansion
+    const detailsButton = item.querySelector(
+      '.details-button, .show-details, [data-action="show-details"]'
+    );
+    if (detailsButton) {
+      detailsButton.addEventListener(
+        "click",
+        () => {
+          // Force redraw of only this camera
+          forceRedraw(cameraIndex);
+          handleUserInteraction();
+        },
+        { passive: true }
+      );
+    }
+
     // Return camera index for reference
     return cameraIndex;
   } catch (e) {
