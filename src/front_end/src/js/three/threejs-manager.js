@@ -1,5 +1,5 @@
 /**
- * Ultra-compact ThreeJS manager with zero overhead - Optimized Version
+ * Ultra-compact ThreeJS manager with zero overhead
  */
 import {
   AmbientLight,
@@ -15,15 +15,12 @@ import { TimeManager } from "./time-manager.js";
 // CORE CONSTANTS
 const MAX_CAMERAS = 32;
 const VISIBILITY_THRESHOLD = 0.01;
-const BATCH_SIZE = 8; // Increased batch size for better throughput
+const BATCH_SIZE = 4;
 const MIN_DELTA_TIME = 1 / 120;
 const MAX_DELTA_TIME = 1 / 30;
 const TEMP_VEC2 = new Vector2();
-const GC_INTERVAL = 10000; // 10 seconds
-const MAINTENANCE_INTERVAL = 30000; // 30 seconds
-const IDLE_FRAME_SKIP = 4; // ~15fps when idle
 
-// PRE-ALLOCATED SINGLETON - Using Uint32Array where applicable for better alignment
+// PRE-ALLOCATED SINGLETON
 const mgr = {
   r: null, // renderer
   s: null, // scene
@@ -53,15 +50,10 @@ const mgr = {
     total: 0,
   },
   f: {
-    // flags - reduced to bitflags for memory efficiency
-    flags: 0,
-    // Flag constants
-    NEEDS_FULL_RENDER: 1,
-    HAS_ACTIVE_DRAG: 2,
+    // flags
+    needsFullRender: false,
+    hasActiveDrag: false,
   },
-  // Timestamps
-  _lastGC: 0,
-  _lastCleanup: 0,
 };
 
 /**
@@ -70,18 +62,16 @@ const mgr = {
 export function initThreeJSManager() {
   disposeThreeJSManager();
 
-  // Create renderer with optimized settings
   mgr.r = new WebGLRenderer({
     alpha: true,
-    antialias: false, // Disable antialiasing for performance
+    antialias: false,
     preserveDrawingBuffer: false,
     powerPreference: "high-performance",
-    precision: "lowp", // Use low precision for better performance
+    precision: "lowp",
     depth: true,
     stencil: false,
     logarithmicDepthBuffer: false,
     premultipliedAlpha: false,
-    failIfMajorPerformanceCaveat: true, // Fail if performance would be poor
   });
 
   const r = mgr.r;
@@ -94,15 +84,6 @@ export function initThreeJSManager() {
   r.outputEncoding = 3000;
   r.info.autoReset = false;
   r.autoClear = false;
-
-  // Explicitly disable WebGL features we don't need
-  const gl = r.getContext();
-  if (gl) {
-    gl.disable(gl.DITHER);
-    // Disable multisample antialiasing if available
-    gl.disable(gl.SAMPLE_ALPHA_TO_COVERAGE);
-    gl.disable(gl.SAMPLE_COVERAGE);
-  }
 
   // Create scene
   mgr.s = new Scene();
@@ -128,33 +109,33 @@ export function initThreeJSManager() {
   mgr.d.fill(0);
   mgr.lr.fill(0);
   mgr.n = 0;
-  mgr.f.flags = 0;
-  mgr._lastGC = 0;
-  mgr._lastCleanup = 0;
 
-  // Use passive event listeners for better performance
-  const visibilityHandler = () => {
-    document.visibilityState === "hidden"
-      ? pauseRendering()
-      : resumeRendering();
-  };
+  // Event handlers
+  document.addEventListener(
+    "visibilitychange",
+    () => {
+      document.visibilityState === "hidden"
+        ? pauseRendering()
+        : resumeRendering();
+    },
+    { passive: true }
+  );
 
-  document.addEventListener("visibilitychange", visibilityHandler, {
-    passive: true,
-  });
+  let resizing = false;
+  window.addEventListener(
+    "resize",
+    () => {
+      if (resizing) return;
+      resizing = true;
+      requestAnimationFrame(() => {
+        mgr.d.fill(1, 0, mgr.n);
+        mgr.f.needsFullRender = true;
+        resizing = false;
+      });
+    },
+    { passive: true }
+  );
 
-  // Debounced resize handler
-  let resizeTimeout;
-  const resizeHandler = () => {
-    if (resizeTimeout) return;
-    resizeTimeout = setTimeout(() => {
-      mgr.d.fill(1, 0, mgr.n);
-      mgr.f.flags |= mgr.f.NEEDS_FULL_RENDER;
-      resizeTimeout = null;
-    }, 100); // 100ms debounce
-  };
-
-  window.addEventListener("resize", resizeHandler, { passive: true });
   window.addEventListener("beforeunload", disposeThreeJSManager);
 
   // Start rendering
@@ -171,7 +152,7 @@ export function initThreeJSManager() {
 }
 
 /**
- * Register camera with optimized intersection observer
+ * Register camera
  */
 export function registerCamera(
   camera,
@@ -197,11 +178,7 @@ export function registerCamera(
   mgr.d[idx] = 1;
 
   // Optimize components
-  if (camera?.isPerspectiveCamera) {
-    camera.matrixAutoUpdate = true;
-    // Disable frustum culling if not needed
-    camera.frustumCulled = false;
-  }
+  if (camera?.isPerspectiveCamera) camera.matrixAutoUpdate = true;
 
   if (controls) {
     if ("enableDamping" in controls) {
@@ -217,8 +194,8 @@ export function registerCamera(
       keyPanSpeed: 0,
     };
 
-    for (const k in settings) {
-      if (k in controls) controls[k] = settings[k];
+    for (const [k, v] of Object.entries(settings)) {
+      if (k in controls) controls[k] = v;
     }
   }
 
@@ -226,7 +203,7 @@ export function registerCamera(
   if (context?.canvas) {
     context.canvas.style.display = active ? "block" : "none";
 
-    // Use optimized IntersectionObserver with weak references
+    // Setup observer
     const observer = new IntersectionObserver(
       (entries) => {
         const entry = entries[0];
@@ -256,18 +233,15 @@ export function registerCamera(
 }
 
 /**
- * Set camera visibility with optimized updates
+ * Set camera visibility
  */
 export function setCameraVisible(idx, visible) {
   if (idx < 0 || idx >= mgr.n) return;
 
   const prev = mgr.a[idx] === 1;
-  const newState = visible ? 1 : 0;
+  mgr.a[idx] = visible ? 1 : 0;
 
-  if (prev === !!newState) return; // No change needed
-
-  mgr.a[idx] = newState;
-  mgr.d[idx] = 1;
+  if (prev !== visible) mgr.d[idx] = 1;
 
   const ctx = mgr.x[idx];
   if (ctx?.canvas) ctx.canvas.style.display = visible ? "block" : "none";
@@ -283,31 +257,19 @@ export function isCameraActive(idx) {
 }
 
 /**
- * Update controls with consistent deltaTime - optimized control updates
+ * Update controls with consistent deltaTime
  */
 function updateControls(dt) {
-  mgr.f.flags &= ~mgr.f.HAS_ACTIVE_DRAG; // Clear flag
+  mgr.f.hasActiveDrag = false;
   let updated = false;
 
-  // Fast path: if no controls need updating, skip loop
-  let hasActiveControls = false;
-  for (let i = 0; i < mgr.n; i++) {
-    if (mgr.a[i] === 1 && mgr.v[i] === 1 && mgr.t[i]) {
-      hasActiveControls = true;
-      break;
-    }
-  }
-
-  if (!hasActiveControls) return false;
-
-  // Main loop with early termination
   for (let i = 0; i < mgr.n; i++) {
     if (mgr.a[i] !== 1 || mgr.v[i] !== 1) continue;
 
     const ctrl = mgr.t[i];
     if (!ctrl) continue;
 
-    if (ctrl._dragging) mgr.f.flags |= mgr.f.HAS_ACTIVE_DRAG;
+    if (ctrl._dragging) mgr.f.hasActiveDrag = true;
 
     if (ctrl.update) {
       ctrl.update(dt);
@@ -320,7 +282,7 @@ function updateControls(dt) {
 }
 
 /**
- * Render single camera with optimized path
+ * Render single camera
  */
 function renderCamera(idx, dt) {
   if (mgr.a[idx] !== 1 || mgr.v[idx] !== 1 || mgr.d[idx] !== 1) return false;
@@ -340,27 +302,29 @@ function renderCamera(idx, dt) {
     const r = mgr.r;
     if (!r) return false;
 
-    // Only resize if dimensions changed
-    const key = `${w},${h}`;
-    if (!mgr.dimCache.has(key)) {
-      r.setSize(w, h, false);
-      mgr.dimCache.set(key, true);
-    }
-
+    r.setSize(w, h, false);
     r.setViewport(0, 0, w, h);
     r.setScissor(0, 0, w, h);
     r.scissorTest = true;
     r.clear(true, true, false);
 
-    // Only update matrices when needed
     cam.updateMatrixWorld(true);
+    mgr.s.updateMatrixWorld(true);
 
-    // Use faster render path
     r.render(mgr.s, cam);
 
-    // Optimized image drawing
     ctx.clearRect(0, 0, w, h);
-    ctx.drawImage(r.domElement, 0, 0, w, h);
+    ctx.drawImage(
+      r.domElement,
+      0,
+      0,
+      r.domElement.width,
+      r.domElement.height,
+      0,
+      0,
+      w,
+      h
+    );
 
     mgr.lr[idx] = performance.now();
     mgr.d[idx] = 0;
@@ -368,13 +332,13 @@ function renderCamera(idx, dt) {
     mgr.metrics.total++;
 
     return true;
-  } catch (e) {
+  } catch {
     return false;
   }
 }
 
 /**
- * Batch render all cameras - optimized batching
+ * Batch render all cameras
  */
 function renderCameras(dt) {
   const r = mgr.r;
@@ -391,21 +355,6 @@ function renderCameras(dt) {
     const count = mgr.n;
     let rendered = 0;
 
-    // Quick check if any cameras need rendering
-    let needsRendering = false;
-    for (let i = 0; i < count; i++) {
-      if (mgr.a[i] === 1 && mgr.v[i] === 1 && mgr.d[i] === 1) {
-        needsRendering = true;
-        break;
-      }
-    }
-
-    if (!needsRendering) {
-      mgr.metrics.skipped++;
-      return 0;
-    }
-
-    // Optimized batching
     for (let start = 0; start < count; start += BATCH_SIZE) {
       const end = Math.min(start + BATCH_SIZE, count);
       for (let i = start; i < end; i++) {
@@ -414,23 +363,22 @@ function renderCameras(dt) {
     }
 
     r.scissorTest = false;
-    mgr.f.flags &= ~mgr.f.NEEDS_FULL_RENDER; // Clear flag
+    mgr.f.needsFullRender = false;
     r.info.reset();
 
     return mgr.metrics.rendered;
-  } catch (e) {
+  } catch {
     return 0;
   }
 }
 
 /**
- * Update FPS counter - optimized update
+ * Update FPS counter
  */
 function updateFPS(now) {
   const m = mgr.metrics;
   m.frames++;
 
-  // Only update once per second
   if (now - m.lastFpsTime >= 1000) {
     m.fps = m.frames;
     m.frames = 0;
@@ -439,40 +387,23 @@ function updateFPS(now) {
 }
 
 /**
- * Main render loop - optimized with frame skipping and priorities
+ * Main render loop
  */
 function renderLoop(ts) {
   if (!mgr.rendering) return;
 
-  const now = performance.now();
   const timeInfo = TimeManager.update(ts, "renderer");
+  const now = performance.now();
 
   // Get consistent dt and clamp
   let dt = timeInfo.deltaTime;
   dt = Math.max(MIN_DELTA_TIME, Math.min(dt, MAX_DELTA_TIME));
 
-  // Frame skipping for idle state
+  // Handle idle state
   const idle = isIdle();
-  if (idle && mgr.metrics.frames % IDLE_FRAME_SKIP !== 0) {
-    // Skip rendering but keep the loop running
-    mgr.metrics.skipped++;
-    mgr.rafId = requestAnimationFrame(renderLoop);
-    return;
-  }
-
-  // Skip if no interaction for a while and nothing is dirty
-  let hasDirty = false;
-  if (!mgr.f.flags & mgr.f.HAS_ACTIVE_DRAG) {
-    for (let i = 0; i < mgr.n; i++) {
-      if (mgr.d[i] === 1) {
-        hasDirty = true;
-        break;
-      }
-    }
-
-    if (!hasDirty && idle && now - mgr.lastTs > 500) {
-      // Nothing changed, skip frame
-      mgr.metrics.skipped++;
+  if (idle) {
+    const idleFrameSkip = 4; // ~15fps when idle
+    if (mgr.metrics.frames % idleFrameSkip !== 0) {
       mgr.rafId = requestAnimationFrame(renderLoop);
       return;
     }
@@ -482,15 +413,11 @@ function renderLoop(ts) {
   renderCameras(dt);
   updateFPS(now);
 
-  // Garbage collection and maintenance
-  if (now - mgr._lastGC > GC_INTERVAL) {
+  // Garbage collection
+  const gcInterval = 5000;
+  if (now - (mgr._lastGC || 0) > gcInterval) {
     collectGarbage();
     mgr._lastGC = now;
-  }
-
-  if (now - mgr._lastCleanup > MAINTENANCE_INTERVAL) {
-    performCleanup();
-    mgr._lastCleanup = now;
   }
 
   mgr.lastTs = ts;
@@ -498,7 +425,7 @@ function renderLoop(ts) {
 }
 
 /**
- * Start rendering with optimized initialization
+ * Start rendering
  */
 function startRendering() {
   if (mgr.rendering) return;
@@ -523,25 +450,19 @@ function pauseRendering() {
 }
 
 /**
- * Resume rendering with optimized state reset
+ * Resume rendering
  */
 function resumeRendering() {
   if (mgr.rendering) return;
 
-  // Only mark active cameras as dirty
-  for (let i = 0; i < mgr.n; i++) {
-    if (mgr.a[i] === 1 && mgr.v[i] === 1) {
-      mgr.d[i] = 1;
-    }
-  }
-
+  mgr.d.fill(1, 0, mgr.n);
   mgr.rendering = true;
   mgr.lastTs = performance.now();
   mgr.rafId = requestAnimationFrame(renderLoop);
 }
 
 /**
- * Optimized garbage collection
+ * Garbage collection
  */
 function collectGarbage(full = false) {
   if (mgr.r) {
@@ -550,25 +471,16 @@ function collectGarbage(full = false) {
 
     if (full) {
       const gl = mgr.r.getContext();
-      // More aggressive GL context cleanup
-      if (gl) {
-        gl.flush();
-        const ext = gl.getExtension("WEBGL_lose_context");
-        if (ext && full) ext.loseContext();
-      }
+      const ext = gl?.getExtension("WEBGL_lose_context");
+      if (ext) gl.flush();
     }
   }
 
-  if (full) {
-    mgr.dimCache.clear();
-
-    // Force JS garbage collection hint (not guaranteed but can help)
-    if (window.gc) window.gc();
-  }
+  if (full) mgr.dimCache.clear();
 }
 
 /**
- * Dispose a camera with optimized cleanup
+ * Dispose a camera
  */
 export function disposeCamera(idx) {
   if (idx < 0 || idx >= mgr.n) return;
@@ -578,10 +490,9 @@ export function disposeCamera(idx) {
 
   const cam = mgr.c[idx];
   if (cam?.userData?.disposables) {
-    for (let i = 0; i < cam.userData.disposables.length; i++) {
-      const item = cam.userData.disposables[i];
+    cam.userData.disposables.forEach((item) => {
       if (item?.dispose) item.dispose();
-    }
+    });
     cam.userData.disposables = [];
   }
 
@@ -603,32 +514,17 @@ export function disposeCamera(idx) {
 }
 
 /**
- * Perform maintenance with optimized compaction algorithm
+ * Perform maintenance
  */
 export function performCleanup(force = false) {
   const now = performance.now();
-  if (!force && now - mgr._lastCleanup < MAINTENANCE_INTERVAL) return;
-
-  // Fast path: check if compaction is needed
-  let hasNull = false;
-  for (let i = 0; i < mgr.n; i++) {
-    if (mgr.c[i] === null) {
-      hasNull = true;
-      break;
-    }
-  }
-
-  if (!hasNull && !force) {
-    mgr._lastCleanup = now;
-    return;
-  }
+  if (!force && now - (mgr._lastCleanup || 0) < 30000) return;
 
   // Compact arrays
   let writeIdx = 0;
   for (let i = 0; i < mgr.n; i++) {
     if (mgr.c[i] !== null) {
       if (i !== writeIdx) {
-        // Move data
         mgr.c[writeIdx] = mgr.c[i];
         mgr.t[writeIdx] = mgr.t[i];
         mgr.x[writeIdx] = mgr.x[i];
@@ -638,11 +534,9 @@ export function performCleanup(force = false) {
         mgr.d[writeIdx] = mgr.d[i];
         mgr.lr[writeIdx] = mgr.lr[i];
 
-        // Update observer references
         const obsIdx = mgr.o.findIndex((o) => o.idx === i);
         if (obsIdx >= 0) mgr.o[obsIdx].idx = writeIdx;
 
-        // Clear old slots
         mgr.c[i] = null;
         mgr.t[i] = null;
         mgr.x[i] = null;
@@ -658,18 +552,14 @@ export function performCleanup(force = false) {
 }
 
 /**
- * Complete ThreeJS cleanup with optimized resource disposal
+ * Complete ThreeJS cleanup
  */
 export function disposeThreeJSManager() {
   pauseRendering();
 
-  // Disconnect observers
-  for (let i = 0; i < mgr.o.length; i++) {
-    mgr.o[i].observer.disconnect();
-  }
+  mgr.o.forEach(({ observer }) => observer.disconnect());
   mgr.o.length = 0;
 
-  // Dispose controls
   for (let i = 0; i < mgr.n; i++) {
     const ctrl = mgr.t[i];
     if (ctrl?.dispose) ctrl.dispose();
@@ -679,7 +569,6 @@ export function disposeThreeJSManager() {
     mgr.m[i] = null;
   }
 
-  // Dispose renderer
   if (mgr.r) {
     const gl = mgr.r.getContext();
     const ext = gl?.getExtension("WEBGL_lose_context");
@@ -690,81 +579,52 @@ export function disposeThreeJSManager() {
     mgr.r = null;
   }
 
-  // Dispose scene
   if (mgr.s) {
-    const disposeQueue = [...mgr.s.children];
-
-    // Remove all children first to prevent traversal overhead
     while (mgr.s.children.length > 0) {
       mgr.s.remove(mgr.s.children[0]);
     }
 
-    // Process dispose queue efficiently
-    while (disposeQueue.length > 0) {
-      const obj = disposeQueue.pop();
+    mgr.s.traverse((obj) => {
+      if (obj.geometry?.dispose) obj.geometry.dispose();
 
-      // Add children to queue
-      if (obj.children && obj.children.length) {
-        disposeQueue.push(...obj.children);
-      }
-
-      // Dispose geometry
-      if (obj.geometry?.dispose) {
-        obj.geometry.dispose();
-        obj.geometry = null;
-      }
-
-      // Dispose material(s)
       if (obj.material) {
         const disposeMaterial = (mat) => {
           if (!mat) return;
 
           if (Array.isArray(mat)) {
-            for (let i = 0; i < mat.length; i++) {
-              disposeMaterial(mat[i]);
-            }
+            mat.forEach(disposeMaterial);
             return;
           }
 
-          // Dispose textures
-          for (const prop in mat) {
+          Object.keys(mat).forEach((prop) => {
             const val = mat[prop];
-            if (val?.isTexture) {
-              val.dispose();
-              mat[prop] = null;
-            }
-          }
+            if (val?.isTexture) val.dispose();
+          });
 
           if (mat.dispose) mat.dispose();
         };
 
         disposeMaterial(obj.material);
-        obj.material = null;
       }
 
-      // Dispose user data
       if (obj.userData?.disposables) {
-        for (let i = 0; i < obj.userData.disposables.length; i++) {
-          const item = obj.userData.disposables[i];
+        obj.userData.disposables.forEach((item) => {
           if (item?.dispose) item.dispose();
-        }
-        obj.userData.disposables = [];
+        });
       }
-    }
+    });
 
     mgr.s = null;
   }
 
   collectGarbage(true);
 
-  // Reset everything
   mgr.n = 0;
   mgr.dimCache.clear();
   mgr.a.fill(0);
   mgr.v.fill(0);
   mgr.d.fill(0);
   mgr.lr.fill(0);
-  mgr.f.flags = 0;
 
   Object.assign(mgr.metrics, {
     frames: 0,
@@ -784,7 +644,7 @@ export function getScene() {
 }
 
 /**
- * Get all registered cameras with optimized object creation
+ * Get all registered cameras
  */
 export function getAllCameras() {
   const cameras = [];

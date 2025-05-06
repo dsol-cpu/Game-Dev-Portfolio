@@ -127,6 +127,7 @@ async function loadModel(modelName) {
           models[modelName] = model;
           setupModel(model);
           resolve(model);
+          console.log(`loaded ${modelName}`);
         },
         undefined,
         (error) => {
