@@ -1,21 +1,20 @@
 /**
- * @fileoverview Player model and controls for airship (Skies of Arcadia style) - No Gravity
+ * @fileoverview Simplified Player model and controls for airship (Skies of Arcadia style) - No Gravity
  */
 
 import {
   Euler,
-  MeshPhongMaterial,
   Quaternion,
   Vector3,
   Group,
+  MeshPhongMaterial,
 } from "../extern/three/three.module.min.js";
 import { handleUserInteraction } from "../user-interaction.js";
 import { getModel } from "./model-manager.js";
 
-// Player state - single shared object
+// Player state
 const player = {
   model: null,
-  height: 10,
   velocity: 0,
   verticalVelocity: 0,
   turnRate: 0,
@@ -24,15 +23,9 @@ const player = {
   position: new Vector3(),
   orientation: new Quaternion(),
   resetInProgress: false,
-  // Properties for smooth tilting (only forward/backward like a ship)
   currentPitch: 0,
   targetPitch: 0,
 };
-
-// Reusable objects
-const tempVector = new Vector3();
-const tempEuler = new Euler();
-const tempQuaternion = new Quaternion();
 
 // Constants
 const SPEED = {
@@ -42,9 +35,9 @@ const SPEED = {
   TURN: 3.0,
   VERTICAL_MAX: 9.0,
   VERTICAL_ACCEL: 0.5,
-  VERTICAL_DECEL: 0.5, // Matches acceleration for more responsive control
-  TILT_AMOUNT: Math.PI / 30, // Subtle tilt like a sailing ship
-  TILT_SPEED: 3.0, // Slightly slower tilt for ship-like feel
+  VERTICAL_DECEL: 0.5,
+  TILT_AMOUNT: Math.PI / 30,
+  TILT_SPEED: 3.0,
   RESET_SPEED: 6.0,
 };
 
@@ -90,37 +83,36 @@ const MATERIALS = {
   }),
 };
 
+// Reusable objects
+const tempVector = new Vector3();
+const tempEuler = new Euler();
+const tempQuaternion = new Quaternion();
+
 export async function createPlayerModel() {
   if (player.model) return player.model;
 
   const ship = new Group();
-
-  // Wait for the model to load before adding it to the group
   const shipModel = await getModel("portfolioShip");
   shipModel.quaternion.identity();
   ship.add(shipModel);
   ship.position.set(0, HEIGHT.MIN, 0);
 
-  // Set initial orientation to face forward (negative Z direction)
   player.orientation = new Quaternion();
-  player.direction = "N";
 
-  // Apply initial orientation to the ship
   ship.quaternion.copy(player.orientation);
 
   player.model = ship;
   return ship;
 }
 
-/**
- * Initialize player controls
- */
 export function initPlayerControls() {
-  // Add event listeners
-  window.addEventListener("keydown", handleKeyDown, { capture: true });
-  window.addEventListener("keyup", handleKeyUp, { capture: true });
+  window.addEventListener("keydown", (e) => handleKey(e, true), {
+    capture: true,
+  });
+  window.addEventListener("keyup", (e) => handleKey(e, false), {
+    capture: true,
+  });
 
-  // Make canvas focusable
   const canvas = document.getElementById("main-game-canvas");
   if (canvas) {
     canvas.tabIndex = 1;
@@ -128,17 +120,20 @@ export function initPlayerControls() {
   }
 }
 
-/**
- * Calculate cardinal direction from rotation
- */
+function handleKey(e, isDown) {
+  if (CONTROL_KEYS.includes(e.code)) {
+    e.preventDefault();
+    e.stopPropagation();
+    handleUserInteraction(e);
+    player.keys[e.code] = isDown;
+  }
+}
+
 function getDirection(rotation) {
   const normalized = ((rotation % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
   return DIRECTIONS[Math.floor(((normalized * 180) / Math.PI + 22.5) / 45) % 8];
 }
 
-/**
- * Update player movement based on controls
- */
 export function updatePlayer(deltaTime) {
   const ship = player.model;
   if (!ship) return;
@@ -148,12 +143,16 @@ export function updatePlayer(deltaTime) {
     return;
   }
 
-  // Get ship forward direction
-  tempVector.set(0, 0, -1).applyQuaternion(player.orientation).normalize();
-  const forward = tempVector;
+  updateMovement(deltaTime);
+  updateTurning(deltaTime);
+  updateTilt(deltaTime);
 
-  // Movement vector for this frame
-  const movement = new Vector3(0, 0, 0);
+  applyTransforms(ship);
+
+  player.position.copy(ship.position);
+}
+
+function updateMovement(deltaTime) {
   const keys = player.keys;
 
   // Forward/backward movement
@@ -176,48 +175,38 @@ export function updatePlayer(deltaTime) {
     }
   }
 
-  // Apply forward movement
-  if (player.velocity !== 0) {
-    tempVector.copy(forward).multiplyScalar(player.velocity);
-    movement.add(tempVector);
-  }
-
-  // Vertical movement - no gravity, only moves when keys are pressed
+  // Vertical movement
   const vertMaxSpeed = SPEED.VERTICAL_MAX * deltaTime;
   const vertAccel = SPEED.VERTICAL_ACCEL * deltaTime;
 
-  if (keys["Space"] && ship.position.y < HEIGHT.MAX) {
+  if (keys["Space"] && player.model.position.y < HEIGHT.MAX) {
     player.verticalVelocity = Math.min(
       vertMaxSpeed,
       player.verticalVelocity + vertAccel
     );
   } else if (
     (keys["ShiftLeft"] || keys["ShiftRight"]) &&
-    ship.position.y > HEIGHT.MIN
+    player.model.position.y > HEIGHT.MIN
   ) {
     player.verticalVelocity = Math.max(
       -vertMaxSpeed,
       player.verticalVelocity - vertAccel
     );
   } else {
-    // Stop vertical movement completely when no keys are pressed - no gravity
     player.verticalVelocity = 0;
   }
 
   // Apply height limits
   if (
-    (ship.position.y >= HEIGHT.MAX && player.verticalVelocity > 0) ||
-    (ship.position.y <= HEIGHT.MIN && player.verticalVelocity < 0)
+    (player.model.position.y >= HEIGHT.MAX && player.verticalVelocity > 0) ||
+    (player.model.position.y <= HEIGHT.MIN && player.verticalVelocity < 0)
   ) {
     player.verticalVelocity = 0;
   }
+}
 
-  // Apply vertical movement
-  if (player.verticalVelocity !== 0) {
-    movement.y += player.verticalVelocity;
-  }
-
-  // Turning - ship-like turning (no roll/banking)
+function updateTurning(deltaTime) {
+  const keys = player.keys;
   const turnRate = SPEED.TURN * deltaTime;
 
   if (keys["ArrowLeft"] || keys["KeyA"]) {
@@ -228,114 +217,80 @@ export function updatePlayer(deltaTime) {
     player.turnRate = 0;
   }
 
-  // Apply turning
   if (player.turnRate !== 0) {
     tempQuaternion.setFromAxisAngle(new Vector3(0, 1, 0), player.turnRate);
     player.orientation.premultiply(tempQuaternion);
-    player.direction = getDirection(
-      tempEuler.setFromQuaternion(player.orientation, "YXZ").y
-    );
+    tempEuler.setFromQuaternion(player.orientation, "YXZ");
+    player.direction = getDirection(tempEuler.y);
   }
+}
 
-  // Set target pitch based on combined movement inputs
-  let targetPitch = 0;
-  const pitchAmount = SPEED.TILT_AMOUNT * 1.2; // Slightly increased for more noticeable effect
+function updateTilt(deltaTime) {
+  const keys = player.keys;
+  const pitchAmount = SPEED.TILT_AMOUNT * 1.2;
 
-  // Determine if we're moving horizontally
   const movingForward = keys["ArrowUp"] || keys["KeyW"] || player.velocity > 0;
   const movingBackward =
     keys["ArrowDown"] || keys["KeyS"] || player.velocity < 0;
-
-  // Determine vertical input
   const goingUp = keys["Space"];
   const goingDown = keys["ShiftLeft"] || keys["ShiftRight"];
 
-  // Calculate tilt based on combined inputs
+  // Simplified tilt logic
+  let targetPitch = 0;
+
   if (movingForward) {
-    if (goingUp) {
-      // Forward + Up = nose up
-      targetPitch = pitchAmount;
-    } else if (goingDown) {
-      // Forward + Down = nose down
-      targetPitch = -pitchAmount;
-    } else {
-      // Just forward = slight nose up
-      targetPitch = pitchAmount * 0.3;
-    }
+    targetPitch = goingUp
+      ? pitchAmount
+      : goingDown
+      ? -pitchAmount
+      : pitchAmount * 0.3;
   } else if (movingBackward) {
-    if (goingUp) {
-      // Backward + Up = nose down
-      targetPitch = -pitchAmount;
-    } else if (goingDown) {
-      // Backward + Down = nose up
-      targetPitch = pitchAmount;
-    } else {
-      // Just backward = slight nose down
-      targetPitch = -pitchAmount * 0.3;
-    }
+    targetPitch = goingUp
+      ? -pitchAmount
+      : goingDown
+      ? pitchAmount
+      : -pitchAmount * 0.3;
   } else {
-    // Not moving horizontally
-    if (goingUp) {
-      // Just up = slight nose up
-      targetPitch = -pitchAmount * 0.5;
-    } else if (goingDown) {
-      // Just down = slight nose down
-      targetPitch = pitchAmount * 0.5;
-    } else {
-      // No input = level
-      targetPitch = 0;
-    }
+    targetPitch = goingUp
+      ? -pitchAmount * 0.5
+      : goingDown
+      ? pitchAmount * 0.5
+      : 0;
   }
 
-  // Apply the calculated pitch
   player.targetPitch = targetPitch;
 
-  // Smoothly transition current pitch toward target pitch
+  // Smooth transition
   const tiltLerpFactor = Math.min(1, SPEED.TILT_SPEED * deltaTime);
   player.currentPitch +=
     (player.targetPitch - player.currentPitch) * tiltLerpFactor;
-
-  // Apply ship orientation - yaw from turning, pitch from movement
-  tempEuler.setFromQuaternion(player.orientation, "YXZ");
-
-  // Create the final quaternion for the ship model
-  ship.quaternion.setFromEuler(
-    new Euler(
-      player.currentPitch, // X axis - pitch from acceleration/deceleration
-      tempEuler.y, // Y axis - direction from turning
-      0, // Z axis - no roll for ship-like movement
-      "YXZ" // Apply in order Y, X, Z
-    )
-  );
-
-  // Apply position change
-  if (!movement.equals(new Vector3(0, 0, 0))) {
-    ship.position.add(movement);
-    // Enforce height limits
-    ship.position.y = Math.max(
-      HEIGHT.MIN,
-      Math.min(HEIGHT.MAX, ship.position.y)
-    );
-  }
-
-  // Apply hover effect VISUALLY only by creating a separate visual offset
-  // This doesn't affect the actual ship position for physics/gameplay
-  // const hoverOffset = Math.sin(performance.now() / 1000) * 0.02;
-
-  // Store the actual position
-  player.position.copy(ship.position);
-
-  // Apply visual hover effect as a temporary visual-only offset
-  // ship.position.y += hoverOffset;
 }
 
-/**
- * Reset ship orientation to level
- */
+function applyTransforms(ship) {
+  // Apply forward movement
+  if (player.velocity !== 0) {
+    tempVector.set(0, 0, -1).applyQuaternion(player.orientation).normalize();
+    tempVector.multiplyScalar(player.velocity);
+    ship.position.add(tempVector);
+  }
+
+  // Apply vertical movement
+  if (player.verticalVelocity !== 0) {
+    ship.position.y += player.verticalVelocity;
+  }
+
+  // Enforce height limits
+  ship.position.y = Math.max(HEIGHT.MIN, Math.min(HEIGHT.MAX, ship.position.y));
+
+  // Apply orientation
+  tempEuler.setFromQuaternion(player.orientation, "YXZ");
+  ship.quaternion.setFromEuler(
+    new Euler(player.currentPitch, tempEuler.y, 0, "YXZ")
+  );
+}
+
 function updateOrientationReset(deltaTime) {
   const ship = player.model;
-  if (!ship) return;
-
   const resetSpeed = SPEED.RESET_SPEED * deltaTime;
 
   // Get level orientation (only Y rotation)
@@ -348,7 +303,7 @@ function updateOrientationReset(deltaTime) {
     new Euler(player.currentPitch, tempEuler.y, 0, "YXZ")
   );
 
-  // Reset pitch values gradually
+  // Reset pitch gradually
   player.currentPitch *= 1 - resetSpeed;
   player.targetPitch = 0;
 
@@ -361,18 +316,12 @@ function updateOrientationReset(deltaTime) {
   }
 }
 
-/**
- * Start orientation reset
- */
 export function resetOrientation() {
   if (!player.model) return;
   player.resetInProgress = true;
   player.turnRate = 0;
 }
 
-/**
- * Update camera to follow player
- */
 export function updateCamera(camera) {
   const ship = player.model;
   if (!ship || !camera) return;
@@ -393,28 +342,11 @@ export function updateCamera(camera) {
   camera.lookAt(tempVector);
 }
 
-/**
- * Clean up player controls
- */
 export function disposePlayerControls() {
-  window.removeEventListener("keydown", handleKeyDown, { capture: true });
-  window.removeEventListener("keyup", handleKeyUp, { capture: true });
-}
-
-function handleKeyDown(e) {
-  if (CONTROL_KEYS.includes(e.code)) {
-    e.preventDefault();
-    e.stopPropagation();
-    handleUserInteraction(e);
-    player.keys[e.code] = true;
-  }
-}
-
-function handleKeyUp(e) {
-  if (CONTROL_KEYS.includes(e.code)) {
-    e.preventDefault();
-    e.stopPropagation();
-    handleUserInteraction(e);
-    player.keys[e.code] = false;
-  }
+  window.removeEventListener("keydown", (e) => handleKey(e, true), {
+    capture: true,
+  });
+  window.removeEventListener("keyup", (e) => handleKey(e, false), {
+    capture: true,
+  });
 }

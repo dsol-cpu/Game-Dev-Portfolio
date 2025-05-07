@@ -16,6 +16,7 @@ import { isLowPoweredDevice } from "./utils/device.js";
 import { initGame, updateIslandBobbing, updateGameLoop } from "./three/game.js";
 import { updateTime } from "./three/time-manager.js";
 import { preloadModels } from "./three/model-manager.js";
+import { createDeltaTimeMetricsOverlay } from "./three/delta-time-metrics.js";
 // Initialize on DOM load
 document.addEventListener("DOMContentLoaded", initializeApp);
 let deltaTime = 0;
@@ -42,7 +43,7 @@ async function initializeApp() {
     initProjectCardScene();
     initGame();
     if (import.meta.env.DEV) {
-      // createDeltaTimeMetricsOverlay();
+      createDeltaTimeMetricsOverlay();
     }
   }
 

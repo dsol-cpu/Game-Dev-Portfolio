@@ -1,7 +1,3 @@
-/**
- * @fileoverview Game scene with player model and camera follow
- **/
-
 import { CAMERA_SECTIONS } from "../data/sections.js";
 import {
   CylinderGeometry,
@@ -14,7 +10,7 @@ import {
 } from "../extern/three/three.module.min.js";
 import { handleUserInteraction } from "../user-interaction.js";
 import { debounce } from "../utils/helper.js";
-import { createCameraController, updateCamera } from "./camera-follow.js";
+import { initCamController, updateCamera } from "./camera-follow.js";
 import {
   createPlayerModel,
   initPlayerControls,
@@ -28,7 +24,6 @@ import {
   setCameraVisible,
 } from "./threejs-manager.js";
 
-// Constants
 const COLORS = {
   clouds: 0xffffff,
   islandSide: 0x8b4513,
@@ -36,12 +31,9 @@ const COLORS = {
   shipBody: 0x3366cc,
   shipAccent: 0x66ccff,
 };
+
 export const ISLAND_DATA = [
-  {
-    name: "Home Island",
-    position: new Vector3(0, 0, 1000),
-    section: "home",
-  },
+  { name: "Home Island", position: new Vector3(0, 0, 1000), section: "home" },
   {
     name: "Experience Island",
     position: new Vector3(912, 304, 304),
@@ -58,11 +50,10 @@ export const ISLAND_DATA = [
     section: "resume",
   },
 ];
+
 const VIEW_MODES = { SCROLL: "scroll", GAME: "game" };
 
-// Game state & objects
 let thirdPersonCamera,
-  camController,
   cameraIndex = -1,
   playerEntity,
   gameAnimationFrameId,
@@ -70,7 +61,6 @@ let thirdPersonCamera,
   islandAnimationData = [],
   cameraFollowActive = true;
 
-// Game controller state
 const gameState = {
   viewMode: VIEW_MODES.SCROLL,
   lastCanvasWidth: 0,
@@ -79,9 +69,6 @@ const gameState = {
   totalTime: 0,
 };
 
-/**
- * Initialize island bobbing animation
- */
 function initIslandBobbing(islands) {
   islands.forEach(() =>
     islandAnimationData.push({
@@ -93,9 +80,6 @@ function initIslandBobbing(islands) {
   );
 }
 
-/**
- * Update island bobbing animation
- */
 export function updateIslandBobbing(deltaTime) {
   gameState.totalTime += deltaTime;
   islands.forEach((island, i) => {
@@ -111,39 +95,36 @@ export function updateIslandBobbing(deltaTime) {
   });
 }
 
-/**
- * Initialize game scene
- */
 export async function initGameScene() {
   gameState.totalTime = 0;
   const gameScene = getScene();
 
-  // Create reusable geometries and materials
-  const cloudGeometry = new SphereGeometry(1, 7, 7),
-    cloudMaterial = new MeshStandardMaterial({
-      color: COLORS.clouds,
-      flatShading: true,
-      transparent: true,
-      opacity: 0.9,
-    }),
-    islandBaseGeometry = new CylinderGeometry(2, 1.5, 2, 8),
-    islandBaseMaterial = new MeshStandardMaterial({
-      color: COLORS.islandSide,
-      flatShading: true,
-    }),
-    islandTopGeometry = new CylinderGeometry(2, 2, 0.5, 8),
-    islandTopMaterial = new MeshStandardMaterial({
-      color: COLORS.islandTop,
-      flatShading: true,
-    });
+  const cloudGeometry = new SphereGeometry(1, 7, 7);
+  const cloudMaterial = new MeshStandardMaterial({
+    color: COLORS.clouds,
+    flatShading: true,
+    transparent: true,
+    opacity: 0.9,
+  });
 
-  // Create islands
+  const islandBaseGeometry = new CylinderGeometry(2, 1.5, 2, 8);
+  const islandBaseMaterial = new MeshStandardMaterial({
+    color: COLORS.islandSide,
+    flatShading: true,
+  });
+
+  const islandTopGeometry = new CylinderGeometry(2, 2, 0.5, 8);
+  const islandTopMaterial = new MeshStandardMaterial({
+    color: COLORS.islandTop,
+    flatShading: true,
+  });
+
   ISLAND_DATA.forEach(({ position, section, name }) => {
-    const islandGroup = new Group(),
-      baseSize = 2 + Math.random() * 0.5,
-      topSize = 2 + Math.random() * 0.5,
-      base = new Mesh(islandBaseGeometry.clone(), islandBaseMaterial),
-      top = new Mesh(islandTopGeometry.clone(), islandTopMaterial);
+    const islandGroup = new Group();
+    const baseSize = 2 + Math.random() * 0.5;
+    const topSize = 2 + Math.random() * 0.5;
+    const base = new Mesh(islandBaseGeometry.clone(), islandBaseMaterial);
+    const top = new Mesh(islandTopGeometry.clone(), islandTopMaterial);
 
     base.scale.set(baseSize / 2, 1, baseSize / 2);
     top.scale.set(topSize / 2, 1, topSize / 2);
@@ -157,10 +138,9 @@ export async function initGameScene() {
     islands.push(islandGroup);
   });
 
-  // Create clouds (reduced count for performance)
   for (let i = 0; i < 8; i++) {
-    const cloud = new Mesh(cloudGeometry.clone(), cloudMaterial),
-      scale = 0.8 + Math.random() * 1.5;
+    const cloud = new Mesh(cloudGeometry.clone(), cloudMaterial);
+    const scale = 0.8 + Math.random() * 1.5;
 
     cloud.position.set(
       (Math.random() - 0.5) * 40,
@@ -171,7 +151,6 @@ export async function initGameScene() {
     gameScene.add(cloud);
   }
 
-  // Create player
   playerEntity = await createPlayerModel();
   const homeIsland = ISLAND_DATA.find(({ section }) => section === "home");
   playerEntity.position.set(
@@ -183,24 +162,21 @@ export async function initGameScene() {
   gameScene.add(playerEntity);
   initIslandBobbing(islands);
   initPlayerControls();
-  const CAMERA_FOV = { DEFAULT_FOV: 75, NEAR: 0.1, FAR: 1000 };
 
-  // Setup camera
   thirdPersonCamera = new PerspectiveCamera(
-    CAMERA_FOV.DEFAULT_FOV,
+    75, // FOV
     window.innerWidth / window.innerHeight,
-    CAMERA_FOV.NEAR,
-    CAMERA_FOV.FAR
+    0.1, // Near
+    1000 // Far
   );
   thirdPersonCamera.position.set(0, 2, 5);
   thirdPersonCamera.lookAt(0, 2, 0);
 
-  camController = createCameraController(thirdPersonCamera, playerEntity);
+  initCamController(thirdPersonCamera, playerEntity);
 
-  // Register camera with manager
   cameraIndex = registerCamera(
     thirdPersonCamera,
-    () => cameraFollowActive && camController?.(),
+    () => cameraFollowActive,
     document.getElementById("main-game-canvas")?.getContext("2d"),
     {
       type: CAMERA_SECTIONS.GAME,
@@ -211,35 +187,23 @@ export async function initGameScene() {
   );
 }
 
-/**
- * Update game loop
- */
 export function updateGameLoop(deltaTime) {
   if (gameState.viewMode !== VIEW_MODES.GAME) return;
 
-  // Update entities
-  playerEntity && ((playerEntity.visible = true), updatePlayer(deltaTime));
-  thirdPersonCamera &&
-    playerEntity &&
-    cameraFollowActive &&
-    updateCamera(thirdPersonCamera, playerEntity, deltaTime);
-  // updateIslandBobbing(deltaTime);
+  if (playerEntity) {
+    playerEntity.visible = true;
+    updatePlayer(deltaTime);
+  }
 
-  // Update debug overlay if available
-  // updateDebugOverlay(playerEntity?.__controls || window._playerControls);
+  if (thirdPersonCamera && playerEntity && cameraFollowActive) {
+    updateCamera(deltaTime);
+  }
 
-  // Force redraw
-  cameraIndex >= 0 && isCameraActive(cameraIndex) && forceRedraw(cameraIndex);
-
-  // Apply frame capping before scheduling next frame
-  // TimeManager.applyFrameCapping().then(() => {
-  //   gameAnimationFrameId = requestAnimationFrame(updateGameLoop);
-  // });
+  if (cameraIndex >= 0 && isCameraActive(cameraIndex)) {
+    forceRedraw(cameraIndex);
+  }
 }
 
-/**
- * Toggle game view
- */
 export function toggleGameView(elements) {
   if (
     !elements?.body ||
@@ -257,18 +221,17 @@ export function toggleGameView(elements) {
     return false;
   }
 
-  // Toggle state
   gameState.viewMode =
     gameState.viewMode === VIEW_MODES.GAME
       ? VIEW_MODES.SCROLL
       : VIEW_MODES.GAME;
   const isGameView = gameState.viewMode === VIEW_MODES.GAME;
 
-  // Update camera visibility
-  cameraIndex >= 0 && setCameraVisible(cameraIndex, isGameView);
+  if (cameraIndex >= 0) {
+    setCameraVisible(cameraIndex, isGameView);
+  }
 
   if (isGameView) {
-    // Switch to game view
     elements.body.classList.add("game-mode");
     viewLabel.textContent = "Scroll View";
 
@@ -285,72 +248,66 @@ export function toggleGameView(elements) {
 
     updateGameViewSize(elements);
 
-    // Ensure camera controller is working
-    !camController &&
-      thirdPersonCamera &&
-      playerEntity &&
-      (camController = createCameraController(thirdPersonCamera, playerEntity));
+    if (thirdPersonCamera && playerEntity) {
+      initCamController(thirdPersonCamera, playerEntity);
+    }
 
     cameraFollowActive = true;
-    camController?.();
 
-    // Start game loop
-    gameAnimationFrameId && cancelAnimationFrame(gameAnimationFrameId);
+    if (gameAnimationFrameId) {
+      cancelAnimationFrame(gameAnimationFrameId);
+    }
     gameAnimationFrameId = requestAnimationFrame(updateGameLoop);
   } else {
-    // Switch to scroll view
     elements.body.classList.remove("game-mode");
     viewLabel.textContent = "Game View";
     elements.gameViewContainer.style.display = "none";
 
-    // Stop game loop
-    gameAnimationFrameId &&
-      (cancelAnimationFrame(gameAnimationFrameId),
-      (gameAnimationFrameId = null));
+    if (gameAnimationFrameId) {
+      cancelAnimationFrame(gameAnimationFrameId);
+      gameAnimationFrameId = null;
+    }
   }
 
   handleUserInteraction();
-  cameraIndex >= 0 && forceRedraw(cameraIndex);
+
+  if (cameraIndex >= 0) {
+    forceRedraw(cameraIndex);
+  }
 
   return isGameView;
 }
 
-/**
- * Update game view size
- */
 export function updateGameViewSize(elements, width, height) {
   const canvas = elements?.mainGameCanvas;
   if (!canvas) return;
 
-  // Calculate dimensions if not provided
   if (!width || !height) {
     const sidebarWidth = elements?.sidebar?.offsetWidth || 0;
     width = window.innerWidth - sidebarWidth || 1;
     height = window.innerHeight || 1;
   }
 
-  // Only update if changed
   if (canvas.width !== width || canvas.height !== height) {
     canvas.width = width;
     canvas.height = height;
     gameState.lastCanvasWidth = width;
     gameState.lastCanvasHeight = height;
 
-    thirdPersonCamera &&
-      ((thirdPersonCamera.aspect = width / height),
-      thirdPersonCamera.updateProjectionMatrix());
+    if (thirdPersonCamera) {
+      thirdPersonCamera.aspect = width / height;
+      thirdPersonCamera.updateProjectionMatrix();
+    }
 
-    cameraIndex >= 0 && forceRedraw(cameraIndex);
+    if (cameraIndex >= 0) {
+      forceRedraw(cameraIndex);
+    }
   }
 }
 
-/**
- * Initialize game module
- */
 export async function initGame() {
   if (gameState.isInitialized) return;
 
-  // Get required DOM elements
   const elements = {
     viewToggleBtn: document.getElementById("view-toggle-btn"),
     mainGameCanvas: document.getElementById("main-game-canvas"),
@@ -359,7 +316,6 @@ export async function initGame() {
     body: document.body,
   };
 
-  // Validate elements
   if (
     !elements.viewToggleBtn ||
     !elements.mainGameCanvas ||
@@ -372,21 +328,20 @@ export async function initGame() {
     return;
   }
 
-  // Initialize game
   await initGameScene();
   elements.gameViewContainer.style.display = "none";
 
-  // Set up event listeners
   elements.viewToggleBtn.addEventListener("click", () =>
     toggleGameView(elements)
   );
 
-  // Set up resize handling
   updateGameViewSize(elements);
   window.addEventListener(
     "resize",
     debounce(() => {
-      gameState.viewMode === VIEW_MODES.GAME && updateGameViewSize(elements);
+      if (gameState.viewMode === VIEW_MODES.GAME) {
+        updateGameViewSize(elements);
+      }
     }, 200)
   );
 

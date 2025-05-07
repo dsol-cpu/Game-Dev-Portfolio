@@ -11,16 +11,10 @@ mod constants;
 mod types;
 mod schemas;
 
-// CORS configuration function
 fn configure_cors() -> Cors {
     Cors::default()
         .allowed_origin_fn(|origin, _req_head| {
-            // Allow requests from localhost on any port (for development)
-            if let Ok(o) = origin.to_str() {
-                o.starts_with("http://localhost:")
-            } else {
-                false
-            }
+            if let Ok(o) = origin.to_str() { o.starts_with("http://localhost:") } else { false }
         })
         .allowed_methods(vec!["GET", "POST"])
         .allowed_headers(

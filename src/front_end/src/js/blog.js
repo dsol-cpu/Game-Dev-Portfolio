@@ -1,4 +1,4 @@
-import fallback from "/images/me.png";
+import fallback from "/images/you_can_do_it.jpeg";
 
 const BlogTag = Object.freeze({
   GENERAL: "General",

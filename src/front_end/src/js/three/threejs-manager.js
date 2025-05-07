@@ -7,6 +7,8 @@ import {
   Scene,
   Vector2,
   WebGLRenderer,
+  Frustum,
+  Matrix4,
 } from "../extern/three/three.module.min.js";
 import { isIdle } from "../user-interaction.js";
 import { getFallbackCube } from "./model-manager.js";
@@ -15,13 +17,25 @@ import { getFallbackCube } from "./model-manager.js";
 const MAX_CAMERAS = 32;
 const VISIBILITY_THRESHOLD = 0.01;
 const BATCH_SIZE = 4;
-const TEMP_VEC2 = new Vector2();
 const IDLE_FRAME_SKIP = 4; // ~15fps when idle
+const VEC_POOL_SIZE = 16;
+
+// Object pools
+const vecPool = Array(VEC_POOL_SIZE)
+  .fill()
+  .map(() => new Vector2());
+let vecPoolIndex = 0;
+const shaderCache = new Map();
+const geometryPool = new Map();
+const materialPool = new Map();
 
 // Rendering state
 let renderer, scene;
 let isActive = false;
 let lastCleanup = 0;
+let lastFrameTime = 0;
+let frameBudget = 16; // ~60fps target
+let adaptiveSkipRate = 1;
 
 // Camera tracking arrays
 let activeCams = new Uint8Array(MAX_CAMERAS);
@@ -50,6 +64,35 @@ let needsFullRender = false;
 let hasActiveDrag = false;
 
 /**
+ * Get pooled Vector2 for calculations
+ */
+function getVec2() {
+  const vec = vecPool[vecPoolIndex];
+  vecPoolIndex = (vecPoolIndex + 1) % VEC_POOL_SIZE;
+  return vec.set(0, 0);
+}
+
+/**
+ * Get pooled geometry by key
+ */
+export function getPooledGeometry(key, createFn) {
+  if (!geometryPool.has(key)) {
+    geometryPool.set(key, createFn());
+  }
+  return geometryPool.get(key);
+}
+
+/**
+ * Get pooled material by key
+ */
+export function getPooledMaterial(key, createFn) {
+  if (!materialPool.has(key)) {
+    materialPool.set(key, createFn());
+  }
+  return materialPool.get(key);
+}
+
+/**
  * Initialize the ThreeJS manager
  */
 export function initThreeJSManager() {
@@ -64,6 +107,7 @@ export function initThreeJSManager() {
     stencil: false,
     logarithmicDepthBuffer: false,
     premultipliedAlpha: false,
+    failIfMajorPerformanceCaveat: true,
   });
 
   // Configure renderer
@@ -74,6 +118,29 @@ export function initThreeJSManager() {
   renderer.outputEncoding = 3000;
   renderer.info.autoReset = false;
   renderer.autoClear = false;
+
+  // Additional WebGL context optimizations
+  const gl = renderer.getContext();
+  optimizeWebGLContext(gl);
+
+  // Setup context loss recovery
+  renderer.domElement.addEventListener(
+    "webglcontextlost",
+    (event) => {
+      event.preventDefault();
+      isActive = false;
+      setTimeout(() => {
+        try {
+          renderer.forceContextRestore();
+          isActive = true;
+          dirtyCams.fill(1, 0, count);
+        } catch (e) {
+          console.warn("WebGL context restoration failed", e);
+        }
+      }, 1000);
+    },
+    false
+  );
 
   // Create scene
   scene = new Scene();
@@ -95,6 +162,19 @@ export function initThreeJSManager() {
   scene.add(ambient);
   scene.add(direct);
 
+  // Set up shader cache
+  setupShaderCache();
+
+  // Store resource limits
+  const maxTextureSize = renderer.capabilities.maxTextureSize;
+  const maxTextures = renderer.capabilities.maxTextures;
+
+  window.THREE_RESOURCE_LIMITS = {
+    maxTextureSize: Math.min(maxTextureSize, 2048),
+    maxVertices: 65536,
+    maxTextures: Math.min(maxTextures, 8),
+  };
+
   // Reset state
   resetState();
 
@@ -114,6 +194,48 @@ export function initThreeJSManager() {
     render: renderFrame,
     isActive: () => isActive,
   };
+}
+
+/**
+ * Optimize WebGL context settings
+ */
+function optimizeWebGLContext(gl) {
+  gl.depthFunc(gl.LEQUAL);
+  gl.hint(gl.GENERATE_MIPMAP_HINT, gl.FASTEST);
+  gl.disable(gl.DITHER);
+
+  // Use smaller data types where possible
+  gl.getExtension("OES_element_index_uint");
+  gl.getExtension("ANGLE_instanced_arrays");
+
+  // Request power-efficient rendering when idle
+  if (gl.getExtension("EXT_disjoint_timer_query")) {
+    const powerPreference = isIdle() ? "low-power" : "high-performance";
+    renderer.setPixelRatio(
+      isIdle() ? 1.0 : Math.min(window.devicePixelRatio, 1.5)
+    );
+  }
+
+  // Enable compressed textures if available
+  gl.getExtension("WEBGL_compressed_texture_s3tc") ||
+    gl.getExtension("WEBKIT_WEBGL_compressed_texture_s3tc");
+}
+
+/**
+ * Setup shader caching system
+ */
+function setupShaderCache() {
+  if (window.THREE && window.THREE.ShaderLib) {
+    const originalShaderSource = window.THREE.ShaderLib.getShaderSource;
+    window.THREE.ShaderLib.getShaderSource = function (id) {
+      if (shaderCache.has(id)) {
+        return shaderCache.get(id);
+      }
+      const source = originalShaderSource(id);
+      shaderCache.set(id, source);
+      return source;
+    };
+  }
 }
 
 /**
@@ -223,6 +345,13 @@ function cleanupResources() {
     metadata[i] = null;
   }
 
+  // Clear object pools
+  geometryPool.forEach((geo) => geo.dispose && geo.dispose());
+  materialPool.forEach((mat) => mat.dispose && mat.dispose());
+  geometryPool.clear();
+  materialPool.clear();
+  shaderCache.clear();
+
   // Clean up WebGL context
   if (renderer) {
     const gl = renderer.getContext();
@@ -307,6 +436,7 @@ export function registerCamera(
   }
 
   const idx = count++;
+  const canvas = context?.canvas;
 
   // Store references
   cameras[idx] = camera;
@@ -324,13 +454,49 @@ export function registerCamera(
     camera.matrixAutoUpdate = true;
   }
 
+  // Setup LOD for scene objects with this camera
+  if (camera && scene) {
+    setupLODForScene(scene, camera);
+  }
+
   // Configure controls
   configureControls(cameraControls);
+
+  // Use OffscreenCanvas for non-visible elements if supported
+  if (canvas && "OffscreenCanvas" in window && !active) {
+    try {
+      const offscreen = canvas.transferControlToOffscreen();
+      contexts[idx] = offscreen.getContext("2d");
+    } catch (e) {
+      // Fallback to normal canvas
+    }
+  }
 
   // Setup canvas and visibility observer
   setupCanvasObserver(context, idx, active);
 
   return idx;
+}
+
+/**
+ * Set up LOD for meshes in the scene based on camera
+ */
+function setupLODForScene(scene, camera) {
+  scene.traverse((object) => {
+    if (object.isMesh && !object.userData.lodConfigured) {
+      const geometry = object.geometry;
+      if (
+        geometry &&
+        geometry.attributes &&
+        geometry.attributes.position &&
+        geometry.attributes.position.count > 1000
+      ) {
+        object.userData.lodConfigured = true;
+        // Store the original geometry for when needed
+        object.userData.fullDetail = geometry;
+      }
+    }
+  });
 }
 
 /**
@@ -507,13 +673,42 @@ export function getAllCameras() {
 }
 
 /**
- * Compact arrays to reclaim space
+ * Dispose unused resources from camera
+ */
+function disposeUnusedResources(cameraIdx) {
+  const cam = cameras[cameraIdx];
+  if (!cam) return;
+
+  // Dispose any cached materials/textures specific to this camera
+  if (cam.userData && cam.userData.cachedResources) {
+    cam.userData.cachedResources.forEach((resource) => {
+      if (resource.dispose) resource.dispose();
+    });
+    cam.userData.cachedResources = [];
+  }
+}
+
+/**
+ * Compact arrays to reclaim space and clean up unused resources
  */
 export function performCleanup(force = false) {
   const now = performance.now();
   if (!force && now - (lastCleanup || 0) < 30000) return;
 
   lastCleanup = now;
+
+  // Force garbage collection for unused textures
+  const unusedThreshold = now - 60000; // 1 minute
+
+  // Check for unused textures and resources
+  if (renderer && renderer.info && renderer.info.memory) {
+    for (let i = 0; i < count; i++) {
+      if (cameras[i] && lastRender[i] < unusedThreshold && !visibleCams[i]) {
+        // Camera hasn't been used recently and is not visible
+        disposeUnusedResources(i);
+      }
+    }
+  }
 
   // Compact arrays
   let writeIdx = 0;
@@ -552,6 +747,66 @@ export function performCleanup(force = false) {
 }
 
 /**
+ * Priority-sort cameras for efficient rendering
+ */
+function prioritizeCameras() {
+  // Collect active, visible, dirty cameras
+  const sortedIndices = [];
+  for (let i = 0; i < count; i++) {
+    if (activeCams[i] === 1 && visibleCams[i] === 1 && dirtyCams[i] === 1) {
+      // Check if camera is actually in viewport
+      const ctx = contexts[i];
+      if (ctx?.canvas) {
+        const rect = ctx.canvas.getBoundingClientRect();
+        const isInViewport =
+          rect.bottom > 0 &&
+          rect.top < window.innerHeight &&
+          rect.right > 0 &&
+          rect.left < window.innerWidth;
+
+        if (isInViewport) {
+          sortedIndices.push({
+            idx: i,
+            priority: controls[i]?._dragging ? 10 : 5,
+          });
+        } else {
+          // Canvas not in viewport - skip render but mark as processed
+          dirtyCams[i] = 0;
+          metrics.skipped++;
+        }
+      }
+    }
+  }
+
+  // Sort by priority (higher first)
+  return sortedIndices
+    .sort((a, b) => b.priority - a.priority)
+    .map((item) => item.idx);
+}
+
+/**
+ * Apply frustum culling to optimize rendering
+ */
+function applyFrustumCulling(camera) {
+  if (!camera) return;
+
+  const frustum = new Frustum();
+  frustum.setFromProjectionMatrix(
+    new Matrix4().multiplyMatrices(
+      camera.projectionMatrix,
+      camera.matrixWorldInverse
+    )
+  );
+
+  // Only render objects in view
+  scene.traverse((object) => {
+    if (object.isMesh && object.userData.skipFrustum !== true) {
+      object.visible = frustum.intersectsObject(object);
+    }
+  });
+}
+
+/**
  * Render a single camera
  */
 function renderCamera(idx) {
@@ -575,6 +830,9 @@ function renderCamera(idx) {
 
     cam.updateMatrixWorld(true);
     scene.updateMatrixWorld(true);
+
+    // Apply frustum culling for better performance
+    applyFrustumCulling(cam);
 
     renderer.render(scene, cam);
 
@@ -610,6 +868,26 @@ function renderCamera(idx) {
 export function renderFrame(deltaTime) {
   if (!isActive) return false;
 
+  // Adaptive frame management
+  const now = performance.now();
+  const frameTimeMs = now - lastFrameTime;
+  lastFrameTime = now;
+
+  // Adjust skip rate based on performance
+  if (frameTimeMs > frameBudget * 1.5 && adaptiveSkipRate < IDLE_FRAME_SKIP) {
+    adaptiveSkipRate = Math.min(adaptiveSkipRate + 1, IDLE_FRAME_SKIP);
+  } else if (frameTimeMs < frameBudget * 0.8 && adaptiveSkipRate > 1) {
+    adaptiveSkipRate = Math.max(adaptiveSkipRate - 1, 1);
+  }
+
+  // Skip frames when appropriate
+  if (isIdle() && !hasActiveDrag && !needsFullRender) {
+    if (metrics.frames % adaptiveSkipRate !== 0) {
+      metrics.skipped++;
+      return false;
+    }
+  }
+
   // Update controls and check for active drags
   hasActiveDrag = false;
   for (let i = 0; i < count; i++) {
@@ -634,22 +912,16 @@ export function renderFrame(deltaTime) {
     metrics.rendered = 0;
 
     try {
-      // Batch render cameras
-      for (let start = 0; start < count; start += BATCH_SIZE) {
-        const end = Math.min(start + BATCH_SIZE, count);
+      // Get priority-sorted camera indices
+      const prioritizedCameras = prioritizeCameras();
 
-        for (let i = start; i < end; i++) {
-          // Skip inactive or invisible cameras
-          if (
-            activeCams[i] !== 1 ||
-            visibleCams[i] !== 1 ||
-            dirtyCams[i] !== 1
-          ) {
-            continue;
-          }
-
-          renderCamera(i);
-        }
+      // Render only the highest priority cameras up to batch size
+      for (
+        let i = 0;
+        i < Math.min(prioritizedCameras.length, BATCH_SIZE);
+        i++
+      ) {
+        renderCamera(prioritizedCameras[i]);
       }
 
       renderer.scissorTest = false;

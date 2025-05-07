@@ -2,47 +2,40 @@ import { isIdle } from "../user-interaction";
 
 let lastTime = performance.now();
 let deltaTime = 0;
-let frameRate = 60; // Default frame rate (FPS)
-let frameCap = true; // Whether to cap the frame rate
-let frameDelay = 1000 / frameRate; // Time in ms per frame
+let frameRate = 60;
+let frameCap = true;
+let frameDelay = 1000 / frameRate;
+const MAX_DELTA = 0.2; // Maximum allowed delta (in seconds)
+const DEFAULT_DELTA = 0.016; // ~60 FPS fallback delta
 
 /**
- * Updates the time values and returns the delta time.
- * With framecapping, this can limit how often your game loop runs.
- * @returns {number} The delta time in seconds.
+ * Updates time values and enforces frame rate if needed
+ * @returns {number|null} Delta time in seconds or null if frame should be skipped
  */
 export function updateTime() {
   const currentTime = performance.now();
-  let rawDeltaTime = currentTime - lastTime;
-  if (isIdle()) return null;
-  // If framecapping is enabled, enforce the frame rate
-  if (frameCap && rawDeltaTime < frameDelay) {
-    // Return null to indicate that the frame should be skipped
-    return null;
-  }
+  const rawDeltaTime = currentTime - lastTime;
 
-  // Convert ms to seconds
-  deltaTime = rawDeltaTime / 1000;
-
-  // Safeguard against extremely large delta times (e.g. after tab switch)
-  if (deltaTime > 0.2) {
-    deltaTime = 0.016; // Default to ~60 FPS
+  if (isIdle() || (frameCap && rawDeltaTime < frameDelay)) {
+    return null; // Skip frame during idle or when under frame delay
   }
 
   lastTime = currentTime;
+  deltaTime = Math.min(rawDeltaTime / 1000, MAX_DELTA) || DEFAULT_DELTA;
+
   return deltaTime;
 }
 
 /**
- * Gets the most recent delta time value.
- * @returns {number} The delta time in seconds.
+ * Gets the current delta time value
+ * @returns {number} Delta time in seconds
  */
 export function getDeltaTime() {
   return deltaTime;
 }
 
 /**
- * Resets the time values.
+ * Resets the time tracking values
  */
 export function resetTime() {
   lastTime = performance.now();
@@ -74,10 +67,6 @@ export function getFrameRate() {
   return frameRate;
 }
 
-/**
- * Checks if framecapping is currently enabled.
- * @returns {boolean} Whether framecapping is enabled.
- */
-export function isFrameCapEnabled() {
+export function isFrameCapped() {
   return frameCap;
 }
