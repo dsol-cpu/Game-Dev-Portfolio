@@ -305,9 +305,59 @@ export function updateGameViewSize(elements, width, height) {
   }
 }
 
+function initGameControlsPanel() {
+  document.addEventListener("DOMContentLoaded", () => {
+    const controlsBox = document.querySelector(".game-controls-info");
+    const closeBtn = document.querySelector(".close-btn");
+    const toggleBtn = document.querySelector(".toggle-btn");
+    const allKeys = document.querySelectorAll(".key[data-key]");
+
+    // Build a map from key code to element
+    const keyMap = new Map();
+    allKeys.forEach((el) => {
+      keyMap.set(el.dataset.key, el);
+    });
+
+    // Close panel
+    closeBtn.addEventListener("click", () => {
+      controlsBox.style.display = "none";
+    });
+
+    // Toggle panel
+    toggleBtn.addEventListener("click", () => {
+      const collapsed = controlsBox.classList.toggle("collapsed");
+      toggleBtn.textContent = collapsed ? "+" : "-";
+    });
+
+    // Key event handler
+    const updateKeyHighlight = (event, isPressed) => {
+      let keyCode = event.code;
+
+      // Normalize ShiftRight -> ShiftLeft (if only one visual element)
+      if (keyCode === "ShiftRight" && keyMap.has("ShiftLeft")) {
+        keyCode = "ShiftLeft";
+      }
+
+      const keyEl = keyMap.get(keyCode);
+      if (keyEl) {
+        keyEl.classList.toggle("active", isPressed);
+      }
+    };
+
+    // Attach single listeners
+    document.addEventListener("keydown", (e) => updateKeyHighlight(e, true));
+    document.addEventListener("keyup", (e) => updateKeyHighlight(e, false));
+
+    // Fade in controls panel
+    setTimeout(() => {
+      controlsBox.style.opacity = 1;
+    }, 100);
+  });
+}
 export async function initGame() {
   if (gameState.isInitialized) return;
 
+  initGameControlsPanel();
   const elements = {
     viewToggleBtn: document.getElementById("view-toggle-btn"),
     mainGameCanvas: document.getElementById("main-game-canvas"),

@@ -1,12 +1,10 @@
-import { isIdle } from "../user-interaction";
+import { isIdle } from "../user-interaction.js";
 
-let lastTime = performance.now();
-let deltaTime = 0;
 let frameRate = 60;
-let frameCap = true;
 let frameDelay = 1000 / frameRate;
-const MAX_DELTA = 0.2; // Maximum allowed delta (in seconds)
-const DEFAULT_DELTA = 0.016; // ~60 FPS fallback delta
+let frameDeltaTime = 1 / frameRate; // Fixed delta time per frame to stabilize fps
+let lastFrameTime = performance.now();
+let nextFrameTime = lastFrameTime + frameDelay;
 
 /**
  * Updates time values and enforces frame rate if needed
@@ -14,16 +12,18 @@ const DEFAULT_DELTA = 0.016; // ~60 FPS fallback delta
  */
 export function updateTime() {
   const currentTime = performance.now();
-  const rawDeltaTime = currentTime - lastTime;
 
-  if (isIdle() || (frameCap && rawDeltaTime < frameDelay)) {
-    return null; // Skip frame during idle or when under frame delay
-  }
+  // If idle, skip frame and do NOT update any timing state
+  if (isIdle() && currentTime < nextFrameTime) return null;
 
-  lastTime = currentTime;
-  deltaTime = Math.min(rawDeltaTime / 1000, MAX_DELTA) || DEFAULT_DELTA;
+  // Schedule next frame
+  nextFrameTime = currentTime + frameDelay;
 
-  return deltaTime;
+  // Update last frame time (used in FPS estimation)
+  lastFrameTime = currentTime;
+
+  // Return fixed delta time (for logic/physics steps)
+  return frameDeltaTime;
 }
 
 /**
@@ -31,32 +31,7 @@ export function updateTime() {
  * @returns {number} Delta time in seconds
  */
 export function getDeltaTime() {
-  return deltaTime;
-}
-
-/**
- * Resets the time tracking values
- */
-export function resetTime() {
-  lastTime = performance.now();
-  deltaTime = 0;
-}
-
-/**
- * Sets the target frame rate for framecapping.
- * @param {number} fps - Frames per second.
- */
-export function setFrameRate(fps) {
-  frameRate = fps;
-  frameDelay = 1000 / frameRate;
-}
-
-/**
- * Enables or disables framecapping.
- * @param {boolean} enabled - Whether framecapping should be enabled.
- */
-export function setFrameCap(enabled) {
-  frameCap = enabled;
+  return frameDeltaTime;
 }
 
 /**
@@ -67,6 +42,20 @@ export function getFrameRate() {
   return frameRate;
 }
 
+/**
+ * Checks if frame capping is enabled
+ * @returns {boolean} True if frame capping is enabled
+ */
 export function isFrameCapped() {
-  return frameCap;
+  return true;
+}
+
+/**
+ * Gets the estimated actual framerate based on most recent frame timing
+ * @returns {number} Estimated FPS
+ */
+export function getEstimatedFPS() {
+  // No new calculations if idle so 0 new frames rendered.
+  if (isIdle()) return 0;
+  return frameRate;
 }

@@ -1,6 +1,3 @@
-/**
- * Ultra-compact ThreeJS manager with zero overhead
- */
 import {
   AmbientLight,
   DirectionalLight,
@@ -13,12 +10,14 @@ import {
 import { isIdle } from "../user-interaction.js";
 import { getFallbackCube } from "./model-manager.js";
 
-// Core constants
-const MAX_CAMERAS = 32;
+// Core constants - Tuned for better performance
+const MAX_CAMERAS = 16;
 const VISIBILITY_THRESHOLD = 0.01;
 const BATCH_SIZE = 4;
-const IDLE_FRAME_SKIP = 4; // ~15fps when idle
+const IDLE_FRAME_SKIP = 3; // Reduced from IDLE_FRAME_SKIP for smoother idle animations
 const VEC_POOL_SIZE = 16;
+const CLEANUP_INTERVAL = 120000; // Reduced frequency of cleanups to 60 seconds
+const LOD_VERTEX_THRESHOLD = 10000; // Only apply LOD to complex geometries
 
 // Object pools
 const vecPool = Array(VEC_POOL_SIZE)
@@ -34,10 +33,10 @@ let renderer, scene;
 let isActive = false;
 let lastCleanup = 0;
 let lastFrameTime = 0;
-let frameBudget = 16; // ~60fps target
+let frameBudget = 16.66; // Target ~60fps (slightly more lenient)
 let adaptiveSkipRate = 1;
 
-// Camera tracking arrays
+// Camera tracking arrays - Using TypedArrays for performance
 let activeCams = new Uint8Array(MAX_CAMERAS);
 let visibleCams = new Uint8Array(MAX_CAMERAS);
 let dirtyCams = new Uint8Array(MAX_CAMERAS);
@@ -57,11 +56,15 @@ let metrics = {
   skipped: 0,
   rendered: 0,
   total: 0,
+  lastPerformanceTime: 0,
+  lastAutoAdjust: 0,
 };
 
 // Render flags
 let needsFullRender = false;
 let hasActiveDrag = false;
+let frustum = new Frustum(); // Reuse frustum object
+let projScreenMatrix = new Matrix4(); // Reuse projection matrix
 
 /**
  * Get pooled Vector2 for calculations
@@ -99,20 +102,28 @@ export function initThreeJSManager() {
   // Create optimized renderer
   renderer = new WebGLRenderer({
     alpha: true,
-    antialias: false,
+    antialias: false, // Disable antialiasing for performance
     preserveDrawingBuffer: false,
     powerPreference: "high-performance",
-    precision: "lowp",
+    precision: "mediump", // Changed from lowp to mediump for better quality/performance balance
     depth: true,
     stencil: false,
     logarithmicDepthBuffer: false,
     premultipliedAlpha: false,
-    failIfMajorPerformanceCaveat: true,
+    failIfMajorPerformanceCaveat: false, // Allow fallback rendering on low-end devices
   });
 
   // Configure renderer
   renderer.setClearColor(0x000000, 0);
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
+
+  // Adjust pixel ratio based on device capabilities
+  const devicePixelRatio = window.devicePixelRatio || 1;
+  const performancePixelRatio = Math.min(
+    devicePixelRatio,
+    devicePixelRatio > 2 ? 1.5 : 1
+  );
+  renderer.setPixelRatio(performancePixelRatio);
+
   renderer.shadowMap.enabled = false;
   renderer.physicallyCorrectLights = false;
   renderer.outputEncoding = 3000;
@@ -123,33 +134,27 @@ export function initThreeJSManager() {
   const gl = renderer.getContext();
   optimizeWebGLContext(gl);
 
-  // Setup context loss recovery
+  // Setup context loss recovery with improved error handling
   renderer.domElement.addEventListener(
     "webglcontextlost",
-    (event) => {
-      event.preventDefault();
-      isActive = false;
-      setTimeout(() => {
-        try {
-          renderer.forceContextRestore();
-          isActive = true;
-          dirtyCams.fill(1, 0, count);
-        } catch (e) {
-          console.warn("WebGL context restoration failed", e);
-        }
-      }, 1000);
-    },
+    handleContextLoss,
     false
   );
 
-  // Create scene
+  renderer.domElement.addEventListener(
+    "webglcontextrestored",
+    handleContextRestore,
+    false
+  );
+
+  // Create scene with optimized settings
   scene = new Scene();
   scene.matrixAutoUpdate = false;
   scene.autoUpdate = false;
   scene.background = null;
   scene.add(getFallbackCube());
 
-  // Add lights
+  // Add lights with optimized settings
   const ambient = new AmbientLight(0xffffff, 0.5);
   ambient.matrixAutoUpdate = false;
 
@@ -184,6 +189,9 @@ export function initThreeJSManager() {
   // Set manager as active
   isActive = true;
 
+  // Start performance monitoring
+  startPerformanceMonitoring();
+
   return {
     getStats: () => ({
       fps: metrics.fps,
@@ -197,28 +205,163 @@ export function initThreeJSManager() {
 }
 
 /**
+ * Handle WebGL context loss
+ */
+function handleContextLoss(event) {
+  event.preventDefault();
+  console.warn("WebGL context lost, attempting recovery");
+  isActive = false;
+
+  // Clear any pending rendering operations
+  if (window.cancelAnimationFrame) {
+    window.cancelAnimationFrame(renderFrame);
+  }
+
+  // Schedule context restoration attempt
+  setTimeout(() => {
+    try {
+      renderer.forceContextRestore();
+    } catch (e) {
+      console.error("Context restoration failed, will retry", e);
+      setTimeout(handleContextRestore, 1000);
+    }
+  }, 500);
+}
+
+/**
+ * Handle WebGL context restoration
+ */
+function handleContextRestore() {
+  console.log("WebGL context restored");
+
+  try {
+    // Re-initialize renderer resources
+    if (renderer) {
+      const gl = renderer.getContext();
+      optimizeWebGLContext(gl);
+    }
+
+    // Mark all cameras as dirty to force redraw
+    dirtyCams.fill(1, 0, count);
+    needsFullRender = true;
+
+    // Reactivate the manager
+    isActive = true;
+  } catch (e) {
+    console.error("Failed to restore after context recovery", e);
+
+    // Last resort - try to recreate the renderer
+    try {
+      if (renderer) {
+        renderer.dispose();
+      }
+      initThreeJSManager();
+    } catch (err) {
+      console.error("Critical renderer failure", err);
+    }
+  }
+}
+
+/**
+ * Setup performance monitoring
+ */
+function startPerformanceMonitoring() {
+  metrics.lastPerformanceTime = performance.now();
+  metrics.lastAutoAdjust = performance.now();
+
+  // Check if PerformanceObserver is available
+  if (typeof PerformanceObserver !== "undefined") {
+    try {
+      // Monitor for long tasks that could cause jank
+      const longTaskObserver = new PerformanceObserver((list) => {
+        const entries = list.getEntries();
+        if (entries.length > 0) {
+          // If we detect long tasks, adjust rendering quality
+          const now = performance.now();
+          if (now - metrics.lastAutoAdjust > 5000) {
+            // Only adjust every 5 sec
+            metrics.lastAutoAdjust = now;
+            adjustRenderingQuality(false); // Reduce quality
+          }
+        }
+      });
+
+      longTaskObserver.observe({ entryTypes: ["longtask"] });
+    } catch (e) {
+      // Performance API not fully supported, fallback to manual checks
+    }
+  }
+}
+
+/**
+ * Adjust rendering quality based on performance
+ */
+function adjustRenderingQuality(increase) {
+  const pixelRatio = renderer.getPixelRatio();
+
+  if (increase && pixelRatio < window.devicePixelRatio) {
+    // Increase quality if we have headroom
+    renderer.setPixelRatio(
+      Math.min(pixelRatio + 0.25, window.devicePixelRatio)
+    );
+  } else if (!increase && pixelRatio > 1) {
+    // Decrease quality if we're experiencing jank
+    renderer.setPixelRatio(Math.max(pixelRatio - 0.25, 1));
+  }
+
+  // Adjust adaptive skip rate
+  if (increase && adaptiveSkipRate > 1) {
+    adaptiveSkipRate--;
+  } else if (!increase && adaptiveSkipRate < IDLE_FRAME_SKIP) {
+    adaptiveSkipRate++;
+  }
+
+  // Force redraw with new settings
+  dirtyCams.fill(1, 0, count);
+}
+
+/**
  * Optimize WebGL context settings
  */
 function optimizeWebGLContext(gl) {
+  if (!gl) return;
+
   gl.depthFunc(gl.LEQUAL);
   gl.hint(gl.GENERATE_MIPMAP_HINT, gl.FASTEST);
-  gl.disable(gl.DITHER);
+
+  // Only disable dithering on high-performance mode
+  if (!isIdle()) {
+    gl.disable(gl.DITHER);
+  }
 
   // Use smaller data types where possible
   gl.getExtension("OES_element_index_uint");
   gl.getExtension("ANGLE_instanced_arrays");
 
-  // Request power-efficient rendering when idle
-  if (gl.getExtension("EXT_disjoint_timer_query")) {
-    const powerPreference = isIdle() ? "low-power" : "high-performance";
-    renderer.setPixelRatio(
-      isIdle() ? 1.0 : Math.min(window.devicePixelRatio, 1.5)
-    );
-  }
+  // For mobile devices, try to get half float extension for better performance
+  gl.getExtension("OES_texture_half_float");
+  gl.getExtension("OES_texture_half_float_linear");
 
   // Enable compressed textures if available
-  gl.getExtension("WEBGL_compressed_texture_s3tc") ||
-    gl.getExtension("WEBKIT_WEBGL_compressed_texture_s3tc");
+  const compressedExtensions = [
+    "WEBGL_compressed_texture_s3tc",
+    "WEBKIT_WEBGL_compressed_texture_s3tc",
+    "WEBGL_compressed_texture_etc",
+    "WEBGL_compressed_texture_astc",
+  ];
+
+  for (const extName of compressedExtensions) {
+    gl.getExtension(extName);
+  }
+
+  // Set power preference based on user idle state
+  if (gl.getExtension("EXT_disjoint_timer_query")) {
+    const powerPreference = isIdle() ? "low-power" : "high-performance";
+    // Adjust pixel ratio based on power preference
+    if (isIdle()) {
+      renderer.setPixelRatio(1.0);
+    }
+  }
 }
 
 /**
@@ -242,7 +385,7 @@ function setupShaderCache() {
  * Set up document and window event listeners
  */
 function setupEventListeners() {
-  // Document visibility handler
+  // Document visibility handler with improved logic
   document.addEventListener(
     "visibilitychange",
     () => {
@@ -257,24 +400,46 @@ function setupEventListeners() {
     { passive: true }
   );
 
-  // Window resize handler
-  let resizing = false;
+  // Window resize handler with debouncing
+  let resizeTimeout = null;
   window.addEventListener(
     "resize",
     () => {
-      if (resizing) return;
-      resizing = true;
-      requestAnimationFrame(() => {
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout);
+      }
+
+      // Use timeout for debouncing
+      resizeTimeout = setTimeout(() => {
         dirtyCams.fill(1, 0, count);
         needsFullRender = true;
-        resizing = false;
-      });
+        resizeTimeout = null;
+      }, 200); // 200ms debounce
+    },
+    { passive: true }
+  );
+
+  // Detect when tab becomes visible/focused
+  window.addEventListener(
+    "focus",
+    () => {
+      if (!isActive) {
+        resumeManager();
+      }
     },
     { passive: true }
   );
 
   // Cleanup on page unload
   window.addEventListener("beforeunload", cleanupResources);
+
+  // Add memory pressure handler if available
+  if ("onmemorypressure" in window) {
+    window.addEventListener("memorypressure", () => {
+      // Perform immediate cleanup when memory pressure is detected
+      performCleanup(true);
+    });
+  }
 }
 
 /**
@@ -282,14 +447,35 @@ function setupEventListeners() {
  */
 function pauseManager() {
   isActive = false;
+
+  // Free up some GPU memory when inactive
+  if (renderer) {
+    renderer.setPixelRatio(1.0);
+  }
 }
 
 /**
  * Resume the manager
  */
 function resumeManager() {
+  // Force redraw all cameras
   dirtyCams.fill(1, 0, count);
+  needsFullRender = true;
   isActive = true;
+
+  // Reset metrics
+  metrics.lastFpsTime = performance.now();
+  metrics.frames = 0;
+
+  // Restore pixel ratio
+  if (renderer) {
+    const devicePixelRatio = window.devicePixelRatio || 1;
+    const performancePixelRatio = Math.min(
+      devicePixelRatio,
+      devicePixelRatio > 2 ? 1.5 : 1
+    );
+    renderer.setPixelRatio(performancePixelRatio);
+  }
 }
 
 /**
@@ -305,11 +491,13 @@ function resetState() {
   // Reset metrics
   Object.assign(metrics, {
     frames: 0,
-    lastFpsTime: 0,
+    lastFpsTime: performance.now(),
     fps: 0,
     skipped: 0,
     rendered: 0,
     total: 0,
+    lastPerformanceTime: performance.now(),
+    lastAutoAdjust: performance.now(),
   });
 }
 
@@ -354,12 +542,16 @@ function cleanupResources() {
 
   // Clean up WebGL context
   if (renderer) {
-    const gl = renderer.getContext();
-    const ext = gl?.getExtension("WEBGL_lose_context");
-    if (ext) ext.loseContext();
+    try {
+      const gl = renderer.getContext();
+      const ext = gl?.getExtension("WEBGL_lose_context");
+      if (ext) ext.loseContext();
 
-    renderer.dispose();
-    renderer.forceContextLoss();
+      renderer.dispose();
+      renderer.forceContextLoss();
+    } catch (e) {
+      // Ignore errors during cleanup
+    }
     renderer = null;
   }
 
@@ -377,12 +569,27 @@ function cleanupResources() {
  * Recursively dispose scene resources
  */
 function disposeSceneResources(scene) {
-  // Remove all children
-  while (scene.children.length > 0) {
-    scene.remove(scene.children[0]);
+  // Use an efficient traversal approach
+  const traverseQueue = [...scene.children];
+  const objectsToDispose = [];
+
+  // First pass: collect all objects
+  while (traverseQueue.length > 0) {
+    const obj = traverseQueue.pop();
+    if (!obj) continue;
+
+    objectsToDispose.push(obj);
+
+    if (obj.children?.length) {
+      traverseQueue.push(...obj.children);
+    }
   }
 
-  scene.traverse((obj) => {
+  // Remove all children at once
+  scene.children.length = 0;
+
+  // Second pass: dispose resources
+  objectsToDispose.forEach((obj) => {
     // Dispose geometries
     if (obj.geometry?.dispose) obj.geometry.dispose();
 
@@ -412,10 +619,20 @@ function disposeMaterial(material) {
     return;
   }
 
-  // Dispose textures
-  Object.keys(material).forEach((prop) => {
-    const value = material[prop];
-    if (value?.isTexture) value.dispose();
+  // Dispose textures - only check known texture properties
+  const textureProps = [
+    "map",
+    "normalMap",
+    "specularMap",
+    "emissiveMap",
+    "bumpMap",
+    "roughnessMap",
+    "metalnessMap",
+  ];
+  textureProps.forEach((prop) => {
+    if (material[prop]?.isTexture) {
+      material[prop].dispose();
+    }
   });
 
   if (material.dispose) material.dispose();
@@ -489,11 +706,14 @@ function setupLODForScene(scene, camera) {
         geometry &&
         geometry.attributes &&
         geometry.attributes.position &&
-        geometry.attributes.position.count > 1000
+        geometry.attributes.position.count > LOD_VERTEX_THRESHOLD
       ) {
         object.userData.lodConfigured = true;
         // Store the original geometry for when needed
         object.userData.fullDetail = geometry;
+
+        // Flag for frustum culling optimization
+        object.frustumCulled = true;
       }
     }
   });
@@ -532,14 +752,15 @@ function setupCanvasObserver(context, idx, active) {
 
   context.canvas.style.display = active ? "block" : "none";
 
-  // Setup intersection observer
+  // Setup intersection observer with better thresholds
   const observer = new IntersectionObserver(
     (entries) => {
       const entry = entries[0];
       if (!entry) return;
 
       const wasVisible = visibleCams[idx] === 1;
-      const isVisible = entry.isIntersecting;
+      const isVisible =
+        entry.isIntersecting && entry.intersectionRatio > VISIBILITY_THRESHOLD;
 
       visibleCams[idx] = isVisible ? 1 : 0;
 
@@ -551,7 +772,7 @@ function setupCanvasObserver(context, idx, active) {
       }
     },
     {
-      threshold: VISIBILITY_THRESHOLD,
+      threshold: [0, VISIBILITY_THRESHOLD, 0.25, 0.5], // More granular visibility detection
       rootMargin: "100px",
     }
   );

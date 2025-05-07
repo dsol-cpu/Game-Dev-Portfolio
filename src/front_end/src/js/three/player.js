@@ -87,6 +87,7 @@ const MATERIALS = {
 const tempVector = new Vector3();
 const tempEuler = new Euler();
 const tempQuaternion = new Quaternion();
+const twoPi = 2 * Math.PI;
 
 export async function createPlayerModel() {
   if (player.model) return player.model;
@@ -106,12 +107,8 @@ export async function createPlayerModel() {
 }
 
 export function initPlayerControls() {
-  window.addEventListener("keydown", (e) => handleKey(e, true), {
-    capture: true,
-  });
-  window.addEventListener("keyup", (e) => handleKey(e, false), {
-    capture: true,
-  });
+  window.addEventListener("keydown", (e) => handleKey(e, true), {});
+  window.addEventListener("keyup", (e) => handleKey(e, false), {});
 
   const canvas = document.getElementById("main-game-canvas");
   if (canvas) {
@@ -126,11 +123,13 @@ function handleKey(e, isDown) {
     e.stopPropagation();
     handleUserInteraction(e);
     player.keys[e.code] = isDown;
+    const query = document.querySelector(`.key[data-key="${e.code}"]`);
+    isDown ? query.classList.add("active") : query.classList.remove("active");
   }
 }
 
 function getDirection(rotation) {
-  const normalized = ((rotation % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+  const normalized = (((rotation % 2) * Math.PI + 2 * Math.PI) % 2) * Math.PI;
   return DIRECTIONS[Math.floor(((normalized * 180) / Math.PI + 22.5) / 45) % 8];
 }
 
@@ -343,10 +342,6 @@ export function updateCamera(camera) {
 }
 
 export function disposePlayerControls() {
-  window.removeEventListener("keydown", (e) => handleKey(e, true), {
-    capture: true,
-  });
-  window.removeEventListener("keyup", (e) => handleKey(e, false), {
-    capture: true,
-  });
+  window.removeEventListener("keydown", (e) => handleKey(e, true), {});
+  window.removeEventListener("keyup", (e) => handleKey(e, false), {});
 }
