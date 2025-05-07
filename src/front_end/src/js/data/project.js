@@ -34,7 +34,7 @@ export const projectCardData = [
     demoUrl: "https://dsol-cpu.github.io/GeospatialDataVisualization-Aug2024/",
     githubUrl:
       "https://github.com/dsol-cpu/GeospatialDataVisualization-Aug2024",
-    modelName: "portfolioShip",
+    modelName: "",
     imageUrl: "/images/me.png",
     imageAlt: "Geospatial Visualizer",
     fullDescription: [
@@ -51,7 +51,7 @@ export const projectCardData = [
     demoUrl: "https://dsol-cpu.github.io/GeospatialDataVisualization-Aug2024/",
     githubUrl:
       "https://github.com/dsol-cpu/GeospatialDataVisualization-Aug2024",
-    modelName: "portfolioShip",
+    modelName: "",
     imageUrl: "/images/me.png",
     imageAlt: "Geospatial Visualizer",
     fullDescription: [

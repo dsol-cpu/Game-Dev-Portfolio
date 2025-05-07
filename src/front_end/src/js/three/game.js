@@ -1,5 +1,5 @@
 /**
- * @fileoverview Optimized game scene with player model and camera follow
+ * @fileoverview Game scene with player model and camera follow
  **/
 
 import { CAMERA_SECTIONS } from "../data/sections.js";
@@ -19,7 +19,7 @@ import {
   createPlayerModel,
   initPlayerControls,
   updatePlayer,
-} from "./player-model.js";
+} from "./player.js";
 import {
   forceRedraw,
   getScene,
@@ -27,31 +27,38 @@ import {
   registerCamera,
   setCameraVisible,
 } from "./threejs-manager.js";
-import { TimeManager } from "./time-manager.js";
 
 // Constants
-const C = { DEFAULT_FOV: 75, NEAR: 0.1, FAR: 1000 },
-  COLORS = {
-    clouds: 0xffffff,
-    islandSide: 0x8b4513,
-    islandTop: 0x228b22,
-    shipBody: 0x3366cc,
-    shipAccent: 0x66ccff,
+const COLORS = {
+  clouds: 0xffffff,
+  islandSide: 0x8b4513,
+  islandTop: 0x228b22,
+  shipBody: 0x3366cc,
+  shipAccent: 0x66ccff,
+};
+export const ISLAND_DATA = [
+  {
+    name: "Home Island",
+    position: new Vector3(0, 0, 1000),
+    section: "home",
   },
-  ISLAND_DATA = [
-    { position: new Vector3(0, 0, 0), section: "home", name: "Home Island" },
-    {
-      position: new Vector3(10, 0, 10),
-      section: "explore",
-      name: "Exploration Island",
-    },
-    {
-      position: new Vector3(-10, 0, -15),
-      section: "adventure",
-      name: "Adventure Island",
-    },
-  ],
-  VIEW_MODES = { SCROLL: "scroll", GAME: "game" };
+  {
+    name: "Experience Island",
+    position: new Vector3(912, 304, 304),
+    section: "experience",
+  },
+  {
+    name: "Projects Island",
+    position: new Vector3(-371, 93, -928),
+    section: "projects",
+  },
+  {
+    name: "Resume Island",
+    position: new Vector3(-229, 114, 915),
+    section: "resume",
+  },
+];
+const VIEW_MODES = { SCROLL: "scroll", GAME: "game" };
 
 // Game state & objects
 let thirdPersonCamera,
@@ -89,7 +96,7 @@ function initIslandBobbing(islands) {
 /**
  * Update island bobbing animation
  */
-function updateIslandBobbing(deltaTime) {
+export function updateIslandBobbing(deltaTime) {
   gameState.totalTime += deltaTime;
   islands.forEach((island, i) => {
     if (islandAnimationData[i]) {
@@ -107,7 +114,7 @@ function updateIslandBobbing(deltaTime) {
 /**
  * Initialize game scene
  */
-export function initGameScene() {
+export async function initGameScene() {
   gameState.totalTime = 0;
   const gameScene = getScene();
 
@@ -165,7 +172,7 @@ export function initGameScene() {
   }
 
   // Create player
-  playerEntity = createPlayerModel();
+  playerEntity = await createPlayerModel();
   const homeIsland = ISLAND_DATA.find(({ section }) => section === "home");
   playerEntity.position.set(
     homeIsland?.position.x || 0,
@@ -176,13 +183,14 @@ export function initGameScene() {
   gameScene.add(playerEntity);
   initIslandBobbing(islands);
   initPlayerControls();
+  const CAMERA_FOV = { DEFAULT_FOV: 75, NEAR: 0.1, FAR: 1000 };
 
   // Setup camera
   thirdPersonCamera = new PerspectiveCamera(
-    C.DEFAULT_FOV,
+    CAMERA_FOV.DEFAULT_FOV,
     window.innerWidth / window.innerHeight,
-    C.NEAR,
-    C.FAR
+    CAMERA_FOV.NEAR,
+    CAMERA_FOV.FAR
   );
   thirdPersonCamera.position.set(0, 2, 5);
   thirdPersonCamera.lookAt(0, 2, 0);
@@ -209,19 +217,16 @@ export function initGameScene() {
 export function updateGameLoop(deltaTime) {
   if (gameState.viewMode !== VIEW_MODES.GAME) return;
 
-  const timeInfo = TimeManager.update(deltaTime, "game");
-  if (timeInfo.skipFrame) return;
-
   // Update entities
   playerEntity && ((playerEntity.visible = true), updatePlayer(deltaTime));
   thirdPersonCamera &&
     playerEntity &&
     cameraFollowActive &&
     updateCamera(thirdPersonCamera, playerEntity, deltaTime);
-  updateIslandBobbing(deltaTime);
+  // updateIslandBobbing(deltaTime);
 
   // Update debug overlay if available
-  updateDebugOverlay(playerEntity?.__controls || window._playerControls);
+  // updateDebugOverlay(playerEntity?.__controls || window._playerControls);
 
   // Force redraw
   cameraIndex >= 0 && isCameraActive(cameraIndex) && forceRedraw(cameraIndex);
@@ -342,7 +347,7 @@ export function updateGameViewSize(elements, width, height) {
 /**
  * Initialize game module
  */
-export function initGame() {
+export async function initGame() {
   if (gameState.isInitialized) return;
 
   // Get required DOM elements
@@ -368,7 +373,7 @@ export function initGame() {
   }
 
   // Initialize game
-  initGameScene();
+  await initGameScene();
   elements.gameViewContainer.style.display = "none";
 
   // Set up event listeners

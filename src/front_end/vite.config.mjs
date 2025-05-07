@@ -27,7 +27,6 @@ export default defineConfig({
 
     // GLTF model optimization
     gltf(),
-
     // Image optimization
     imagemin({
       gifsicle: { optimizationLevel: 7, interlaced: false },
