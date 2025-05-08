@@ -10,44 +10,48 @@ import {
 import { isIdle } from "../user-interaction.js";
 import { getFallbackCube } from "./model-manager.js";
 
-// Core constants - Tuned for better performance
-const MAX_CAMERAS = 16;
-const VISIBILITY_THRESHOLD = 0.01;
-const BATCH_SIZE = 4;
-const IDLE_FRAME_SKIP = 3; // Reduced from IDLE_FRAME_SKIP for smoother idle animations
-const VEC_POOL_SIZE = 16;
-const CLEANUP_INTERVAL = 120000; // Reduced frequency of cleanups to 60 seconds
-const LOD_VERTEX_THRESHOLD = 10000; // Only apply LOD to complex geometries
+// Core configuration
+const CONFIG = {
+  MAX_CAMERAS: 16,
+  VISIBILITY_THRESHOLD: 0.01,
+  BATCH_SIZE: 4,
+  IDLE_FRAME_SKIP: 5,
+  VEC_POOL_SIZE: 8, // Reduced from 16
+  CLEANUP_INTERVAL: 60000,
+  LOD_VERTEX_THRESHOLD: 32,
+};
 
-// Object pools
-const vecPool = Array(VEC_POOL_SIZE)
+// Resource pools and caches
+const vecPool = Array(CONFIG.VEC_POOL_SIZE)
   .fill()
   .map(() => new Vector2());
-let vecPoolIndex = 0;
 const shaderCache = new Map();
 const geometryPool = new Map();
 const materialPool = new Map();
+let vecPoolIndex = 0;
 
 // Rendering state
 let renderer, scene;
 let isActive = false;
 let lastCleanup = 0;
 let lastFrameTime = 0;
-let frameBudget = 16.66; // Target ~60fps (slightly more lenient)
+let frameBudget = 16.66; // ~60fps
 let adaptiveSkipRate = 1;
+let needsFullRender = false;
+let hasActiveDrag = false;
 
-// Camera tracking arrays - Using TypedArrays for performance
-let activeCams = new Uint8Array(MAX_CAMERAS);
-let visibleCams = new Uint8Array(MAX_CAMERAS);
-let dirtyCams = new Uint8Array(MAX_CAMERAS);
-let lastRender = new Float32Array(MAX_CAMERAS);
-let cameras = Array(MAX_CAMERAS).fill(null);
-let controls = Array(MAX_CAMERAS).fill(null);
-let contexts = Array(MAX_CAMERAS).fill(null);
-let metadata = Array(MAX_CAMERAS).fill(null);
+// Camera tracking with TypedArrays for performance
+let activeCams = new Uint8Array(CONFIG.MAX_CAMERAS);
+let visibleCams = new Uint8Array(CONFIG.MAX_CAMERAS);
+let dirtyCams = new Uint8Array(CONFIG.MAX_CAMERAS);
+let lastRender = new Float32Array(CONFIG.MAX_CAMERAS);
+let cameras = Array(CONFIG.MAX_CAMERAS).fill(null);
+let controls = Array(CONFIG.MAX_CAMERAS).fill(null);
+let contexts = Array(CONFIG.MAX_CAMERAS).fill(null);
+let metadata = Array(CONFIG.MAX_CAMERAS).fill(null);
 let count = 0;
 
-// Observers and metrics
+// Observer tracking and metrics
 let observers = [];
 let metrics = {
   frames: 0,
@@ -56,27 +60,19 @@ let metrics = {
   skipped: 0,
   rendered: 0,
   total: 0,
-  lastPerformanceTime: 0,
-  lastAutoAdjust: 0,
 };
 
-// Render flags
-let needsFullRender = false;
-let hasActiveDrag = false;
-let frustum = new Frustum(); // Reuse frustum object
-let projScreenMatrix = new Matrix4(); // Reuse projection matrix
-
 /**
- * Get pooled Vector2 for calculations
+ * Get a vector from pool for temporary calculations
  */
 function getVec2() {
   const vec = vecPool[vecPoolIndex];
-  vecPoolIndex = (vecPoolIndex + 1) % VEC_POOL_SIZE;
+  vecPoolIndex = (vecPoolIndex + 1) % CONFIG.VEC_POOL_SIZE;
   return vec.set(0, 0);
 }
 
 /**
- * Get pooled geometry by key
+ * Get or create geometry from pool
  */
 export function getPooledGeometry(key, createFn) {
   if (!geometryPool.has(key)) {
@@ -86,7 +82,7 @@ export function getPooledGeometry(key, createFn) {
 }
 
 /**
- * Get pooled material by key
+ * Get or create material from pool
  */
 export function getPooledMaterial(key, createFn) {
   if (!materialPool.has(key)) {
@@ -98,99 +94,35 @@ export function getPooledMaterial(key, createFn) {
 /**
  * Initialize the ThreeJS manager
  */
-export function initThreeJSManager() {
+export async function initThreeJSManager() {
   // Create optimized renderer
   renderer = new WebGLRenderer({
     alpha: true,
-    antialias: false, // Disable antialiasing for performance
+    antialias: false,
     preserveDrawingBuffer: false,
     powerPreference: "high-performance",
-    precision: "mediump", // Changed from lowp to mediump for better quality/performance balance
+    precision: "mediump",
     depth: true,
     stencil: false,
-    logarithmicDepthBuffer: false,
-    premultipliedAlpha: false,
-    failIfMajorPerformanceCaveat: false, // Allow fallback rendering on low-end devices
   });
 
-  // Configure renderer
+  // Configure renderer settings
   renderer.setClearColor(0x000000, 0);
-
-  // Adjust pixel ratio based on device capabilities
-  const devicePixelRatio = window.devicePixelRatio || 1;
-  const performancePixelRatio = Math.min(
-    devicePixelRatio,
-    devicePixelRatio > 2 ? 1.5 : 1
-  );
-  renderer.setPixelRatio(performancePixelRatio);
-
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.shadowMap.enabled = false;
-  renderer.physicallyCorrectLights = false;
-  renderer.outputEncoding = 3000;
-  renderer.info.autoReset = false;
   renderer.autoClear = false;
 
-  // Additional WebGL context optimizations
-  const gl = renderer.getContext();
-  optimizeWebGLContext(gl);
+  // Setup context recovery handlers
+  setupContextHandlers();
 
-  // Setup context loss recovery with improved error handling
-  renderer.domElement.addEventListener(
-    "webglcontextlost",
-    handleContextLoss,
-    false
-  );
-
-  renderer.domElement.addEventListener(
-    "webglcontextrestored",
-    handleContextRestore,
-    false
-  );
-
-  // Create scene with optimized settings
-  scene = new Scene();
-  scene.matrixAutoUpdate = false;
-  scene.autoUpdate = false;
-  scene.background = null;
-  scene.add(getFallbackCube());
-
-  // Add lights with optimized settings
-  const ambient = new AmbientLight(0xffffff, 0.5);
-  ambient.matrixAutoUpdate = false;
-
-  const direct = new DirectionalLight(0xffffff, 0.8);
-  direct.position.set(5, 5, 2);
-  direct.castShadow = false;
-  direct.matrixAutoUpdate = false;
-  direct.updateMatrix();
-
-  scene.add(ambient);
-  scene.add(direct);
-
-  // Set up shader cache
-  setupShaderCache();
-
-  // Store resource limits
-  const maxTextureSize = renderer.capabilities.maxTextureSize;
-  const maxTextures = renderer.capabilities.maxTextures;
-
-  window.THREE_RESOURCE_LIMITS = {
-    maxTextureSize: Math.min(maxTextureSize, 2048),
-    maxVertices: 65536,
-    maxTextures: Math.min(maxTextures, 8),
-  };
-
-  // Reset state
-  resetState();
+  // Create and configure scene
+  setupScene();
 
   // Setup event listeners
   setupEventListeners();
 
   // Set manager as active
   isActive = true;
-
-  // Start performance monitoring
-  startPerformanceMonitoring();
 
   return {
     getStats: () => ({
@@ -205,437 +137,116 @@ export function initThreeJSManager() {
 }
 
 /**
- * Handle WebGL context loss
+ * Setup WebGL context loss/restore handlers
  */
-function handleContextLoss(event) {
-  event.preventDefault();
-  console.warn("WebGL context lost, attempting recovery");
-  isActive = false;
+function setupContextHandlers() {
+  renderer.domElement.addEventListener(
+    "webglcontextlost",
+    (event) => {
+      event.preventDefault();
+      isActive = false;
+    },
+    false
+  );
 
-  // Clear any pending rendering operations
-  if (window.cancelAnimationFrame) {
-    window.cancelAnimationFrame(renderFrame);
-  }
-
-  // Schedule context restoration attempt
-  setTimeout(() => {
-    try {
-      renderer.forceContextRestore();
-    } catch (e) {
-      console.error("Context restoration failed, will retry", e);
-      setTimeout(handleContextRestore, 1000);
-    }
-  }, 500);
+  renderer.domElement.addEventListener(
+    "webglcontextrestored",
+    () => {
+      dirtyCams.fill(1, 0, count);
+      needsFullRender = true;
+      isActive = true;
+    },
+    false
+  );
 }
 
 /**
- * Handle WebGL context restoration
+ * Setup scene with lights
  */
-function handleContextRestore() {
-  console.log("WebGL context restored");
+function setupScene() {
+  scene = new Scene();
+  scene.matrixAutoUpdate = false;
+  scene.autoUpdate = false;
+  scene.add(getFallbackCube());
 
-  try {
-    // Re-initialize renderer resources
-    if (renderer) {
-      const gl = renderer.getContext();
-      optimizeWebGLContext(gl);
-    }
+  // Add lights
+  const ambient = new AmbientLight(0xffffff, 0.5);
+  ambient.matrixAutoUpdate = false;
 
-    // Mark all cameras as dirty to force redraw
-    dirtyCams.fill(1, 0, count);
-    needsFullRender = true;
+  const direct = new DirectionalLight(0xffffff, 0.8);
+  direct.position.set(5, 5, 2);
+  direct.castShadow = false;
+  direct.matrixAutoUpdate = false;
+  direct.updateMatrix();
 
-    // Reactivate the manager
-    isActive = true;
-  } catch (e) {
-    console.error("Failed to restore after context recovery", e);
-
-    // Last resort - try to recreate the renderer
-    try {
-      if (renderer) {
-        renderer.dispose();
-      }
-      initThreeJSManager();
-    } catch (err) {
-      console.error("Critical renderer failure", err);
-    }
-  }
-}
-
-/**
- * Setup performance monitoring
- */
-function startPerformanceMonitoring() {
-  metrics.lastPerformanceTime = performance.now();
-  metrics.lastAutoAdjust = performance.now();
-
-  // Check if PerformanceObserver is available
-  if (typeof PerformanceObserver !== "undefined") {
-    try {
-      // Monitor for long tasks that could cause jank
-      const longTaskObserver = new PerformanceObserver((list) => {
-        const entries = list.getEntries();
-        if (entries.length > 0) {
-          // If we detect long tasks, adjust rendering quality
-          const now = performance.now();
-          if (now - metrics.lastAutoAdjust > 5000) {
-            // Only adjust every 5 sec
-            metrics.lastAutoAdjust = now;
-            adjustRenderingQuality(false); // Reduce quality
-          }
-        }
-      });
-
-      longTaskObserver.observe({ entryTypes: ["longtask"] });
-    } catch (e) {
-      // Performance API not fully supported, fallback to manual checks
-    }
-  }
-}
-
-/**
- * Adjust rendering quality based on performance
- */
-function adjustRenderingQuality(increase) {
-  const pixelRatio = renderer.getPixelRatio();
-
-  if (increase && pixelRatio < window.devicePixelRatio) {
-    // Increase quality if we have headroom
-    renderer.setPixelRatio(
-      Math.min(pixelRatio + 0.25, window.devicePixelRatio)
-    );
-  } else if (!increase && pixelRatio > 1) {
-    // Decrease quality if we're experiencing jank
-    renderer.setPixelRatio(Math.max(pixelRatio - 0.25, 1));
-  }
-
-  // Adjust adaptive skip rate
-  if (increase && adaptiveSkipRate > 1) {
-    adaptiveSkipRate--;
-  } else if (!increase && adaptiveSkipRate < IDLE_FRAME_SKIP) {
-    adaptiveSkipRate++;
-  }
-
-  // Force redraw with new settings
-  dirtyCams.fill(1, 0, count);
-}
-
-/**
- * Optimize WebGL context settings
- */
-function optimizeWebGLContext(gl) {
-  if (!gl) return;
-
-  gl.depthFunc(gl.LEQUAL);
-  gl.hint(gl.GENERATE_MIPMAP_HINT, gl.FASTEST);
-
-  // Only disable dithering on high-performance mode
-  if (!isIdle()) {
-    gl.disable(gl.DITHER);
-  }
-
-  // Use smaller data types where possible
-  gl.getExtension("OES_element_index_uint");
-  gl.getExtension("ANGLE_instanced_arrays");
-
-  // For mobile devices, try to get half float extension for better performance
-  gl.getExtension("OES_texture_half_float");
-  gl.getExtension("OES_texture_half_float_linear");
-
-  // Enable compressed textures if available
-  const compressedExtensions = [
-    "WEBGL_compressed_texture_s3tc",
-    "WEBKIT_WEBGL_compressed_texture_s3tc",
-    "WEBGL_compressed_texture_etc",
-    "WEBGL_compressed_texture_astc",
-  ];
-
-  for (const extName of compressedExtensions) {
-    gl.getExtension(extName);
-  }
-
-  // Set power preference based on user idle state
-  if (gl.getExtension("EXT_disjoint_timer_query")) {
-    const powerPreference = isIdle() ? "low-power" : "high-performance";
-    // Adjust pixel ratio based on power preference
-    if (isIdle()) {
-      renderer.setPixelRatio(1.0);
-    }
-  }
-}
-
-/**
- * Setup shader caching system
- */
-function setupShaderCache() {
-  if (window.THREE && window.THREE.ShaderLib) {
-    const originalShaderSource = window.THREE.ShaderLib.getShaderSource;
-    window.THREE.ShaderLib.getShaderSource = function (id) {
-      if (shaderCache.has(id)) {
-        return shaderCache.get(id);
-      }
-      const source = originalShaderSource(id);
-      shaderCache.set(id, source);
-      return source;
-    };
-  }
+  scene.add(ambient);
+  scene.add(direct);
 }
 
 /**
  * Set up document and window event listeners
  */
 function setupEventListeners() {
-  // Document visibility handler with improved logic
+  // Visibility change handler
   document.addEventListener(
     "visibilitychange",
     () => {
       const isHidden = document.visibilityState === "hidden";
-
-      if (isHidden && isActive) {
-        pauseManager();
-      } else if (!isHidden && !isActive) {
-        resumeManager();
-      }
+      isHidden ? pauseManager() : resumeManager();
     },
     { passive: true }
   );
 
-  // Window resize handler with debouncing
+  // Debounced resize handler
   let resizeTimeout = null;
   window.addEventListener(
     "resize",
     () => {
-      if (resizeTimeout) {
-        clearTimeout(resizeTimeout);
-      }
+      if (resizeTimeout) clearTimeout(resizeTimeout);
 
-      // Use timeout for debouncing
       resizeTimeout = setTimeout(() => {
         dirtyCams.fill(1, 0, count);
         needsFullRender = true;
         resizeTimeout = null;
-      }, 200); // 200ms debounce
+      }, 200);
     },
     { passive: true }
   );
 
-  // Detect when tab becomes visible/focused
+  // Focus handler
   window.addEventListener(
     "focus",
     () => {
-      if (!isActive) {
-        resumeManager();
-      }
+      if (!isActive) resumeManager();
     },
     { passive: true }
   );
 
-  // Cleanup on page unload
+  // Cleanup on unload
   window.addEventListener("beforeunload", cleanupResources);
-
-  // Add memory pressure handler if available
-  if ("onmemorypressure" in window) {
-    window.addEventListener("memorypressure", () => {
-      // Perform immediate cleanup when memory pressure is detected
-      performCleanup(true);
-    });
-  }
 }
 
 /**
- * Pause the manager
+ * Pause the rendering manager
  */
 function pauseManager() {
   isActive = false;
-
-  // Free up some GPU memory when inactive
-  if (renderer) {
-    renderer.setPixelRatio(1.0);
-  }
+  if (renderer) renderer.setPixelRatio(1.0);
 }
 
 /**
- * Resume the manager
+ * Resume the rendering manager
  */
 function resumeManager() {
-  // Force redraw all cameras
   dirtyCams.fill(1, 0, count);
   needsFullRender = true;
   isActive = true;
 
-  // Reset metrics
   metrics.lastFpsTime = performance.now();
   metrics.frames = 0;
 
-  // Restore pixel ratio
-  if (renderer) {
-    const devicePixelRatio = window.devicePixelRatio || 1;
-    const performancePixelRatio = Math.min(
-      devicePixelRatio,
-      devicePixelRatio > 2 ? 1.5 : 1
-    );
-    renderer.setPixelRatio(performancePixelRatio);
-  }
-}
-
-/**
- * Reset the manager state
- */
-function resetState() {
-  activeCams.fill(0);
-  visibleCams.fill(0);
-  dirtyCams.fill(0);
-  lastRender.fill(0);
-  count = 0;
-
-  // Reset metrics
-  Object.assign(metrics, {
-    frames: 0,
-    lastFpsTime: performance.now(),
-    fps: 0,
-    skipped: 0,
-    rendered: 0,
-    total: 0,
-    lastPerformanceTime: performance.now(),
-    lastAutoAdjust: performance.now(),
-  });
-}
-
-/**
- * Clean up all WebGL and Three.js resources
- */
-function cleanupResources() {
-  // Stop manager
-  if (isActive) {
-    pauseManager();
-  }
-
-  // Disconnect observers
-  observers.forEach(({ observer }) => observer.disconnect());
-  observers.length = 0;
-
-  // Clean up cameras and controls
-  for (let i = 0; i < count; i++) {
-    const ctrl = controls[i];
-    if (ctrl?.dispose) ctrl.dispose();
-
-    // Clean up camera resources
-    const cam = cameras[i];
-    if (cam?.userData?.disposables) {
-      cam.userData.disposables.forEach((item) => {
-        if (item?.dispose) item.dispose();
-      });
-    }
-
-    controls[i] = null;
-    cameras[i] = null;
-    contexts[i] = null;
-    metadata[i] = null;
-  }
-
-  // Clear object pools
-  geometryPool.forEach((geo) => geo.dispose && geo.dispose());
-  materialPool.forEach((mat) => mat.dispose && mat.dispose());
-  geometryPool.clear();
-  materialPool.clear();
-  shaderCache.clear();
-
-  // Clean up WebGL context
-  if (renderer) {
-    try {
-      const gl = renderer.getContext();
-      const ext = gl?.getExtension("WEBGL_lose_context");
-      if (ext) ext.loseContext();
-
-      renderer.dispose();
-      renderer.forceContextLoss();
-    } catch (e) {
-      // Ignore errors during cleanup
-    }
-    renderer = null;
-  }
-
-  // Clean up scene
-  if (scene) {
-    disposeSceneResources(scene);
-    scene = null;
-  }
-
-  // Reset state
-  resetState();
-}
-
-/**
- * Recursively dispose scene resources
- */
-function disposeSceneResources(scene) {
-  // Use an efficient traversal approach
-  const traverseQueue = [...scene.children];
-  const objectsToDispose = [];
-
-  // First pass: collect all objects
-  while (traverseQueue.length > 0) {
-    const obj = traverseQueue.pop();
-    if (!obj) continue;
-
-    objectsToDispose.push(obj);
-
-    if (obj.children?.length) {
-      traverseQueue.push(...obj.children);
-    }
-  }
-
-  // Remove all children at once
-  scene.children.length = 0;
-
-  // Second pass: dispose resources
-  objectsToDispose.forEach((obj) => {
-    // Dispose geometries
-    if (obj.geometry?.dispose) obj.geometry.dispose();
-
-    // Dispose materials
-    if (obj.material) {
-      disposeMaterial(obj.material);
-    }
-
-    // Dispose custom resources
-    if (obj.userData?.disposables) {
-      obj.userData.disposables.forEach((item) => {
-        if (item?.dispose) item.dispose();
-      });
-    }
-  });
-}
-
-/**
- * Dispose material and its textures
- */
-function disposeMaterial(material) {
-  if (!material) return;
-
-  // Handle material arrays
-  if (Array.isArray(material)) {
-    material.forEach(disposeMaterial);
-    return;
-  }
-
-  // Dispose textures - only check known texture properties
-  const textureProps = [
-    "map",
-    "normalMap",
-    "specularMap",
-    "emissiveMap",
-    "bumpMap",
-    "roughnessMap",
-    "metalnessMap",
-  ];
-  textureProps.forEach((prop) => {
-    if (material[prop]?.isTexture) {
-      material[prop].dispose();
-    }
-  });
-
-  if (material.dispose) material.dispose();
+  if (renderer)
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 }
 
 /**
@@ -648,14 +259,13 @@ export function registerCamera(
   cameraMetadata = {},
   active = true
 ) {
-  if (count >= MAX_CAMERAS) {
-    throw new Error(`Max cameras (${MAX_CAMERAS}) reached`);
+  if (count >= CONFIG.MAX_CAMERAS) {
+    throw new Error(`Max cameras (${CONFIG.MAX_CAMERAS}) reached`);
   }
 
   const idx = count++;
-  const canvas = context?.canvas;
 
-  // Store references
+  // Store camera data
   cameras[idx] = camera;
   controls[idx] = cameraControls;
   contexts[idx] = context;
@@ -666,57 +276,18 @@ export function registerCamera(
   visibleCams[idx] = 1;
   dirtyCams[idx] = 1;
 
-  // Optimize camera
+  // Camera optimizations
   if (camera?.isPerspectiveCamera) {
     camera.matrixAutoUpdate = true;
-  }
-
-  // Setup LOD for scene objects with this camera
-  if (camera && scene) {
-    setupLODForScene(scene, camera);
   }
 
   // Configure controls
   configureControls(cameraControls);
 
-  // Use OffscreenCanvas for non-visible elements if supported
-  if (canvas && "OffscreenCanvas" in window && !active) {
-    try {
-      const offscreen = canvas.transferControlToOffscreen();
-      contexts[idx] = offscreen.getContext("2d");
-    } catch (e) {
-      // Fallback to normal canvas
-    }
-  }
-
-  // Setup canvas and visibility observer
+  // Setup observer for visibility
   setupCanvasObserver(context, idx, active);
 
   return idx;
-}
-
-/**
- * Set up LOD for meshes in the scene based on camera
- */
-function setupLODForScene(scene, camera) {
-  scene.traverse((object) => {
-    if (object.isMesh && !object.userData.lodConfigured) {
-      const geometry = object.geometry;
-      if (
-        geometry &&
-        geometry.attributes &&
-        geometry.attributes.position &&
-        geometry.attributes.position.count > LOD_VERTEX_THRESHOLD
-      ) {
-        object.userData.lodConfigured = true;
-        // Store the original geometry for when needed
-        object.userData.fullDetail = geometry;
-
-        // Flag for frustum culling optimization
-        object.frustumCulled = true;
-      }
-    }
-  });
 }
 
 /**
@@ -732,27 +303,21 @@ function configureControls(ctrl) {
   }
 
   // Apply common settings
-  const settings = {
+  Object.assign(ctrl, {
     rotateSpeed: 0.65,
     zoomSpeed: 0.65,
     enableKeys: false,
-    keyPanSpeed: 0,
-  };
-
-  for (const [key, value] of Object.entries(settings)) {
-    if (key in ctrl) ctrl[key] = value;
-  }
+  });
 }
 
 /**
- * Setup intersection observer for canvas visibility
+ * Setup observer for canvas visibility
  */
 function setupCanvasObserver(context, idx, active) {
   if (!context?.canvas) return;
 
   context.canvas.style.display = active ? "block" : "none";
 
-  // Setup intersection observer with better thresholds
   const observer = new IntersectionObserver(
     (entries) => {
       const entry = entries[0];
@@ -760,19 +325,18 @@ function setupCanvasObserver(context, idx, active) {
 
       const wasVisible = visibleCams[idx] === 1;
       const isVisible =
-        entry.isIntersecting && entry.intersectionRatio > VISIBILITY_THRESHOLD;
+        entry.isIntersecting &&
+        entry.intersectionRatio > CONFIG.VISIBILITY_THRESHOLD;
 
       visibleCams[idx] = isVisible ? 1 : 0;
 
       if (!wasVisible && isVisible) {
         dirtyCams[idx] = 1;
-        if (!isActive) {
-          resumeManager();
-        }
+        if (!isActive) resumeManager();
       }
     },
     {
-      threshold: [0, VISIBILITY_THRESHOLD, 0.25, 0.5], // More granular visibility detection
+      threshold: [0, CONFIG.VISIBILITY_THRESHOLD, 0.5],
       rootMargin: "100px",
     }
   );
@@ -814,7 +378,18 @@ export function isCameraActive(idx) {
 }
 
 /**
- * Dispose a camera
+ * Force redraw of a specific camera
+ */
+export function forceRedraw(idx) {
+  if (idx < 0 || idx >= count) return;
+
+  dirtyCams[idx] = 1;
+
+  if (!isActive) resumeManager();
+}
+
+/**
+ * Dispose a camera and its resources
  */
 export function disposeCamera(idx) {
   if (idx < 0 || idx >= count) return;
@@ -853,19 +428,6 @@ export function disposeCamera(idx) {
 }
 
 /**
- * Force redraw of a specific camera
- */
-export function forceRedraw(idx) {
-  if (idx < 0 || idx >= count) return;
-
-  dirtyCams[idx] = 1;
-
-  if (!isActive) {
-    resumeManager();
-  }
-}
-
-/**
  * Get the scene instance
  */
 export function getScene() {
@@ -894,42 +456,79 @@ export function getAllCameras() {
 }
 
 /**
- * Dispose unused resources from camera
+ * Clean up all WebGL and Three.js resources
  */
-function disposeUnusedResources(cameraIdx) {
-  const cam = cameras[cameraIdx];
-  if (!cam) return;
+function cleanupResources() {
+  isActive = false;
 
-  // Dispose any cached materials/textures specific to this camera
-  if (cam.userData && cam.userData.cachedResources) {
-    cam.userData.cachedResources.forEach((resource) => {
-      if (resource.dispose) resource.dispose();
-    });
-    cam.userData.cachedResources = [];
+  // Disconnect observers
+  observers.forEach(({ observer }) => observer.disconnect());
+  observers = [];
+
+  // Clean up cameras and controls
+  for (let i = 0; i < count; i++) {
+    disposeCamera(i);
   }
+
+  // Clear object pools
+  geometryPool.forEach((geo) => geo?.dispose?.());
+  materialPool.forEach((mat) => mat?.dispose?.());
+  geometryPool.clear();
+  materialPool.clear();
+  shaderCache.clear();
+
+  // Clean up WebGL context
+  if (renderer) {
+    try {
+      renderer.dispose();
+      renderer.forceContextLoss();
+    } catch (e) {
+      // Ignore errors during cleanup
+    }
+    renderer = null;
+  }
+
+  // Clean up scene
+  if (scene) {
+    disposeSceneResources(scene);
+    scene = null;
+  }
+
+  // Reset state
+  count = 0;
 }
 
 /**
- * Compact arrays to reclaim space and clean up unused resources
+ * Dispose of all scene resources
+ */
+function disposeSceneResources(scene) {
+  scene.traverse((obj) => {
+    if (obj.geometry?.dispose) obj.geometry.dispose();
+
+    if (obj.material) {
+      if (Array.isArray(obj.material)) {
+        obj.material.forEach((m) => m?.dispose?.());
+      } else {
+        obj.material.dispose?.();
+      }
+    }
+
+    if (obj.userData?.disposables) {
+      obj.userData.disposables.forEach((item) => item?.dispose?.());
+    }
+  });
+
+  scene.children.length = 0;
+}
+
+/**
+ * Perform resource cleanup
  */
 export function performCleanup(force = false) {
   const now = performance.now();
-  if (!force && now - (lastCleanup || 0) < 30000) return;
+  if (!force && now - lastCleanup < CONFIG.CLEANUP_INTERVAL) return;
 
   lastCleanup = now;
-
-  // Force garbage collection for unused textures
-  const unusedThreshold = now - 60000; // 1 minute
-
-  // Check for unused textures and resources
-  if (renderer && renderer.info && renderer.info.memory) {
-    for (let i = 0; i < count; i++) {
-      if (cameras[i] && lastRender[i] < unusedThreshold && !visibleCams[i]) {
-        // Camera hasn't been used recently and is not visible
-        disposeUnusedResources(i);
-      }
-    }
-  }
 
   // Compact arrays
   let writeIdx = 0;
@@ -968,41 +567,311 @@ export function performCleanup(force = false) {
 }
 
 /**
- * Priority-sort cameras for efficient rendering
+ * Render a frame with optimizations for single-camera use case
+ */
+export function renderFrame(deltaTime) {
+  if (!isActive) return false;
+
+  // Adaptive frame management
+  const now = performance.now();
+  const frameTimeMs = now - lastFrameTime;
+  lastFrameTime = now;
+
+  // Adjust skip rate based on performance
+  if (
+    frameTimeMs > frameBudget * 1.5 &&
+    adaptiveSkipRate < CONFIG.IDLE_FRAME_SKIP
+  ) {
+    adaptiveSkipRate = Math.min(adaptiveSkipRate + 1, CONFIG.IDLE_FRAME_SKIP);
+  } else if (frameTimeMs < frameBudget * 0.8 && adaptiveSkipRate > 1) {
+    adaptiveSkipRate = Math.max(adaptiveSkipRate - 1, 1);
+  }
+
+  // Skip frames when appropriate
+  if (
+    isIdle() &&
+    !hasActiveDrag &&
+    !needsFullRender &&
+    metrics.frames % adaptiveSkipRate !== 0
+  ) {
+    metrics.skipped++;
+    return false;
+  }
+
+  // Update controls and check for drag operations
+  updateControls(deltaTime);
+
+  // Render cameras using optimized path when only one camera is active
+  if (renderer) {
+    // Check if we're in single camera mode
+    if (isSingleCameraMode()) {
+      return renderSingleCamera();
+    } else {
+      return renderCameras();
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Check if we're in single camera mode (only one camera active and visible)
+ */
+function isSingleCameraMode() {
+  let activeCount = 0;
+  let lastActiveIdx = -1;
+
+  for (let i = 0; i < count; i++) {
+    if (activeCams[i] === 1 && visibleCams[i] === 1) {
+      activeCount++;
+      lastActiveIdx = i;
+      if (activeCount > 1) break;
+    }
+  }
+
+  return activeCount === 1 && lastActiveIdx >= 0;
+}
+
+let activeIdx = -1;
+
+/**
+ * Optimized rendering when only one camera is active
+ */
+function renderSingleCamera() {
+  // Find the single active camera
+  if (activeIdx === -1)
+    for (let i = 0; i < count; i++) {
+      if (activeCams[i] === 1 && visibleCams[i] === 1) {
+        activeIdx = i;
+        break;
+      }
+    }
+
+  if (activeIdx === -1) return false;
+
+  const cam = cameras[activeIdx];
+  const ctx = contexts[activeIdx];
+  const ctrl = controls[activeIdx];
+
+  // Skip if no camera needs rendering
+  if (dirtyCams[activeIdx] !== 1 && !ctrl?._dragging && !needsFullRender) {
+    metrics.skipped++;
+    return false;
+  }
+
+  if (!cam || !ctx?.canvas?.isConnected) return false;
+
+  const canvas = ctx.canvas;
+  const w = canvas.width;
+  const h = canvas.height;
+
+  if (w <= 8 || h <= 8) return false;
+
+  try {
+    // Optimize renderer setup for single camera
+    renderer.autoClear = true; // Enable autoClear for single camera
+    renderer.scissorTest = false; // Disable scissor test
+    renderer.setSize(w, h, false);
+    renderer.setViewport(0, 0, w, h);
+
+    // Update matrices - more efficiently for single camera
+    cam.updateMatrixWorld(true);
+    scene.updateMatrixWorld(false); // Don't force update for all objects
+
+    // Only apply frustum culling if we have a complex scene
+    if (scene.children.length > 10) {
+      applyFrustumCulling(cam);
+    }
+
+    // Render scene
+    renderer.render(scene, cam);
+
+    // Copy to destination canvas
+    ctx.clearRect(0, 0, w, h);
+    ctx.drawImage(
+      renderer.domElement,
+      0,
+      0,
+      renderer.domElement.width,
+      renderer.domElement.height,
+      0,
+      0,
+      w,
+      h
+    );
+
+    // Update state
+    lastRender[activeIdx] = performance.now();
+    dirtyCams[activeIdx] = 0;
+    metrics.rendered++;
+    metrics.total++;
+
+    needsFullRender = false;
+
+    return true;
+  } catch (e) {
+    console.error("Error rendering single camera", e);
+    return false;
+  }
+}
+
+/**
+ * Update camera controls and check for drag operations
+ */
+function updateControls(deltaTime) {
+  hasActiveDrag = false;
+
+  for (let i = 0; i < count; i++) {
+    if (activeCams[i] !== 1 || visibleCams[i] !== 1) continue;
+
+    const ctrl = controls[i];
+    if (!ctrl) continue;
+
+    if (ctrl._dragging) hasActiveDrag = true;
+
+    if (ctrl.update) {
+      ctrl.update(deltaTime);
+      dirtyCams[i] = 1;
+    }
+  }
+}
+
+/**
+ * Render all active cameras
+ */
+function renderCameras() {
+  renderer.autoClear = false;
+  renderer.scissorTest = true;
+
+  metrics.rendered = 0;
+
+  try {
+    // Get priority-sorted camera indices
+    const prioritizedCameras = prioritizeCameras();
+
+    // Render cameras up to batch size
+    for (
+      let i = 0;
+      i < Math.min(prioritizedCameras.length, CONFIG.BATCH_SIZE);
+      i++
+    ) {
+      renderCamera(prioritizedCameras[i]);
+    }
+
+    renderer.scissorTest = false;
+    needsFullRender = false;
+  } catch (e) {
+    console.error("Error rendering cameras", e);
+  }
+
+  // Update FPS metrics
+  metrics.frames++;
+  const now = performance.now();
+  if (now - metrics.lastFpsTime >= 1000) {
+    metrics.fps = metrics.frames;
+    metrics.frames = 0;
+    metrics.lastFpsTime = now;
+  }
+
+  return metrics.rendered > 0;
+}
+
+/**
+ * Prioritize cameras for rendering
  */
 function prioritizeCameras() {
-  // Collect active, visible, dirty cameras
-  const sortedIndices = [];
-  for (let i = 0; i < count; i++) {
-    if (activeCams[i] === 1 && visibleCams[i] === 1 && dirtyCams[i] === 1) {
-      // Check if camera is actually in viewport
-      const ctx = contexts[i];
-      if (ctx?.canvas) {
-        const rect = ctx.canvas.getBoundingClientRect();
-        const isInViewport =
-          rect.bottom > 0 &&
-          rect.top < window.innerHeight &&
-          rect.right > 0 &&
-          rect.left < window.innerWidth;
+  // Collect candidates
+  const candidates = [];
 
-        if (isInViewport) {
-          sortedIndices.push({
-            idx: i,
-            priority: controls[i]?._dragging ? 10 : 5,
-          });
-        } else {
-          // Canvas not in viewport - skip render but mark as processed
-          dirtyCams[i] = 0;
-          metrics.skipped++;
-        }
-      }
+  for (let i = 0; i < count; i++) {
+    if (activeCams[i] !== 1 || visibleCams[i] !== 1 || dirtyCams[i] !== 1)
+      continue;
+
+    // Check if camera is in viewport
+    const ctx = contexts[i];
+    if (!ctx?.canvas) continue;
+
+    const rect = ctx.canvas.getBoundingClientRect();
+    const isInViewport =
+      rect.bottom > 0 &&
+      rect.top < window.innerHeight &&
+      rect.right > 0 &&
+      rect.left < window.innerWidth;
+
+    if (isInViewport) {
+      candidates.push({
+        idx: i,
+        priority: controls[i]?._dragging ? 10 : 5,
+      });
+    } else {
+      // Not in viewport, mark as processed
+      dirtyCams[i] = 0;
+      metrics.skipped++;
     }
   }
 
   // Sort by priority (higher first)
-  return sortedIndices
+  return candidates
     .sort((a, b) => b.priority - a.priority)
     .map((item) => item.idx);
+}
+
+/**
+ * Render a single camera
+ */
+function renderCamera(idx) {
+  const cam = cameras[idx];
+  const ctx = contexts[idx];
+
+  if (!cam || !ctx?.canvas?.isConnected) return false;
+
+  const canvas = ctx.canvas;
+  const w = canvas.width;
+  const h = canvas.height;
+
+  if (w <= 8 || h <= 8) return false;
+
+  try {
+    // Configure renderer for this camera
+    renderer.setSize(w, h, false);
+    renderer.setViewport(0, 0, w, h);
+    renderer.setScissor(0, 0, w, h);
+    renderer.clear(true, true, false);
+
+    // Update matrices
+    cam.updateMatrixWorld(true);
+    scene.updateMatrixWorld(true);
+
+    // Apply frustum culling
+    applyFrustumCulling(cam);
+
+    // Render scene
+    renderer.render(scene, cam);
+
+    // Copy to destination canvas
+    ctx.clearRect(0, 0, w, h);
+    ctx.drawImage(
+      renderer.domElement,
+      0,
+      0,
+      renderer.domElement.width,
+      renderer.domElement.height,
+      0,
+      0,
+      w,
+      h
+    );
+
+    // Update state
+    lastRender[idx] = performance.now();
+    dirtyCams[idx] = 0;
+    metrics.rendered++;
+    metrics.total++;
+
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
 /**
@@ -1025,141 +894,4 @@ function applyFrustumCulling(camera) {
       object.visible = frustum.intersectsObject(object);
     }
   });
-}
-
-/**
- * Render a single camera
- */
-function renderCamera(idx) {
-  const cam = cameras[idx];
-  const ctx = contexts[idx];
-
-  if (!cam || !ctx?.canvas?.isConnected) return false;
-
-  const canvas = ctx.canvas;
-  const w = canvas.width;
-  const h = canvas.height;
-
-  if (w <= 8 || h <= 8) return false;
-
-  try {
-    renderer.setSize(w, h, false);
-    renderer.setViewport(0, 0, w, h);
-    renderer.setScissor(0, 0, w, h);
-    renderer.scissorTest = true;
-    renderer.clear(true, true, false);
-
-    cam.updateMatrixWorld(true);
-    scene.updateMatrixWorld(true);
-
-    // Apply frustum culling for better performance
-    applyFrustumCulling(cam);
-
-    renderer.render(scene, cam);
-
-    ctx.clearRect(0, 0, w, h);
-    ctx.drawImage(
-      renderer.domElement,
-      0,
-      0,
-      renderer.domElement.width,
-      renderer.domElement.height,
-      0,
-      0,
-      w,
-      h
-    );
-
-    lastRender[idx] = performance.now();
-    dirtyCams[idx] = 0;
-    metrics.rendered++;
-    metrics.total++;
-
-    return true;
-  } catch (e) {
-    // Ignore rendering errors
-    return false;
-  }
-}
-
-/**
- * Process a frame with the given deltaTime
- * This function should be called from an external render loop
- */
-export function renderFrame(deltaTime) {
-  if (!isActive) return false;
-
-  // Adaptive frame management
-  const now = performance.now();
-  const frameTimeMs = now - lastFrameTime;
-  lastFrameTime = now;
-
-  // Adjust skip rate based on performance
-  if (frameTimeMs > frameBudget * 1.5 && adaptiveSkipRate < IDLE_FRAME_SKIP) {
-    adaptiveSkipRate = Math.min(adaptiveSkipRate + 1, IDLE_FRAME_SKIP);
-  } else if (frameTimeMs < frameBudget * 0.8 && adaptiveSkipRate > 1) {
-    adaptiveSkipRate = Math.max(adaptiveSkipRate - 1, 1);
-  }
-
-  // Skip frames when appropriate
-  if (isIdle() && !hasActiveDrag && !needsFullRender) {
-    if (metrics.frames % adaptiveSkipRate !== 0) {
-      metrics.skipped++;
-      return false;
-    }
-  }
-
-  // Update controls and check for active drags
-  hasActiveDrag = false;
-  for (let i = 0; i < count; i++) {
-    if (activeCams[i] !== 1 || visibleCams[i] !== 1) continue;
-
-    const ctrl = controls[i];
-    if (!ctrl) continue;
-
-    if (ctrl._dragging) hasActiveDrag = true;
-
-    if (ctrl.update) {
-      ctrl.update(deltaTime);
-      dirtyCams[i] = 1;
-    }
-  }
-
-  // Render cameras
-  if (renderer) {
-    renderer.autoClear = false;
-    renderer.scissorTest = true;
-
-    metrics.rendered = 0;
-
-    try {
-      // Get priority-sorted camera indices
-      const prioritizedCameras = prioritizeCameras();
-
-      // Render only the highest priority cameras up to batch size
-      for (
-        let i = 0;
-        i < Math.min(prioritizedCameras.length, BATCH_SIZE);
-        i++
-      ) {
-        renderCamera(prioritizedCameras[i]);
-      }
-
-      renderer.scissorTest = false;
-      needsFullRender = false;
-      renderer.info.reset();
-    } catch (e) {
-      // Ignore batching errors
-    }
-  }
-
-  // Update FPS counter
-  metrics.frames++;
-  if (deltaTime - metrics.lastFpsTime >= 1000) {
-    metrics.fps = metrics.frames;
-    metrics.frames = 0;
-    metrics.lastFpsTime = deltaTime;
-  }
-
-  return metrics.rendered > 0;
 }

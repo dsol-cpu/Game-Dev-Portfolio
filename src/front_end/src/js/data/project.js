@@ -27,14 +27,14 @@ export const TechTags = Object.freeze({
 export const projectCardData = [
   {
     id: "geospatial-visualizer",
-    category: PortfolioCategory.GODOT,
+    category: PortfolioCategory.UNITY,
     title: "Geospatial Visualizer",
-    tags: [TechTags.GODOT, TechTags.CSHARP],
+    tags: [TechTags.UNITY, TechTags.CSHARP],
     shortDescription: "A visualization of geospatial information.",
     demoUrl: "https://dsol-cpu.github.io/GeospatialDataVisualization-Aug2024/",
     githubUrl:
       "https://github.com/dsol-cpu/GeospatialDataVisualization-Aug2024",
-    modelName: "",
+    modelName: "globe",
     imageUrl: "/images/me.png",
     imageAlt: "Geospatial Visualizer",
     fullDescription: [

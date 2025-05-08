@@ -219,15 +219,12 @@
     <div class="main-content">
       <!-- About Section -->
       <section id="about">
-        <div class="container">
+        <div class="container about-container">
+          <!-- Canvas container with proper positioning -->
           <div class="about-canvas-container">
-            <canvas
-              id="about-threejs-canvas"
-              width="300"
-              height="200"
-              class="threejs-canvas"
-            ></canvas>
+            <canvas id="about-threejs-canvas" class="threejs-canvas"></canvas>
           </div>
+
           <div class="about-text">
             <p>I'm a game developer.</p>
             <br />
@@ -250,17 +247,26 @@
           <div class="about-images">
             <div class="image-card">
               <img
-                src="path-to-unity-screenshot.jpg"
+                src="/api/placeholder/200/150"
                 alt="Unity project screenshot"
+                loading="lazy"
               />
               <p>Gameplay programming & procedural generation</p>
             </div>
             <div class="image-card">
-              <img src="/images/me.pn" alt="3D modeling artwork" />
+              <img
+                src="/api/placeholder/200/150"
+                alt="3D modeling artwork"
+                loading="lazy"
+              />
               <p>Exploring 3D modeling & game art</p>
             </div>
             <div class="image-card">
-              <img src="path-to-friends-gaming.jpg" alt="Gaming with friends" />
+              <img
+                src="/api/placeholder/200/150"
+                alt="Gaming with friends"
+                loading="lazy"
+              />
               <p>Gaming with friends in my downtime</p>
             </div>
           </div>
@@ -416,9 +422,6 @@
 
       <!-- Game Controls Info Box -->
       <div class="game-controls-info">
-        <!-- <button class="close-btn">×</button> -->
-        <!-- <button class="toggle-btn">-</button> -->
-
         <div class="controls-header">
           <svg class="controller-icon">
             <use href="#icon-controller"></use>

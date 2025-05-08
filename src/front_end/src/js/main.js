@@ -6,20 +6,28 @@ import { initBlogPosts } from "./blog.js";
 import { initNavigation } from "./navigation.js";
 import { initPortfolioFilters } from "./portfolio-filters.js";
 import { initProjectCards, setupBackdropListener } from "./project-card.js";
+import { createDeltaTimeMetricsOverlay } from "./three/delta-time-metrics.js";
+import { initGame, updateGameLoop, updateIslandBobbing } from "./three/game.js";
+import { preloadModels } from "./three/model-manager.js";
 import {
   initPortfolioCanvases,
   initProjectCardScene,
 } from "./three/project-cards.js";
 import { initThreeJSManager, renderFrame } from "./three/threejs-manager.js";
-import { initUserInteraction } from "./user-interaction.js";
+// Import the new frame capping functions
+import {
+  getDeltaTime,
+  getFixedDeltaTime,
+  runFixedUpdates,
+  startFrameCappedLoop,
+  stopFrameCappedLoop,
+} from "./three/time-manager.js";
+import { initUserInteraction, isIdle } from "./user-interaction.js";
 import { isLowPoweredDevice } from "./utils/device.js";
-import { initGame, updateIslandBobbing, updateGameLoop } from "./three/game.js";
-import { updateTime } from "./three/time-manager.js";
-import { preloadModels } from "./three/model-manager.js";
-import { createDeltaTimeMetricsOverlay } from "./three/delta-time-metrics.js";
+
 // Initialize on DOM load
 document.addEventListener("DOMContentLoaded", initializeApp);
-let deltaTime = 0;
+
 /**
  * Main initialization function
  */
@@ -30,15 +38,16 @@ async function initializeApp() {
   // Initialize navigation
   initNavigation();
 
-  initAboutCanvas();
   initProjectCards();
 
   // Only initialize the ThreeJS scenes and models if you don't have a doodoo computer
   if (isLowPoweredDevice()) {
     document.getElementById("view-toggle-btn").style.display = "none";
   } else {
-    preloadModels(["babyTurtle", "portfolioShip"]);
-    initThreeJSManager();
+    preloadModels(["babyTurtle", "portfolioShip", "globe"]);
+    await initThreeJSManager();
+    initAboutCanvas();
+
     initPortfolioCanvases();
     initProjectCardScene();
     initGame();
@@ -51,7 +60,8 @@ async function initializeApp() {
   setupBackdropListener();
   initBlogPosts();
 
-  mainLoop();
+  // Start the frame-capped main loop instead of calling mainLoop directly
+  startFrameCappedLoop(frameUpdateCallback);
 }
 
 function initAboutCanvas() {
@@ -92,19 +102,35 @@ function initAboutCanvas() {
   );
 }
 
-function mainLoop() {
-  // Update deltaTime var instead of a const to avoid recreating variables
-  deltaTime = updateTime();
+/**
+ * Frame update callback function - called by the frame capping system
+ * @param {number} timestamp - The timestamp from requestAnimationFrame
+ */
+function frameUpdateCallback(timestamp) {
+  if (isIdle()) return;
 
-  if (deltaTime !== null) {
-    //Game scene rendering and logic
-    updateIslandBobbing(deltaTime);
-    updateGameLoop(deltaTime);
+  // Get the frame-capped deltaTime
+  const deltaTime = getDeltaTime();
 
-    //General engine operations for all registered physics bodies and cameras
-    //TODO: physicsLoop(deltaTime); ???
-    renderFrame(deltaTime);
-  }
-  //Singular recursive loop to request next frame
-  requestAnimationFrame(mainLoop);
+  // Run physics and other fixed-timestep systems
+  runFixedUpdates((fixedDeltaTime) => {
+    // Any logic that needs to run at fixed timesteps (like physics)
+    // Put physics code here if you have any
+  });
+
+  // Game scene rendering and logic
+  updateIslandBobbing(deltaTime);
+  updateGameLoop(deltaTime);
+
+  // General engine operations for all registered physics bodies and cameras
+  renderFrame(deltaTime);
 }
+
+// Clean up function - call this when unloading the app if needed
+function cleanup() {
+  stopFrameCappedLoop();
+  // Any other cleanup...
+}
+
+// Optional: Handle cleanup when the page is unloaded
+window.addEventListener("beforeunload", cleanup);

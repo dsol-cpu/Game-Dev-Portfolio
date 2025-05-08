@@ -6,7 +6,6 @@ import { C } from "../constants/constants.js";
 export const orbitControlsConfig = {
   enableDamping: true,
   dampingFactor: 0.05,
-  autoRotate: true,
   autoRotateSpeed: C.AUTO_ROTATE_SPEED,
   enableZoom: true,
   minDistance: C.MIN_DISTANCE,

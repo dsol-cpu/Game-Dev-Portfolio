@@ -354,6 +354,7 @@ function initGameControlsPanel() {
     }, 100);
   });
 }
+
 export async function initGame() {
   if (gameState.isInitialized) return;
 
@@ -378,6 +379,7 @@ export async function initGame() {
     return;
   }
 
+  // Now initialize the game scene
   await initGameScene();
   elements.gameViewContainer.style.display = "none";
 

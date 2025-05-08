@@ -1,61 +1,93 @@
 import { isIdle } from "../user-interaction.js";
 
-let frameRate = 60;
-let frameDelay = 1000 / frameRate;
-let frameDeltaTime = 1 / frameRate; // Fixed delta time per frame to stabilize fps
+const TARGET_FRAME_RATE = 60;
+const FRAME_DELAY = 1000 / TARGET_FRAME_RATE;
+const FIXED_DELTA_TIME = 1 / TARGET_FRAME_RATE; // 60Hz physics step
+const FPS_SMOOTHING_ALPHA = 0.1;
+const MAX_DELTA_TIME = 0.05; // 50ms max per frame
+
+let accumulator = 0;
 let lastFrameTime = performance.now();
-let nextFrameTime = lastFrameTime + frameDelay;
+let deltaTime = FIXED_DELTA_TIME;
+let smoothedDeltaTime = deltaTime;
+let smoothedFPS = TARGET_FRAME_RATE;
+let rafHandle = null;
+let frameCallback = null;
 
-/**
- * Updates time values and enforces frame rate if needed
- * @returns {number|null} Delta time in seconds or null if frame should be skipped
- */
-export function updateTime() {
-  const currentTime = performance.now();
+let lastActualFrameTimes = Array(10).fill(FRAME_DELAY);
+let frameTimeIndex = 0;
 
-  // If idle, skip frame and do NOT update any timing state
-  if (isIdle() && currentTime < nextFrameTime) return null;
-
-  // Schedule next frame
-  nextFrameTime = currentTime + frameDelay;
-
-  // Update last frame time (used in FPS estimation)
-  lastFrameTime = currentTime;
-
-  // Return fixed delta time (for logic/physics steps)
-  return frameDeltaTime;
-}
-
-/**
- * Gets the current delta time value
- * @returns {number} Delta time in seconds
- */
 export function getDeltaTime() {
-  return frameDeltaTime;
+  return deltaTime;
 }
 
-/**
- * Gets the current target frame rate.
- * @returns {number} The target frames per second.
- */
-export function getFrameRate() {
-  return frameRate;
+export function getSmoothedDeltaTime() {
+  return smoothedDeltaTime;
 }
 
-/**
- * Checks if frame capping is enabled
- * @returns {boolean} True if frame capping is enabled
- */
-export function isFrameCapped() {
-  return true;
+export function getFixedDeltaTime() {
+  return FIXED_DELTA_TIME;
 }
 
-/**
- * Gets the estimated actual framerate based on most recent frame timing
- * @returns {number} Estimated FPS
- */
+export function runFixedUpdates(stepFn) {
+  while (accumulator >= FIXED_DELTA_TIME) {
+    stepFn(FIXED_DELTA_TIME);
+    accumulator -= FIXED_DELTA_TIME;
+  }
+}
+
 export function getEstimatedFPS() {
-  // No new calculations if idle so 0 new frames rendered.
   if (isIdle()) return 0;
-  return frameRate;
+
+  const avgFrameTime =
+    lastActualFrameTimes.reduce((sum, time) => sum + time, 0) /
+    lastActualFrameTimes.length;
+  smoothedFPS =
+    FPS_SMOOTHING_ALPHA * (1000 / avgFrameTime) +
+    (1 - FPS_SMOOTHING_ALPHA) * smoothedFPS;
+
+  return Math.min(smoothedFPS, TARGET_FRAME_RATE);
+}
+
+function recordActualFrameTime(frameTime) {
+  lastActualFrameTimes[frameTimeIndex] = frameTime;
+  frameTimeIndex = (frameTimeIndex + 1) % lastActualFrameTimes.length;
+}
+
+function frameLoop(timestamp) {
+  const now = performance.now();
+  const actualElapsed = now - lastFrameTime;
+  lastFrameTime = now;
+
+  deltaTime = FIXED_DELTA_TIME;
+  smoothedDeltaTime = FIXED_DELTA_TIME;
+  accumulator += FIXED_DELTA_TIME;
+
+  if (frameCallback) {
+    frameCallback(timestamp);
+  }
+
+  recordActualFrameTime(actualElapsed);
+  setTimeout(() => {
+    rafHandle = requestAnimationFrame(frameLoop);
+  }, Math.max(0, FRAME_DELAY - (performance.now() - now)));
+}
+
+export function startFrameCappedLoop(callback) {
+  if (rafHandle !== null) {
+    console.warn("Frame capped loop already running");
+    return;
+  }
+
+  frameCallback = callback;
+  lastFrameTime = performance.now();
+  rafHandle = requestAnimationFrame(frameLoop);
+}
+
+export function stopFrameCappedLoop() {
+  if (rafHandle !== null) {
+    cancelAnimationFrame(rafHandle);
+    rafHandle = null;
+    frameCallback = null;
+  }
 }

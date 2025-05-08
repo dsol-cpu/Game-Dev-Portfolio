@@ -1,8 +1,7 @@
 import {
-  getFrameRate,
-  isFrameCapped,
   getDeltaTime,
   getEstimatedFPS,
+  getSmoothedDeltaTime,
 } from "./time-manager.js";
 import { isIdle } from "../user-interaction.js";
 
@@ -11,141 +10,136 @@ import { isIdle } from "../user-interaction.js";
  * Toggle visibility with F2 key
  */
 export function createDeltaTimeMetricsOverlay() {
-  // Create base container
   const container = document.createElement("div");
   container.style.cssText = `
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    width: 280px;
-    background: rgba(10, 14, 25, 0.85);
-    color: #fff;
-    font-family: 'Roboto', 'Segoe UI', sans-serif;
-    font-size: 12px;
-    z-index: 10000;
-    pointer-events: none;
-    border-radius: 8px;
-    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
-    overflow: hidden;
-    backdrop-filter: blur(5px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    transition: transform 0.3s ease, opacity 0.3s ease;
-  `;
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 280px;
+      background: rgba(10, 14, 25, 0.85);
+      color: #fff;
+      font-family: 'Roboto', 'Segoe UI', sans-serif;
+      font-size: 12px;
+      z-index: 10000;
+      pointer-events: none;
+      border-radius: 8px;
+      box-shadow: 0 5px 15px rgba(0, 0, 0, 0.5);
+      overflow: hidden;
+      backdrop-filter: blur(5px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      transition: transform 0.3s ease, opacity 0.3s ease;
+    `;
 
-  // Header area with title and toggle info
   const header = document.createElement("div");
   header.style.cssText = `
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 15px;
-    background: rgba(30, 34, 45, 0.9);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  `;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 15px;
+      background: rgba(30, 34, 45, 0.9);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    `;
 
   const title = document.createElement("div");
   title.style.cssText = `
-    font-weight: bold;
-    display: flex;
-    align-items: center;
-    gap: 5px;
-  `;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    `;
   title.innerHTML = `
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2">
-      <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
-    </svg>
-    <span>Performance Metrics</span>
-  `;
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#4ade80" stroke-width="2">
+        <path d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+      </svg>
+      <span>Performance Metrics</span>
+    `;
 
   const toggleInfo = document.createElement("div");
   toggleInfo.style.cssText = `
-    font-size: 10px;
-    color: rgba(255, 255, 255, 0.6);
-    background: rgba(255, 255, 255, 0.1);
-    padding: 2px 6px;
-    border-radius: 4px;
-  `;
+      font-size: 10px;
+      color: rgba(255, 255, 255, 0.6);
+      background: rgba(255, 255, 255, 0.1);
+      padding: 2px 6px;
+      border-radius: 4px;
+    `;
   toggleInfo.textContent = "[F2] Toggle";
 
   header.append(title, toggleInfo);
 
-  // Main content area with stats and graph
   const content = document.createElement("div");
   content.style.cssText = `
-    padding: 15px;
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
-  `;
+      padding: 15px;
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    `;
 
-  // Stats area
   const statsArea = document.createElement("div");
   statsArea.style.cssText = `
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
-  `;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    `;
 
-  // FPS Counter (major stat)
   const fpsCounter = document.createElement("div");
   fpsCounter.style.cssText = `
-    grid-column: 1 / -1;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border-radius: 6px;
-    background: rgba(255, 255, 255, 0.05);
-    padding: 10px;
-    margin-bottom: 5px;
-  `;
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.05);
+      padding: 10px;
+      margin-bottom: 5px;
+    `;
 
   const fpsLabel = document.createElement("div");
   fpsLabel.style.cssText = `
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.7);
-  `;
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.7);
+    `;
   fpsLabel.textContent = "FPS";
 
   const fpsValue = document.createElement("div");
   fpsValue.style.cssText = `
-    font-size: 22px;
-    font-weight: bold;
-    color: #4ade80;
-  `;
+      font-size: 22px;
+      font-weight: bold;
+      color: #4ade80;
+    `;
   fpsValue.textContent = "60.0";
 
   fpsCounter.append(fpsLabel, fpsValue);
 
-  // Create stat items
   const createStat = (label) => {
     const stat = document.createElement("div");
     stat.style.cssText = `
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 8px 10px;
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 6px;
-    `;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 10px;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 6px;
+      `;
 
     const statLabel = document.createElement("div");
     statLabel.style.cssText = `
-      font-size: 11px;
-      color: rgba(255, 255, 255, 0.7);
-    `;
+        font-size: 11px;
+        color: rgba(255, 255, 255, 0.7);
+      `;
     statLabel.textContent = label;
 
     const statValue = document.createElement("div");
     statValue.style.cssText = `
-      font-size: 11px;
-      font-weight: 500;
-    `;
+        font-size: 11px;
+        font-weight: 500;
+      `;
     statValue.textContent = "N/A";
 
     stat.append(statLabel, statValue);
     return { stat, statValue };
   };
 
+  const deltaStat = createStat("Δ Time (ms)");
   const focusStat = createStat("Focus");
   const idleStat = createStat("Idle");
   const driftStat = createStat("Drift");
@@ -153,34 +147,34 @@ export function createDeltaTimeMetricsOverlay() {
 
   statsArea.append(
     fpsCounter,
+    deltaStat.stat,
     focusStat.stat,
     idleStat.stat,
     driftStat.stat,
     targetStat.stat
   );
 
-  // Graph area
   const graphArea = document.createElement("div");
   graphArea.style.cssText = `
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 6px;
-    padding: 10px;
-    height: 100px;
-  `;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 6px;
+      padding: 10px;
+      height: 100px;
+    `;
 
   const graphTitle = document.createElement("div");
   graphTitle.style.cssText = `
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.7);
-    margin-bottom: 5px;
-  `;
+      font-size: 11px;
+      color: rgba(255, 255, 255, 0.7);
+      margin-bottom: 5px;
+    `;
   graphTitle.textContent = "FPS History";
 
   const canvas = document.createElement("canvas");
   canvas.style.cssText = `
-    width: 100%;
-    height: 70px;
-  `;
+      width: 100%;
+      height: 70px;
+    `;
   canvas.width = 240;
   canvas.height = 70;
 
@@ -189,15 +183,12 @@ export function createDeltaTimeMetricsOverlay() {
   container.append(header, content);
   document.body.appendChild(container);
 
-  // Initialize FPS history array
   const fpsHistory = [];
   const maxHistory = 60;
   const ctx = canvas.getContext("2d");
 
-  // Visibility state
   let isVisible = true;
 
-  // Toggle visibility function
   function toggleVisibility() {
     isVisible = !isVisible;
     container.style.opacity = isVisible ? "1" : "0";
@@ -205,50 +196,40 @@ export function createDeltaTimeMetricsOverlay() {
       ? "translateY(0)"
       : "translateY(20px)";
     setTimeout(() => {
-      if (!isVisible) container.style.display = "none";
+      container.style.display = isVisible ? "block" : "none";
     }, 300);
-
-    if (isVisible) {
-      container.style.display = "block";
-      // Small delay to ensure display is set before starting transition
-      setTimeout(() => {
-        container.style.opacity = "1";
-        container.style.transform = "translateY(0)";
-      }, 10);
-    }
   }
 
-  // Set up F2 key listener
   window.addEventListener("keydown", (event) => {
-    // Check for F2 key (keyCode 113)
     if (event.key === "F2" || event.keyCode === 113) {
       toggleVisibility();
-      // Prevent default browser behavior for F2 if any
       event.preventDefault();
     }
   });
 
-  // Calculate color based on FPS value
   function getFpsColor(fps) {
-    if (fps >= 55) return "#4ade80"; // Green for good FPS
-    if (fps >= 30) return "#facc15"; // Yellow for okay FPS
-    return "#f87171"; // Red for poor FPS
+    if (fps >= 55) return "#4ade80";
+    if (fps >= 30) return "#facc15";
+    return "#f87171";
   }
 
-  // Update function for the overlay
   function update() {
     if (!isVisible) return;
 
     const fps = getEstimatedFPS();
+    const delta = getSmoothedDeltaTime();
+
     fpsHistory.push(fps);
     if (fpsHistory.length > maxHistory) fpsHistory.shift();
 
     fpsValue.textContent = fps.toFixed(1);
     fpsValue.style.color = getFpsColor(fps);
 
+    deltaStat.statValue.textContent = (delta * 1000).toFixed(1) + " ms";
+
     const hasFocus = document.hasFocus();
     const idle = isIdle();
-    const isDrift = fps < getFrameRate() * 0.9;
+    const isDrift = fps < getEstimatedFPS() * 0.9;
 
     focusStat.statValue.textContent = hasFocus ? "Yes" : "No";
     focusStat.statValue.style.color = hasFocus ? "#4ade80" : "#f87171";
@@ -259,32 +240,22 @@ export function createDeltaTimeMetricsOverlay() {
     driftStat.statValue.textContent = isDrift ? "Yes" : "No";
     driftStat.statValue.style.color = isDrift ? "#f87171" : "#4ade80";
 
-    const targetFPS = getFrameRate();
-    const isCapped = isFrameCapped();
-    targetStat.statValue.textContent = isCapped
-      ? `${targetFPS} (Capped)`
-      : "Uncapped";
+    targetStat.statValue.textContent = 60;
 
     drawFpsGraph();
   }
 
-  // Draw the FPS graph
   function drawFpsGraph() {
     if (!fpsHistory.length) return;
 
-    // Clear canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Calculate scale factors
     const maxValue = Math.max(...fpsHistory, 60);
     const scaleY = canvas.height / (maxValue * 1.2);
     const step = canvas.width / (maxHistory - 1);
 
-    // Draw grid lines
     ctx.strokeStyle = "rgba(255, 255, 255, 0.1)";
     ctx.lineWidth = 1;
-
-    // Horizontal grid lines
     for (let i = 0; i <= 3; i++) {
       const y = i * (canvas.height / 3);
       ctx.beginPath();
@@ -293,17 +264,15 @@ export function createDeltaTimeMetricsOverlay() {
       ctx.stroke();
     }
 
-    // Create gradient for the area under the curve
     const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
     gradient.addColorStop(0, "rgba(74, 222, 128, 0.2)");
     gradient.addColorStop(1, "rgba(74, 222, 128, 0)");
 
-    // Draw the filled area
     ctx.beginPath();
     ctx.moveTo(0, canvas.height);
 
     fpsHistory.forEach((val, i) => {
-      const x = i * (canvas.width / (maxHistory - 1));
+      const x = i * step;
       const y = canvas.height - val * scaleY;
       ctx.lineTo(x, y);
     });
@@ -313,20 +282,18 @@ export function createDeltaTimeMetricsOverlay() {
     ctx.fillStyle = gradient;
     ctx.fill();
 
-    // Draw smooth line
     ctx.beginPath();
     ctx.lineWidth = 2;
     ctx.strokeStyle = "#4ade80";
 
     fpsHistory.forEach((val, i) => {
-      const x = i * (canvas.width / (maxHistory - 1));
+      const x = i * step;
       const y = canvas.height - val * scaleY;
       i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     });
 
     ctx.stroke();
 
-    // Draw threshold line for 60 FPS
     const thresholdY = canvas.height - 60 * scaleY;
     if (thresholdY > 0 && thresholdY < canvas.height) {
       ctx.beginPath();
@@ -340,13 +307,9 @@ export function createDeltaTimeMetricsOverlay() {
     }
   }
 
-  // Update every 250ms
-  const updateInterval = setInterval(update, 1000 / getFrameRate());
-
-  // Initial update
+  const updateInterval = setInterval(update, 1000 / getEstimatedFPS);
   update();
 
-  // Return the API for external control
   return {
     element: container,
     toggle: toggleVisibility,

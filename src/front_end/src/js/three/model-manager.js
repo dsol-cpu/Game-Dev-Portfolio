@@ -1,13 +1,16 @@
 /**
  * @fileoverview Simplified model manager for Three.js applications.
- * Handles model loading, caching, and memory management.
+ * Handles model loading, caching, memory management, and texture optimization.
  */
 
 import {
-  BoxGeometry,
-  MeshNormalMaterial,
-  Mesh,
   Box3,
+  BoxGeometry,
+  LinearFilter,
+  Mesh,
+  MeshNormalMaterial,
+  NearestFilter,
+  RepeatWrapping,
   Vector3,
 } from "../extern/three/three.module.min.js";
 
@@ -17,6 +20,20 @@ import { GLTFLoader } from "../extern/three/GLTFLoader.js";
 const CONFIG = {
   FALLBACK_CUBE_NAME: "fallbackCube",
   MODEL_LOAD_TIMEOUT: 10000, // ms
+  TEXTURE_OPTIMIZATION: {
+    ENABLED: true,
+    MAX_TEXTURE_SIZE: 512, // Maximum texture dimension (power of 2)
+    MIN_TEXTURE_SIZE: 64, // Minimum texture dimension (power of 2)
+    QUALITY_LEVELS: {
+      // Different quality presets
+      LOW: 64,
+      MEDIUM: 256,
+      HIGH: 512,
+    },
+    MIPMAP: false, // Whether to generate mipmaps
+    FILTER: "LINEAR", // Texture filtering method: LINEAR or NEAREST
+    ANISOTROPY: 1, // Anisotropic filtering level (1 = disabled)
+  },
 };
 
 // Create a single shared fallback cube
@@ -30,6 +47,7 @@ const state = {
   models: {},
   modelLoadPromises: {},
   modelPositions: {},
+  textureQuality: "MEDIUM", // Default texture quality
 };
 
 /**
@@ -37,6 +55,155 @@ const state = {
  */
 function getFallbackCube() {
   return FALLBACK_CUBE;
+}
+
+/**
+ * Set texture quality level
+ * @param {string} qualityLevel - 'LOW', 'MEDIUM', or 'HIGH'
+ */
+function setTextureQuality(qualityLevel) {
+  if (CONFIG.TEXTURE_OPTIMIZATION.QUALITY_LEVELS[qualityLevel] !== undefined) {
+    state.textureQuality = qualityLevel;
+    console.log(`Texture quality set to: ${qualityLevel}`);
+    return true;
+  }
+  console.warn(`Invalid quality level: ${qualityLevel}`);
+  return false;
+}
+
+/**
+ * Get the current texture max size based on quality setting
+ */
+function getCurrentTextureMaxSize() {
+  return (
+    CONFIG.TEXTURE_OPTIMIZATION.QUALITY_LEVELS[state.textureQuality] ||
+    CONFIG.TEXTURE_OPTIMIZATION.MAX_TEXTURE_SIZE
+  );
+}
+
+/**
+ * Find the optimal power-of-two size for textures
+ * @param {number} originalSize - Original dimension of the texture
+ * @returns {number} Optimized size (power of 2)
+ */
+function getOptimalTextureSize(originalSize) {
+  const maxSize = getCurrentTextureMaxSize();
+  const minSize = CONFIG.TEXTURE_OPTIMIZATION.MIN_TEXTURE_SIZE;
+
+  // Find the nearest power of 2 that's less than or equal to the original size
+  let size = 1;
+  while (size * 2 <= originalSize && size * 2 <= maxSize) {
+    size *= 2;
+  }
+
+  // Don't go below the minimum size
+  return Math.max(size, minSize);
+}
+
+/**
+ * Optimize a texture to reduce memory usage while maintaining visual quality
+ * @param {THREE.Texture} texture - The texture to optimize
+ */
+function optimizeTexture(texture) {
+  if (!texture || !CONFIG.TEXTURE_OPTIMIZATION.ENABLED) return texture;
+
+  // Store original dimensions
+  const originalWidth = texture.image ? texture.image.width : 0;
+  const originalHeight = texture.image ? texture.image.height : 0;
+
+  if (originalWidth === 0 || originalHeight === 0) return texture;
+
+  // Calculate optimal dimensions
+  const optimalWidth = getOptimalTextureSize(originalWidth);
+  const optimalHeight = getOptimalTextureSize(originalHeight);
+
+  // Only resize if needed
+  if (optimalWidth < originalWidth || optimalHeight < originalHeight) {
+    // Log what we're doing
+    console.log(
+      `Optimizing texture: ${originalWidth}x${originalHeight} -> ${optimalWidth}x${optimalHeight}`
+    );
+
+    // Create a canvas for resizing
+    const canvas = document.createElement("canvas");
+    canvas.width = optimalWidth;
+    canvas.height = optimalHeight;
+    const ctx = canvas.getContext("2d");
+
+    // Use high-quality image scaling
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+
+    // Draw the original image scaled down
+    ctx.drawImage(texture.image, 0, 0, optimalWidth, optimalHeight);
+
+    // Replace the texture's image with our resized version
+    texture.image = canvas;
+    texture.needsUpdate = true;
+  }
+
+  // Apply filtering based on configuration
+  texture.generateMipmaps = CONFIG.TEXTURE_OPTIMIZATION.MIPMAP;
+  texture.minFilter =
+    CONFIG.TEXTURE_OPTIMIZATION.FILTER === "NEAREST"
+      ? NearestFilter
+      : CONFIG.TEXTURE_OPTIMIZATION.MIPMAP
+      ? LinearFilter
+      : LinearFilter;
+  texture.magFilter =
+    CONFIG.TEXTURE_OPTIMIZATION.FILTER === "NEAREST"
+      ? NearestFilter
+      : LinearFilter;
+
+  // Set anisotropy
+  texture.anisotropy = CONFIG.TEXTURE_OPTIMIZATION.ANISOTROPY;
+
+  // Use repeat wrapping for better tiling if texture is used for that
+  texture.wrapS = RepeatWrapping;
+  texture.wrapT = RepeatWrapping;
+
+  return texture;
+}
+
+/**
+ * Process all textures in a model
+ * @param {THREE.Object3D} model - The model to process textures for
+ */
+function optimizeModelTextures(model) {
+  if (!model) return;
+
+  // Process all materials in the model
+  model.traverse((node) => {
+    if (!node.isMesh || !node.material) return;
+
+    const materials = Array.isArray(node.material)
+      ? node.material
+      : [node.material];
+
+    materials.forEach((material) => {
+      // Process all texture maps in the material
+      const textureMaps = [
+        "map",
+        "normalMap",
+        "bumpMap",
+        "displacementMap",
+        "roughnessMap",
+        "metalnessMap",
+        "alphaMap",
+        "aoMap",
+        "emissiveMap",
+        "envMap",
+        "lightMap",
+        "specularMap",
+      ];
+
+      textureMaps.forEach((mapName) => {
+        if (material[mapName] && material[mapName].isTexture) {
+          optimizeTexture(material[mapName]);
+        }
+      });
+    });
+  });
 }
 
 /**
@@ -78,9 +245,13 @@ async function getModel(modelName) {
       (gltf) => {
         clearTimeout(timeoutId);
         const model = gltf.scene;
+
+        // Optimize textures after loading but before setup
+        optimizeModelTextures(model);
+
         state.models[modelName] = model;
         setupModel(model);
-        console.log(`Loaded model: ${modelName}`);
+        console.log(`Loaded model: ${modelName} with optimized textures`);
         resolve(model);
       },
       undefined,
@@ -160,8 +331,12 @@ function disposeModel(modelName, scene = null) {
       // Dispose material
       if (child.material) {
         if (Array.isArray(child.material)) {
-          child.material.forEach((mat) => mat.dispose());
+          child.material.forEach((mat) => {
+            disposeTextures(mat);
+            mat.dispose();
+          });
         } else {
+          disposeTextures(child.material);
           child.material.dispose();
         }
       }
@@ -169,6 +344,35 @@ function disposeModel(modelName, scene = null) {
   });
 
   delete state.models[modelName];
+}
+
+/**
+ * Dispose textures from a material
+ */
+function disposeTextures(material) {
+  if (!material) return;
+
+  // List of texture properties to check and dispose
+  const textureProps = [
+    "map",
+    "normalMap",
+    "bumpMap",
+    "displacementMap",
+    "roughnessMap",
+    "metalnessMap",
+    "alphaMap",
+    "aoMap",
+    "emissiveMap",
+    "envMap",
+    "lightMap",
+    "specularMap",
+  ];
+
+  textureProps.forEach((prop) => {
+    if (material[prop] && material[prop].isTexture) {
+      material[prop].dispose();
+    }
+  });
 }
 
 /**
@@ -260,13 +464,14 @@ function getLoadedModels() {
 
 // Export public API
 export {
-  getModel,
-  preloadModels,
   calculateModelPositions,
-  getModelPosition,
-  updateModelPosition,
-  updateModelScale,
+  disposeModel,
   getFallbackCube,
   getLoadedModels,
-  disposeModel,
+  getModel,
+  getModelPosition,
+  preloadModels,
+  setTextureQuality,
+  updateModelPosition,
+  updateModelScale,
 };
