@@ -364,6 +364,7 @@ section .container {
 
 .game-mode .game-view-container {
   display: block;
+  background-color: skyblue;
 }
 
 #main-game-canvas {

@@ -5,20 +5,27 @@
 import { initBlogPosts } from "./blog.js";
 import { initNavigation } from "./navigation.js";
 import { initPortfolioFilters } from "./portfolio-filters.js";
-import { initProjectCards, setupBackdropListener } from "./project-card.js";
+
 import { createDeltaTimeMetricsOverlay } from "./three/delta-time-metrics.js";
-import { initGame, updateGameLoop, updateIslandBobbing } from "./three/game.js";
+import {
+  initGame,
+  isGameView,
+  updateGameLoop,
+  updateIslandBobbing,
+} from "./three/game.js";
 import { preloadModels } from "./three/model-manager.js";
 import {
-  initPortfolioCanvases,
+  initProjectCards,
   initProjectCardScene,
-} from "./three/project-cards.js";
-import { initThreeJSManager, renderFrame } from "./three/threejs-manager.js";
+} from "./three/project-card-system.js";
+import {
+  initThreeJSManager,
+  renderFrame,
+  hasActiveCamera,
+} from "./three/threejs-manager.js";
 // Import the new frame capping functions
 import {
   getDeltaTime,
-  getFixedDeltaTime,
-  runFixedUpdates,
   startFrameCappedLoop,
   stopFrameCappedLoop,
 } from "./three/time-manager.js";
@@ -39,16 +46,14 @@ async function initializeApp() {
   initNavigation();
 
   initProjectCards();
-
   // Only initialize the ThreeJS scenes and models if you don't have a doodoo computer
   if (isLowPoweredDevice()) {
     document.getElementById("view-toggle-btn").style.display = "none";
   } else {
     preloadModels(["babyTurtle", "portfolioShip", "globe"]);
-    await initThreeJSManager();
+    initThreeJSManager();
     initAboutCanvas();
 
-    initPortfolioCanvases();
     initProjectCardScene();
     initGame();
     if (import.meta.env.DEV) {
@@ -57,7 +62,6 @@ async function initializeApp() {
   }
 
   initPortfolioFilters();
-  setupBackdropListener();
   initBlogPosts();
 
   // Start the frame-capped main loop instead of calling mainLoop directly
@@ -71,7 +75,7 @@ function initAboutCanvas() {
   const canvas = aboutSection.querySelector(".about-canvas");
   if (!canvas) return;
 
-  const ctx = canvas.getContext("2d", { alpha: true, desynchronized: true });
+  const ctx = canvas.getContext("2d");
   if (!ctx) return;
 
   // Set canvas dimensions
@@ -85,21 +89,8 @@ function initAboutCanvas() {
   camera.position.set(0, 1, 5);
   camera.lookAt(0, 0, 0);
 
-  registerCamera(
-    camera,
-    null,
-    ctx,
-    {
-      type: CAMERA_SECTIONS.ABOUT,
-      elementId: aboutSection.id || CAMERA_SECTIONS.ABOUT,
-      section: CAMERA_SECTIONS.ABOUT,
-    },
-    true
-  );
-  console.info(
-    "initialized about canvas and registered its camera! ",
-    getCamerasByCategory(CAMERA_SECTIONS.ABOUT)
-  );
+  registerCamera(camera, ctx);
+  console.info("initialized about canvas and registered its camera! ");
 }
 
 /**
@@ -107,21 +98,20 @@ function initAboutCanvas() {
  * @param {number} timestamp - The timestamp from requestAnimationFrame
  */
 function frameUpdateCallback(timestamp) {
-  if (isIdle()) return;
+  if (isIdle() || !hasActiveCamera()) return;
 
   // Get the frame-capped deltaTime
   const deltaTime = getDeltaTime();
 
   // Run physics and other fixed-timestep systems
-  runFixedUpdates((fixedDeltaTime) => {
-    // Any logic that needs to run at fixed timesteps (like physics)
-    // Put physics code here if you have any
-  });
-
-  // Game scene rendering and logic
-  updateIslandBobbing(deltaTime);
-  updateGameLoop(deltaTime);
-
+  // runFixedUpdates((fixedDeltaTime) => {
+  //   // Any logic that needs to run at fixed timesteps (like physics)
+  //   // Put physics code here if you have any
+  // });
+  if (isGameView()) {
+    updateIslandBobbing(deltaTime);
+    updateGameLoop(deltaTime);
+  }
   // General engine operations for all registered physics bodies and cameras
   renderFrame(deltaTime);
 }

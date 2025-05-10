@@ -17,12 +17,12 @@ import {
   updatePlayer,
 } from "./player.js";
 import {
-  forceRedraw,
   getScene,
-  isCameraActive,
   registerCamera,
-  setCameraVisible,
+  getAllCameras,
+  renderFrame,
 } from "./threejs-manager.js";
+import { initGameUI, updateGameUI, disposeGameUI } from "./game-ui.js";
 
 const COLORS = {
   clouds: 0xffffff,
@@ -36,17 +36,17 @@ export const ISLAND_DATA = [
   { name: "Home Island", position: new Vector3(0, 0, 1000), section: "home" },
   {
     name: "Experience Island",
-    position: new Vector3(912, 304, 304),
+    position: new Vector3(30, 10, 1030),
     section: "experience",
   },
   {
     name: "Projects Island",
-    position: new Vector3(-371, 93, -928),
+    position: new Vector3(-20, -15, 975),
     section: "projects",
   },
   {
     name: "Resume Island",
-    position: new Vector3(-229, 114, 915),
+    position: new Vector3(10, 25, 990),
     section: "resume",
   },
 ];
@@ -56,18 +56,27 @@ const VIEW_MODES = { SCROLL: "scroll", GAME: "game" };
 let thirdPersonCamera,
   cameraIndex = -1,
   playerEntity,
-  gameAnimationFrameId,
   islands = [],
   islandAnimationData = [],
   cameraFollowActive = true;
 
 const gameState = {
   viewMode: VIEW_MODES.SCROLL,
-  lastCanvasWidth: 0,
-  lastCanvasHeight: 0,
-  isInitialized: false,
   totalTime: 0,
+  isInitialized: false,
 };
+
+let gameWorker = null;
+let workerBusy = false;
+let pendingAnimationData = [];
+
+/**
+ * Checks if the current view mode is game view
+ * @returns {boolean} True if in game view, false otherwise
+ */
+export function isGameView() {
+  return gameState.viewMode === VIEW_MODES.GAME;
+}
 
 function initIslandBobbing(islands) {
   islands.forEach(() =>
@@ -82,17 +91,43 @@ function initIslandBobbing(islands) {
 
 export function updateIslandBobbing(deltaTime) {
   gameState.totalTime += deltaTime;
-  islands.forEach((island, i) => {
-    if (islandAnimationData[i]) {
-      const data = islandAnimationData[i];
-      const newY =
-        data.initialY +
-        Math.sin(gameState.totalTime * data.frequency + data.offset) *
-          data.amplitude;
-      const smoothingFactor = 0.05 * Math.min(1, deltaTime * 60);
-      island.position.y += (newY - island.position.y) * smoothingFactor;
+
+  // For small numbers of islands, you might not need a worker
+  // But if you have many islands or complex animations, the worker helps
+  if (islands.length > 5) {
+    // If worker isn't busy, send a new calculation request
+    if (!workerBusy && gameWorker) {
+      workerBusy = true;
+
+      // Prepare data for the worker
+      // We only send the minimum data needed to avoid large transfers
+      const islandData = islands.map((island, i) => ({
+        currentY: island.position.y,
+        animationData: islandAnimationData[i],
+      }));
+
+      gameWorker.postMessage({
+        type: "calculateIslandAnimations",
+        data: {
+          islands: islandData,
+          totalTime: gameState.totalTime,
+          deltaTime,
+        },
+      });
     }
-  });
+  } else {
+    islands.forEach((island, i) => {
+      if (islandAnimationData[i]) {
+        const data = islandAnimationData[i];
+        const newY =
+          data.initialY +
+          Math.sin(gameState.totalTime * data.frequency + data.offset) *
+            data.amplitude;
+        const smoothingFactor = 0.05 * Math.min(1, deltaTime * 60);
+        island.position.y += (newY - island.position.y) * smoothingFactor;
+      }
+    });
+  }
 }
 
 export async function initGameScene() {
@@ -143,9 +178,9 @@ export async function initGameScene() {
     const scale = 0.8 + Math.random() * 1.5;
 
     cloud.position.set(
-      (Math.random() - 0.5) * 40,
+      Math.random() * -0.5,
       5 + Math.random() * 8,
-      (Math.random() - 0.5) * 40
+      (Math.random() * 1000 - 0.5) * 40
     );
     cloud.scale.set(scale, scale * 0.6, scale);
     gameScene.add(cloud);
@@ -162,45 +197,45 @@ export async function initGameScene() {
   gameScene.add(playerEntity);
   initIslandBobbing(islands);
   initPlayerControls();
-
+  /*  */
   thirdPersonCamera = new PerspectiveCamera(
     75, // FOV
     window.innerWidth / window.innerHeight,
     0.1, // Near
-    1000 // Far
+    100 // Far
   );
   thirdPersonCamera.position.set(0, 2, 5);
   thirdPersonCamera.lookAt(0, 2, 0);
 
   initCamController(thirdPersonCamera, playerEntity);
 
-  cameraIndex = registerCamera(
-    thirdPersonCamera,
-    () => cameraFollowActive,
-    document.getElementById("main-game-canvas")?.getContext("2d"),
-    {
-      type: CAMERA_SECTIONS.GAME,
-      elementId: "game-view",
-      section: CAMERA_SECTIONS.GAME,
-    },
-    false
-  );
+  // Get the canvas context
+  const gameCanvas = document.getElementById("main-game-canvas");
+  const gameCanvasContext = gameCanvas?.getContext("2d");
+
+  cameraIndex = registerCamera(thirdPersonCamera, gameCanvasContext, {
+    type: CAMERA_SECTIONS.GAME,
+    elementId: "game-view",
+    section: CAMERA_SECTIONS.GAME,
+  });
 }
 
 export function updateGameLoop(deltaTime) {
-  if (gameState.viewMode !== VIEW_MODES.GAME) return;
-
+  // No need to check viewMode here since main.js will handle this check
   if (playerEntity) {
     playerEntity.visible = true;
     updatePlayer(deltaTime);
+
+    // Update the UI with player state
+    updateGameUI({
+      position: playerEntity.position,
+      direction: playerEntity.userData?.direction || "N",
+      model: playerEntity,
+    });
   }
 
   if (thirdPersonCamera && playerEntity && cameraFollowActive) {
     updateCamera(deltaTime);
-  }
-
-  if (cameraIndex >= 0 && isCameraActive(cameraIndex)) {
-    forceRedraw(cameraIndex);
   }
 }
 
@@ -227,10 +262,6 @@ export function toggleGameView(elements) {
       : VIEW_MODES.GAME;
   const isGameView = gameState.viewMode === VIEW_MODES.GAME;
 
-  if (cameraIndex >= 0) {
-    setCameraVisible(cameraIndex, isGameView);
-  }
-
   if (isGameView) {
     elements.body.classList.add("game-mode");
     viewLabel.textContent = "Scroll View";
@@ -253,27 +284,17 @@ export function toggleGameView(elements) {
     }
 
     cameraFollowActive = true;
-
-    if (gameAnimationFrameId) {
-      cancelAnimationFrame(gameAnimationFrameId);
-    }
-    gameAnimationFrameId = requestAnimationFrame(updateGameLoop);
   } else {
     elements.body.classList.remove("game-mode");
     viewLabel.textContent = "Game View";
     elements.gameViewContainer.style.display = "none";
 
-    if (gameAnimationFrameId) {
-      cancelAnimationFrame(gameAnimationFrameId);
-      gameAnimationFrameId = null;
-    }
+    // Dispose UI when exiting game view
+    disposeGameUI();
   }
 
   handleUserInteraction();
-
-  if (cameraIndex >= 0) {
-    forceRedraw(cameraIndex);
-  }
+  renderFrame();
 
   return isGameView;
 }
@@ -291,17 +312,13 @@ export function updateGameViewSize(elements, width, height) {
   if (canvas.width !== width || canvas.height !== height) {
     canvas.width = width;
     canvas.height = height;
-    gameState.lastCanvasWidth = width;
-    gameState.lastCanvasHeight = height;
 
     if (thirdPersonCamera) {
       thirdPersonCamera.aspect = width / height;
       thirdPersonCamera.updateProjectionMatrix();
     }
 
-    if (cameraIndex >= 0) {
-      forceRedraw(cameraIndex);
-    }
+    renderFrame();
   }
 }
 
@@ -311,6 +328,11 @@ function initGameControlsPanel() {
     const closeBtn = document.querySelector(".close-btn");
     const toggleBtn = document.querySelector(".toggle-btn");
     const allKeys = document.querySelectorAll(".key[data-key]");
+
+    if (!controlsBox || !closeBtn || !toggleBtn) {
+      console.warn("Game controls panel elements not found");
+      return;
+    }
 
     // Build a map from key code to element
     const keyMap = new Map();
@@ -383,15 +405,20 @@ export async function initGame() {
   await initGameScene();
   elements.gameViewContainer.style.display = "none";
 
-  elements.viewToggleBtn.addEventListener("click", () =>
-    toggleGameView(elements)
-  );
+  elements.viewToggleBtn.addEventListener("click", () => {
+    const isGameView = toggleGameView(elements);
+
+    // Initialize UI when entering game view
+    if (isGameView) {
+      initGameUI(elements);
+    }
+  });
 
   updateGameViewSize(elements);
   window.addEventListener(
     "resize",
     debounce(() => {
-      if (gameState.viewMode === VIEW_MODES.GAME) {
+      if (isGameView()) {
         updateGameViewSize(elements);
       }
     }, 200)

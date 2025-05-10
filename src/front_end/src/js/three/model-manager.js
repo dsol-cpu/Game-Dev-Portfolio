@@ -41,6 +41,7 @@ const FALLBACK_CUBE = new Mesh(
   new BoxGeometry(1, 1, 1),
   new MeshNormalMaterial()
 );
+FALLBACK_CUBE.position.set(0, 0, 100);
 
 // Simple state management
 const state = {
@@ -378,7 +379,7 @@ function disposeTextures(material) {
 /**
  * Calculate model positions in a grid layout
  */
-function calculateModelPositions(modelNames = [], gridSize = 525) {
+function calculateModelPositions(modelNames = [], gridSize = 12) {
   // If no model names provided, use existing models
   if (modelNames.length === 0) {
     modelNames = Object.keys(state.models);
