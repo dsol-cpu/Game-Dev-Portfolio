@@ -46,7 +46,6 @@ const state = {
  * Initialize the ThreeJS manager
  */
 export function initThreeJSManager() {
-  // Create optimized renderer
   state.renderer = new WebGLRenderer({
     alpha: true,
     antialias: false,
@@ -139,7 +138,7 @@ export function initThreeJSManager() {
 }
 
 /**
- * Update renderer size based on active canvas - optimized
+ * Update renderer size based on active canvas
  */
 function updateRendererSize() {
   if (!state.renderer || !state.active.canvas) return;
@@ -184,7 +183,7 @@ export function registerCamera(camera, context) {
 }
 
 /**
- * Setup observer for canvas visibility - optimized
+ * Setup observer for canvas visibility
  */
 function setupCanvasObserver(context, idx) {
   if (!context?.canvas) return;
@@ -443,7 +442,7 @@ function cleanupResources() {
 }
 
 /**
- * Apply frustum culling to optimize rendering - highly optimized
+ * Apply frustum culling to optimize rendering
  */
 function applyFrustumCulling(camera) {
   if (!camera) return;
@@ -455,7 +454,6 @@ function applyFrustumCulling(camera) {
   );
   _frustum.setFromProjectionMatrix(_projScreenMatrix);
 
-  // Use optimized traversal
   const objects = state.scene.children;
   for (let i = 0; i < objects.length; i++) {
     const object = objects[i];
@@ -505,7 +503,7 @@ function throttledRender() {
 }
 
 /**
- * Render a frame - highly optimized
+ * Render a frame
  */
 export function renderFrame() {
   if (!state.isActive || !state.active.camera || !state.active.canvas)
@@ -570,6 +568,7 @@ export function renderFrame() {
 export function startAutoRender() {
   if (state.rafId) return;
   state.isActive = true;
+  state.active.ctx = state.active.canvas.getContext("2d", { alpha: true });
   throttledRender();
 }
 

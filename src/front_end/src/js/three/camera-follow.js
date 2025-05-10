@@ -1,226 +1,144 @@
-/**
- * @fileoverview Streamlined camera follow system that keeps camera at a fixed point behind player
- */
-
 import {
   Vector3,
   MathUtils,
   Raycaster,
 } from "../extern/three/three.module.min.js";
 
-// Simple configuration with only necessary values
-const CONFIG = Object.freeze({
-  DISTANCE: Object.freeze({
-    MIN: 3,
-    MAX: 15,
-    DEFAULT: 8,
-  }),
-  HEIGHT: Object.freeze({
-    TARGET_OFFSET: 0.8, // Look at point offset
-    CAMERA_OFFSET: 1.5, // Camera height offset
-  }),
-  COLLISION: Object.freeze({
-    ENABLED: true,
-    LAYERS: 1,
-    BUFFER: 0.15, // Buffer to reduce clipping
-  }),
-});
+// Constants
+const DISTANCE_MIN = 3;
+const DISTANCE_MAX = 15;
+const DISTANCE_DEFAULT = 8;
+const HEIGHT_TARGET_OFFSET = 0.8;
+const HEIGHT_CAMERA_OFFSET = 1.5;
+const COLLISION_ENABLED = true;
+const COLLISION_LAYERS = 1;
+const COLLISION_BUFFER = 0.15;
 
-// Pre-allocated vectors to avoid garbage collection
-const _targetPosition = new Vector3();
-const _cameraPosition = new Vector3();
-const _cameraOffset = new Vector3();
-const _rayDirection = new Vector3();
-const _lookAtPosition = new Vector3();
+// Reusable vectors
+const _targetPos = new Vector3();
+const _camPos = new Vector3();
+const _rayDir = new Vector3();
+const _lookAt = new Vector3();
 
-// Pre-allocated arrays for calculations
-const _sin = new Float32Array(1);
-const _cos = new Float32Array(1);
-
-// Collision detection
+// Raycaster
 const _raycaster = new Raycaster();
-_raycaster.layers.mask = CONFIG.COLLISION.LAYERS;
+_raycaster.layers.mask = COLLISION_LAYERS;
 
-// State variables
-let currentDistance = CONFIG.DISTANCE.DEFAULT;
-let collisionEnabled = CONFIG.COLLISION.ENABLED;
+// Scalar temp values
+let _distance = DISTANCE_DEFAULT;
+let _useCollision = COLLISION_ENABLED;
 
-let playerCamera, playerTarget, worldScene;
+// Object references
+let _camera = null;
+let _target = null;
+let _scene = null;
 
-/**
- * Create and initialize the camera controller with options
- * @param {THREE.Camera} camera - The camera to control
- * @param {THREE.Object3D} target - The target to follow
- * @param {Object} options - Optional configuration parameters
- * @returns {Object} Controller API
- */
-export function initCamController(camera, target, options = {}) {
-  playerCamera = camera;
-  playerTarget = target;
-  worldScene = options.scene || null;
+// Reusable array to avoid reallocation
+let _intersects = [];
 
-  // Apply options
-  if (options.distance !== undefined) {
-    currentDistance = MathUtils.clamp(
-      options.distance,
-      CONFIG.DISTANCE.MIN,
-      CONFIG.DISTANCE.MAX
+// Wheel zoom handler
+function _onWheel(e) {
+  const dir = Math.sign(e.deltaY);
+  if (dir !== 0) {
+    _distance = MathUtils.clamp(
+      _distance + dir * 0.5,
+      DISTANCE_MIN,
+      DISTANCE_MAX
     );
   }
-
-  if (options.collisionDetection !== undefined) {
-    collisionEnabled = options.collisionDetection;
-  }
-
-  // Set up zoom wheel handler
-  document.addEventListener("wheel", handleWheel, { passive: true });
-
-  // Return API for controller
-  return {
-    reset: () => {
-      currentDistance = CONFIG.DISTANCE.DEFAULT;
-    },
-    setDistance: (dist) => {
-      currentDistance = MathUtils.clamp(
-        dist,
-        CONFIG.DISTANCE.MIN,
-        CONFIG.DISTANCE.MAX
-      );
-    },
-    setCollisionDetection: (enabled) => {
-      collisionEnabled = enabled;
-    },
-    getState: () => ({
-      distance: currentDistance,
-      collisionDetection: collisionEnabled,
-    }),
-  };
 }
 
-/**
- * Wheel handler for zoom functionality
- * @param {WheelEvent} event
- */
-function handleWheel(event) {
-  // Apply zoom based on wheel direction
-  const zoomFactor = Math.sign(event.deltaY) * 0.5;
-  currentDistance = MathUtils.clamp(
-    currentDistance + zoomFactor,
-    CONFIG.DISTANCE.MIN,
-    CONFIG.DISTANCE.MAX
-  );
-}
+// Collision check
+function _checkCollision() {
+  if (!_useCollision || !_scene) return false;
 
-/**
- * Check for collisions between camera and world objects
- * @returns {boolean} Whether a collision was detected
- */
-function handleCameraCollision() {
-  // Fast exit if disabled or no scene
-  if (!collisionEnabled || !worldScene) return false;
+  _rayDir.subVectors(_camPos, _targetPos).normalize();
+  _raycaster.set(_targetPos, _rayDir);
+  _raycaster.far = _distance;
 
-  // Calculate ray direction from target to camera
-  _rayDirection.copy(_cameraPosition).sub(_targetPosition).normalize();
-  const rayLength = currentDistance;
+  _intersects.length = 0; // Clear reused array
+  _intersects = _raycaster.intersectObjects(_scene.children, true);
 
-  // Set up raycaster
-  _raycaster.set(_targetPosition, _rayDirection);
-  _raycaster.far = rayLength;
-
-  // Cast ray against scene objects
-  const intersects = _raycaster.intersectObjects(worldScene.children, true);
-
-  if (intersects.length > 0) {
-    // Apply collision correction with buffer
-    const collisionDistance =
-      intersects[0].distance * (1 - CONFIG.COLLISION.BUFFER);
-
-    // Set camera position to avoid clipping
-    _cameraPosition
-      .copy(_targetPosition)
-      .add(_rayDirection.multiplyScalar(collisionDistance));
-
+  if (_intersects.length > 0) {
+    const d = _intersects[0].distance * (1 - COLLISION_BUFFER);
+    _camPos.copy(_targetPos).addScaledVector(_rayDir, d);
     return true;
   }
 
   return false;
 }
 
-/**
- * Update camera position to fixed point behind player
- */
-export function updateCamera() {
-  if (!playerCamera || !playerTarget) return;
+// Controller API
+export function initCamController(cam, tgt, opt = {}) {
+  _camera = cam;
+  _target = tgt;
+  _scene = opt.scene || null;
 
-  // Get target position
-  _targetPosition.copy(playerTarget.position);
-
-  // Extract player rotation angle from quaternion
-  const playerQuat = playerTarget.quaternion;
-  const angle = Math.atan2(
-    2 * (playerQuat.y * playerQuat.w + playerQuat.x * playerQuat.z),
-    1 - 2 * (playerQuat.z * playerQuat.z + playerQuat.y * playerQuat.y)
-  );
-
-  // Calculate sine and cosine of angle
-  _sin[0] = Math.sin(angle);
-  _cos[0] = Math.cos(angle);
-
-  // Calculate camera offset based on player orientation
-  _cameraOffset.x = _sin[0] * currentDistance;
-  _cameraOffset.y = CONFIG.HEIGHT.CAMERA_OFFSET;
-  _cameraOffset.z = _cos[0] * currentDistance;
-
-  // Position camera directly behind player
-  _cameraPosition.copy(_targetPosition).add(_cameraOffset);
-
-  // Check for collisions
-  const hasCollision = handleCameraCollision();
-
-  // Set camera position (directly, no smoothing)
-  if (!hasCollision) {
-    playerCamera.position.copy(_cameraPosition);
-  } else {
-    // Collision position already set in _cameraPosition
-    playerCamera.position.copy(_cameraPosition);
+  if (opt.distance !== undefined) {
+    _distance = MathUtils.clamp(opt.distance, DISTANCE_MIN, DISTANCE_MAX);
+  }
+  if (opt.collisionDetection !== undefined) {
+    _useCollision = !!opt.collisionDetection;
   }
 
-  // Set camera look at position
-  _lookAtPosition.copy(_targetPosition);
-  _lookAtPosition.y += CONFIG.HEIGHT.TARGET_OFFSET;
-  playerCamera.lookAt(_lookAtPosition);
+  document.addEventListener("wheel", _onWheel, { passive: true });
+
+  return {
+    reset: () => (_distance = DISTANCE_DEFAULT),
+    setDistance: (d) =>
+      (_distance = MathUtils.clamp(d, DISTANCE_MIN, DISTANCE_MAX)),
+    setCollisionDetection: (v) => (_useCollision = !!v),
+    getState: () => ({
+      distance: _distance,
+      collisionDetection: _useCollision,
+    }),
+  };
 }
 
-/**
- * Force camera position update - identical to updateCamera in this version
- * since we're not using smoothing
- */
+// Update camera position & orientation
+export function updateCamera() {
+  if (!_camera || !_target) return;
+
+  const pos = _target.position;
+  _targetPos.set(pos.x, pos.y, pos.z);
+
+  const q = _target.quaternion;
+  const y = q.y,
+    w = q.w,
+    x = q.x,
+    z = q.z;
+  const angle = Math.atan2(2 * (y * w + x * z), 1 - 2 * (z * z + y * y));
+  const sin = Math.sin(angle);
+  const cos = Math.cos(angle);
+
+  _camPos.set(
+    _targetPos.x + sin * _distance,
+    _targetPos.y + HEIGHT_CAMERA_OFFSET,
+    _targetPos.z + cos * _distance
+  );
+
+  _camera.position.copy(_camPos);
+
+  _lookAt.set(_targetPos.x, _targetPos.y + HEIGHT_TARGET_OFFSET, _targetPos.z);
+
+  _camera.lookAt(_lookAt);
+}
+
 export function snapCameraToTarget() {
   updateCamera();
 }
 
-/**
- * Clean up event listeners and resources
- */
 export function disposeCameraController() {
-  document.removeEventListener("wheel", handleWheel);
-  playerCamera = null;
-  playerTarget = null;
-  worldScene = null;
+  document.removeEventListener("wheel", _onWheel);
+  _camera = _target = _scene = null;
+  _intersects.length = 0;
 }
 
-/**
- * Get current camera state - useful for debugging
- */
 export function getCameraState() {
   return {
-    distance: currentDistance,
-    collisionDetection: collisionEnabled,
-    targetPosition: playerTarget
-      ? new Vector3().copy(playerTarget.position)
-      : null,
-    cameraPosition: playerCamera
-      ? new Vector3().copy(playerCamera.position)
-      : null,
+    distance: _distance,
+    collisionDetection: _useCollision,
+    targetPosition: _target ? _target.position.clone() : null,
+    cameraPosition: _camera ? _camera.position.clone() : null,
   };
 }

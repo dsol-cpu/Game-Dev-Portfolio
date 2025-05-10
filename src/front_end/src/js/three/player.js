@@ -157,15 +157,6 @@ export function initPlayerControls() {
     canvas.tabIndex = 1;
     canvas.addEventListener("click", () => canvas.focus());
   }
-
-  // Import user interaction module if needed
-  import("../user-interaction.js")
-    .then((module) => {
-      // Optional: Setup any additional interaction handling
-    })
-    .catch(() => {
-      // Silently continue if module isn't available
-    });
 }
 
 /**
@@ -352,52 +343,38 @@ function updateTurning(deltaTime) {
   }
 }
 
+const PITCH_AMOUNT = TILT_AMOUNT * 1.2;
+const PITCH_FORWARD = [PITCH_AMOUNT * 0.3, -PITCH_AMOUNT, PITCH_AMOUNT];
+const PITCH_BACKWARD = [-PITCH_AMOUNT * 0.3, PITCH_AMOUNT, -PITCH_AMOUNT];
+const PITCH_IDLE = [0, PITCH_AMOUNT * 0.5, -PITCH_AMOUNT * 0.5];
+
 /**
  * Calculate and update tilt based on movement
  * @param {number} deltaTime - Time since last frame in seconds
  */
 function updateTilt(deltaTime) {
   const keyState = player.keyState;
-  const pitchAmount = TILT_AMOUNT * 1.2;
+  const velocity = player.velocity;
+  const clamped = player.heightClamped;
 
-  // Simplified tilt logic using bitwise operations
-  const movingForward = keyState & KEY.FORWARD || player.velocity > 0;
-  const movingBackward = keyState & KEY.BACKWARD || player.velocity < 0;
-  const goingUp = !!(keyState & KEY.UP) && !player.heightClamped;
-  const goingDown = !!(keyState & KEY.DOWN) && !player.heightClamped;
+  const movingForward = keyState & KEY.FORWARD || velocity > 0;
+  const movingBackward = keyState & KEY.BACKWARD || velocity < 0;
+  const goingUp = keyState & KEY.UP && !clamped;
+  const goingDown = keyState & KEY.DOWN && !clamped;
 
-  // Calculate target pitch
-  let targetPitch = 0;
+  const directionIndex = goingDown ? 1 : goingUp ? 2 : 0;
 
-  // Lookup-based pitch calculation (faster than conditionals)
-  if (movingForward) {
-    targetPitch = goingUp
-      ? pitchAmount
-      : goingDown
-      ? -pitchAmount
-      : pitchAmount * 0.3;
-  } else if (movingBackward) {
-    targetPitch = goingUp
-      ? -pitchAmount
-      : goingDown
-      ? pitchAmount
-      : -pitchAmount * 0.3;
-  } else {
-    targetPitch = goingUp
-      ? -pitchAmount * 0.5
-      : goingDown
-      ? pitchAmount * 0.5
-      : 0;
-  }
+  let targetPitch = movingForward
+    ? PITCH_FORWARD[directionIndex]
+    : movingBackward
+    ? PITCH_BACKWARD[directionIndex]
+    : PITCH_IDLE[directionIndex];
 
   player.targetPitch = targetPitch;
 
-  // Smooth transition - clamped lerp factor
   const tiltLerpFactor = Math.min(1, TILT_SPEED * deltaTime);
-  player.currentPitch +=
-    (player.targetPitch - player.currentPitch) * tiltLerpFactor;
+  player.currentPitch += (targetPitch - player.currentPitch) * tiltLerpFactor;
 }
-
 /**
  * Apply calculated transformations to the ship model
  * @param {Group} ship - The ship model

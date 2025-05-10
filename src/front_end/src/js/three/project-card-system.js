@@ -413,6 +413,9 @@ function createMainCanvas() {
   return canvas;
 }
 
+/**
+ * Setup main camera with proper orientation
+ */
 function setupMainCamera(canvas) {
   projectCamera = new PerspectiveCamera(
     C.DEFAULT_FOV,
@@ -421,8 +424,12 @@ function setupMainCamera(canvas) {
     C.FAR
   );
 
-  projectCamera.position.set(0, 5, 10);
+  // FIXED: Position camera directly in front of models
+  projectCamera.position.set(0, 0, 10); // Changed Y to 0 (was 5)
   projectCamera.lookAt(0, 0, 0);
+
+  // FIXED: Ensure camera up vector is properly aligned
+  projectCamera.up.set(0, 1, 0);
 
   const ctx = canvas.getContext("2d", { alpha: true });
   cameraIndex = registerCamera(projectCamera, ctx, {
@@ -508,6 +515,12 @@ function cacheViewWindowPositions() {
   });
 }
 
+/**
+ * Position model for a specific item view window
+ *
+ * @param {Object} model - The 3D model to position
+ * @param {String} modelName - Name of the model
+ */
 function positionModelForItem(model, modelName) {
   if (!model || !modelName) return;
 
@@ -528,13 +541,25 @@ function positionModelForItem(model, modelName) {
   vector.multiplyScalar(zDistance);
   vector.add(projectCamera.position);
 
-  // Position the model
+  // Position the model - FIXED: Don't use lookAt which causes slant
   model.position.copy(vector);
-  model.lookAt(projectCamera.position);
+
+  // FIXED: Reset rotation to default orientation instead of looking at camera
+  // This ensures models maintain consistent orientation in orthographic view
+  model.rotation.set(0, 0, 0);
+
+  // For animated models, we can set a slightly different default rotation
+  // that looks good in the front-facing orthographic camera
+  model.rotation.y = Math.PI; // This rotates to face forward
 
   // Save original position for animations
   if (!model.userData.originalPosition) {
     model.userData.originalPosition = model.position.clone();
+  }
+
+  // Save original rotation as well
+  if (!model.userData.originalRotation) {
+    model.userData.originalRotation = model.rotation.clone();
   }
 
   model.updateMatrix();
@@ -822,9 +847,9 @@ function setupCardDragInteraction(state) {
     });
   });
 }
-
 /**
  * Apply rotation inertia to model after drag ends
+ * FIXED: Constrain rotation to maintain proper alignment
  */
 function applyRotationInertia(model, speed) {
   if (!model) return;
@@ -856,6 +881,10 @@ function applyRotationInertia(model, speed) {
       -Math.PI / 3,
       Math.min(Math.PI / 3, model.rotation.x)
     );
+
+    // FIXED: Ensure model maintains proper alignment
+    // Prevent extreme rotations and keep model upright
+    model.rotation.z = 0; // Prevent roll rotation which causes slant
 
     // Update model matrices
     model.updateMatrix();
@@ -906,10 +935,20 @@ function updateModelPositions() {
   );
 }
 
+/**
+ * Setup model rotation animations with improved orientation
+ */
 export function setupModelRotationAnimations() {
   projectModels.forEach((model) => {
     if (!model) return;
-    model.userData.originalRotation = model.rotation.clone();
+
+    // Store original rotation or set default if not yet defined
+    if (!model.userData.originalRotation) {
+      // FIXED: Set a rotation that looks good with orthographic camera
+      model.rotation.set(0, Math.PI, 0); // Face forward (y-axis rotation)
+      model.userData.originalRotation = model.rotation.clone();
+    }
+
     model.userData.animate = true;
 
     // Set rotation speed with slight randomization for each model
@@ -920,12 +959,15 @@ export function setupModelRotationAnimations() {
   });
 }
 
+/**
+ * Animate models with improved orientation
+ */
 export function animateModels(deltaTime) {
   let needsRender = false;
 
   projectModels.forEach((model) => {
     if (model?.userData?.animate) {
-      // Rotate model if animation is enabled
+      // Rotate model if animation is enabled - ONLY around Y axis to prevent slant
       model.rotation.y += model.userData.rotationSpeed * deltaTime;
 
       // Apply slight oscillation on X axis for more interesting motion
@@ -934,7 +976,7 @@ export function animateModels(deltaTime) {
         if (!model.userData.oscillation) {
           model.userData.oscillation = {
             phase: Math.random() * Math.PI * 2, // Random starting phase
-            amplitude: 0.05 + Math.random() * 0.05, // Slight random amplitude
+            amplitude: 0.02 + Math.random() * 0.03, // FIXED: Reduced amplitude for less extreme motion
             frequency: 0.2 + Math.random() * 0.3, // Different frequency for each model
           };
         }
@@ -942,8 +984,11 @@ export function animateModels(deltaTime) {
         const osc = model.userData.oscillation;
         osc.phase += 0.01 * deltaTime;
 
-        // Apply gentle oscillation to X rotation
+        // Apply gentle oscillation to X rotation - REDUCED to minimize slant appearance
         model.rotation.x = Math.sin(osc.phase * osc.frequency) * osc.amplitude;
+
+        // FIXED: Ensure Z rotation stays at 0 to prevent unwanted tilt
+        model.rotation.z = 0;
       }
 
       model.updateMatrix();
