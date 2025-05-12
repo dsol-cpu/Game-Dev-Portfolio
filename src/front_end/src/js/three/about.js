@@ -1,6 +1,5 @@
-import { CAMERA_SECTIONS } from "../data/sections";
 import { PerspectiveCamera } from "../extern/three/three.core.min";
-import { registerCamera, getCamerasByCategory } from "./camera-registry";
+import { registerCamera } from "./camera-registry";
 
 // Constants
 const C = {
@@ -74,27 +73,11 @@ export async function initAboutCanvas() {
   camera.lookAt(0, 0, 0);
 
   // Register the camera with the system
-  registerCamera(
-    camera,
-    null,
-    ctx,
-    {
-      type: CAMERA_SECTIONS.ABOUT,
-      elementId: aboutSection.id || CAMERA_SECTIONS.ABOUT,
-      section: CAMERA_SECTIONS.ABOUT,
-    },
-    true
-  );
+  registerCamera(camera, ctx);
 
   // Initial canvas sizing
   updateCanvasDimensions();
 
   // Add resize event listener
   window.addEventListener("resize", updateCanvasDimensions);
-
-  // Log successful initialization
-  console.info(
-    "Initialized about canvas and registered its camera!",
-    getCamerasByCategory(CAMERA_SECTIONS.ABOUT)
-  );
 }

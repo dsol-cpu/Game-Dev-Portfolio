@@ -1,4 +1,3 @@
-import { CAMERA_SECTIONS } from "../data/sections.js";
 import {
   CylinderGeometry,
   Group,
@@ -47,146 +46,179 @@ export const ISLAND_DATA = [
 ];
 
 const VIEW_MODES = { SCROLL: "scroll", GAME: "game" };
+const MUSIC_URL = "/audio/Little Jack (Nasrad, Ixa'taka, Valua).mp3";
+const TRANSITION_DURATION = 500; // ms for view transition
 
-let thirdPersonCamera,
-  cameraIndex = -1,
-  playerEntity,
-  islands = [],
-  islandAnimationData = [],
-  cameraFollowActive = true;
-
-// Audio system variables
-let audioContext = null;
-let musicSource = null;
-let musicBuffer = null;
-let gainNode = null;
-let musicPlaying = false;
-let audioInitialized = false;
-
+// Game state and references - All consolidated for faster access
 const gameState = {
   viewMode: VIEW_MODES.SCROLL,
   totalTime: 0,
   isInitialized: false,
-  audioEnabled: true, // Default audio state
+  audioEnabled: true,
+  isTransitioning: false,
 };
 
+// Audio system state - Consolidated
+const audioState = {
+  context: null,
+  musicSource: null,
+  musicBuffer: null,
+  gainNode: null,
+  playing: false,
+  initialized: false,
+  startTime: 0,
+  pauseTime: 0,
+  pausedAt: 0,
+};
+
+// Game entities and references
+let thirdPersonCamera;
+let cameraIndex = -1;
+let playerEntity;
+let islands = [];
+let islandAnimationData = [];
+let cameraFollowActive = true;
 let gameWorker = null;
 let workerBusy = false;
 
 export const isGameView = () => gameState.viewMode === VIEW_MODES.GAME;
 
-// Audio system initialization
 function initAudioSystem() {
-  if (audioInitialized) return;
+  if (audioState.initialized) return;
 
   try {
-    // Create audio context only when needed (lazy initialization)
-    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+    // Create audio context and gain node once
+    audioState.context = new (window.AudioContext ||
+      window.webkitAudioContext)();
+    audioState.gainNode = audioState.context.createGain();
+    audioState.gainNode.gain.value = 0.5;
+    audioState.gainNode.connect(audioState.context.destination);
 
-    // Create gain node for volume control
-    gainNode = audioContext.createGain();
-    gainNode.gain.value = 0.5; // Set default volume to 50%
-    gainNode.connect(audioContext.destination);
-
-    // Load background music
     loadBackgroundMusic();
-    audioInitialized = true;
+    audioState.initialized = true;
   } catch (error) {
     console.error("Audio system initialization failed:", error);
   }
 }
 
-// Load background music file
 function loadBackgroundMusic() {
-  // Only load if not already loaded
-  if (musicBuffer) return;
+  if (audioState.musicBuffer) return;
 
-  // Path to your background music file
-  const musicUrl = "/audio/Little Jack (Nasrad, Ixa'taka, Valua).mp3";
-
-  fetch(musicUrl)
+  fetch(MUSIC_URL)
     .then((response) => {
-      if (!response.ok) {
+      if (!response.ok)
         throw new Error(`HTTP error! Status: ${response.status}`);
-      }
       return response.arrayBuffer();
     })
-    .then((arrayBuffer) => {
-      // Decode asynchronously
-      return audioContext.decodeAudioData(arrayBuffer);
-    })
+    .then((arrayBuffer) => audioState.context.decodeAudioData(arrayBuffer))
     .then((buffer) => {
-      musicBuffer = buffer;
-      // If in game mode and audio enabled, start playing
-      if (isGameView() && gameState.audioEnabled) {
-        playBackgroundMusic();
-      }
+      audioState.musicBuffer = buffer;
+      // Auto-play if in game view and audio enabled
+      if (isGameView() && gameState.audioEnabled) playBackgroundMusic();
     })
-    .catch((error) => {
-      console.error("Error loading background music:", error);
-    });
+    .catch((error) => console.error("Error loading background music:", error));
 }
 
-// Play background music with loop
-function playBackgroundMusic() {
-  if (!audioContext || !musicBuffer || musicPlaying) return;
+function playBackgroundMusic(resumeFromPosition = 0) {
+  // Skip if not ready or already playing
+  if (!audioState.context || !audioState.musicBuffer || audioState.playing)
+    return;
 
-  // Resume audio context if suspended (needed for Chrome's autoplay policy)
-  if (audioContext.state === "suspended") {
-    audioContext.resume();
-  }
+  // Resume suspended context first if needed
+  if (audioState.context.state === "suspended") audioState.context.resume();
 
-  // Create a new source node
-  musicSource = audioContext.createBufferSource();
-  musicSource.buffer = musicBuffer;
-  musicSource.loop = true;
+  // Create and connect source node
+  audioState.musicSource = audioState.context.createBufferSource();
+  audioState.musicSource.buffer = audioState.musicBuffer;
+  audioState.musicSource.loop = true;
+  audioState.musicSource.connect(audioState.gainNode);
 
-  // Connect to gain node for volume control
-  musicSource.connect(gainNode);
+  // Fade in for smooth transition
+  audioState.gainNode.gain.setValueAtTime(0, audioState.context.currentTime);
+  audioState.gainNode.gain.linearRampToValueAtTime(
+    0.5,
+    audioState.context.currentTime + 1
+  );
 
-  // Start playing with crossfade
-  gainNode.gain.setValueAtTime(0, audioContext.currentTime);
-  gainNode.gain.linearRampToValueAtTime(0.5, audioContext.currentTime + 1);
-  musicSource.start(0);
-  musicPlaying = true;
+  // Start playback from specified position
+  audioState.musicSource.start(0, resumeFromPosition);
+  audioState.startTime = audioState.context.currentTime - resumeFromPosition;
+  audioState.playing = true;
 }
 
-// Stop background music with fade out
-function stopBackgroundMusic() {
-  if (!musicSource || !musicPlaying) return;
+function pauseBackgroundMusic() {
+  if (!audioState.musicSource || !audioState.playing) return;
 
-  // Fade out
-  gainNode.gain.setValueAtTime(gainNode.gain.value, audioContext.currentTime);
-  gainNode.gain.linearRampToValueAtTime(0, audioContext.currentTime + 0.5);
+  // Calculate and store current position
+  audioState.pausedAt =
+    (audioState.context.currentTime - audioState.startTime) %
+    audioState.musicBuffer.duration;
 
-  // Schedule stop after fade
+  // Fade out smoothly
+  audioState.gainNode.gain.setValueAtTime(
+    audioState.gainNode.gain.value,
+    audioState.context.currentTime
+  );
+  audioState.gainNode.gain.linearRampToValueAtTime(
+    0,
+    audioState.context.currentTime + 0.5
+  );
+
+  // Stop after fade completes
   setTimeout(() => {
-    if (musicSource) {
-      musicSource.stop();
-      musicSource.disconnect();
-      musicSource = null;
+    if (audioState.musicSource) {
+      audioState.musicSource.stop();
+      audioState.musicSource.disconnect();
+      audioState.musicSource = null;
     }
-    musicPlaying = false;
+    audioState.playing = false;
   }, 500);
 }
 
-// Toggle background music
+function stopBackgroundMusic() {
+  if (!audioState.musicSource || !audioState.playing) return;
+
+  // Fade out smoothly
+  audioState.gainNode.gain.setValueAtTime(
+    audioState.gainNode.gain.value,
+    audioState.context.currentTime
+  );
+  audioState.gainNode.gain.linearRampToValueAtTime(
+    0,
+    audioState.context.currentTime + 0.5
+  );
+
+  // Stop after fade completes and reset position
+  setTimeout(() => {
+    if (audioState.musicSource) {
+      audioState.musicSource.stop();
+      audioState.musicSource.disconnect();
+      audioState.musicSource = null;
+    }
+    audioState.playing = false;
+    audioState.pausedAt = 0; // Reset pause position when stopping
+  }, 500);
+}
+
 export function toggleBackgroundMusic() {
   gameState.audioEnabled = !gameState.audioEnabled;
 
-  // Initialize audio system if needed
-  if (!audioInitialized && gameState.audioEnabled) {
+  // Initialize if needed and enabled
+  if (!audioState.initialized && gameState.audioEnabled) {
     initAudioSystem();
-    return; // Loading will trigger playback once complete
+    return gameState.audioEnabled;
   }
 
+  // Handle toggle based on new state
   if (gameState.audioEnabled) {
-    playBackgroundMusic();
+    if (isGameView()) {
+      resumeBackgroundMusic();
+    }
   } else {
     stopBackgroundMusic();
   }
 
-  // Update UI to reflect music state
+  // Update UI button state
   const musicToggleBtn = document.getElementById("music-toggle-btn");
   if (musicToggleBtn) {
     musicToggleBtn.classList.toggle("active", gameState.audioEnabled);
@@ -200,15 +232,35 @@ export function toggleBackgroundMusic() {
   return gameState.audioEnabled;
 }
 
-// Suspend audio context when not in use to save resources
+function resumeBackgroundMusic() {
+  if (!audioState.initialized || !audioState.context || !audioState.musicBuffer)
+    return;
+
+  // Skip if already playing
+  if (audioState.playing) return;
+
+  // Set resume position (default to 0 if not paused before)
+  const resumePosition = audioState.pausedAt > 0 ? audioState.pausedAt : 0;
+
+  // Resume context first if needed, then play
+  if (audioState.context.state === "suspended") {
+    audioState.context.resume().then(() => {
+      playBackgroundMusic(resumePosition);
+    });
+  } else {
+    playBackgroundMusic(resumePosition);
+  }
+}
+
 function suspendAudioWhenInactive() {
-  if (audioContext && audioContext.state === "running" && !isGameView()) {
-    stopBackgroundMusic();
-    audioContext.suspend();
+  // Pause when not in game view but context is running
+  if (audioState.context?.state === "running" && !isGameView()) {
+    pauseBackgroundMusic();
   }
 }
 
 function initIslandBobbing(islands) {
+  // Pre-allocate animation data for all islands
   islands.forEach(() =>
     islandAnimationData.push({
       initialY: islands[islandAnimationData.length].position.y,
@@ -222,6 +274,7 @@ function initIslandBobbing(islands) {
 export function updateIslandBobbing(deltaTime) {
   gameState.totalTime += deltaTime;
 
+  // Offload calculations to worker for large island counts
   if (islands.length > 5 && gameWorker && !workerBusy) {
     workerBusy = true;
     gameWorker.postMessage({
@@ -235,18 +288,23 @@ export function updateIslandBobbing(deltaTime) {
         deltaTime,
       },
     });
-  } else {
-    islands.forEach((island, i) => {
-      if (islandAnimationData[i]) {
-        const data = islandAnimationData[i];
-        const newY =
-          data.initialY +
-          Math.sin(gameState.totalTime * data.frequency + data.offset) *
-            data.amplitude;
-        const smoothingFactor = 0.05 * Math.min(1, deltaTime * 60);
-        island.position.y += (newY - island.position.y) * smoothingFactor;
-      }
-    });
+    return;
+  }
+
+  // Calculate island bobbing in main thread for small island counts
+  const smoothingFactor = 0.05 * Math.min(1, deltaTime * 60);
+
+  for (let i = 0; i < islands.length; i++) {
+    const island = islands[i];
+    const data = islandAnimationData[i];
+    if (!data) continue;
+
+    const newY =
+      data.initialY +
+      Math.sin(gameState.totalTime * data.frequency + data.offset) *
+        data.amplitude;
+
+    island.position.y += (newY - island.position.y) * smoothingFactor;
   }
 }
 
@@ -254,6 +312,7 @@ export async function initGameScene() {
   gameState.totalTime = 0;
   const gameScene = getScene();
 
+  // Create reusable geometries and materials for performance
   const cloudGeometry = new SphereGeometry(1, 7, 7);
   const cloudMaterial = new MeshStandardMaterial({
     color: COLORS.clouds,
@@ -274,25 +333,33 @@ export async function initGameScene() {
     flatShading: true,
   });
 
-  ISLAND_DATA.forEach(({ position, section, name }) => {
+  // Create islands - batch process for performance
+  for (let i = 0; i < ISLAND_DATA.length; i++) {
+    const { position, section, name } = ISLAND_DATA[i];
     const islandGroup = new Group();
     const baseSize = 2 + Math.random() * 0.5;
     const topSize = 2 + Math.random() * 0.5;
+
+    // Create base and top meshes
     const base = new Mesh(islandBaseGeometry.clone(), islandBaseMaterial);
     const top = new Mesh(islandTopGeometry.clone(), islandTopMaterial);
 
+    // Configure meshes
     base.scale.set(baseSize / 2, 1, baseSize / 2);
     top.scale.set(topSize / 2, 1, topSize / 2);
     top.position.y = 1;
 
+    // Assemble and position island
     islandGroup.add(base, top);
     islandGroup.position.copy(position);
     islandGroup.userData = { type: section, name };
 
+    // Add to scene and tracking array
     gameScene.add(islandGroup);
     islands.push(islandGroup);
-  });
+  }
 
+  // Create clouds - batch process
   for (let i = 0; i < 8; i++) {
     const cloud = new Mesh(cloudGeometry.clone(), cloudMaterial);
     const scale = 0.8 + Math.random() * 1.5;
@@ -306,7 +373,10 @@ export async function initGameScene() {
     gameScene.add(cloud);
   }
 
+  // Create player entity
   playerEntity = await createPlayerModel();
+
+  // Position player at home island
   const homeIsland = ISLAND_DATA.find(({ section }) => section === "home");
   playerEntity.position.set(
     homeIsland?.position.x || 0,
@@ -315,9 +385,12 @@ export async function initGameScene() {
   );
 
   gameScene.add(playerEntity);
+
+  // Initialize systems
   initIslandBobbing(islands);
   initPlayerControls();
 
+  // Setup camera
   thirdPersonCamera = new PerspectiveCamera(
     75,
     window.innerWidth / window.innerHeight,
@@ -329,62 +402,68 @@ export async function initGameScene() {
 
   initCamController(thirdPersonCamera, playerEntity);
 
+  // Register camera with renderer
   const gameCanvas = document.getElementById("main-game-canvas");
   const gameCanvasContext = gameCanvas?.getContext("2d");
-
-  cameraIndex = registerCamera(thirdPersonCamera, gameCanvasContext, {
-    type: CAMERA_SECTIONS.GAME,
-    elementId: "game-view",
-    section: CAMERA_SECTIONS.GAME,
-  });
+  cameraIndex = registerCamera(thirdPersonCamera, gameCanvasContext);
 }
 
 export function updateGameLoop(deltaTime) {
+  // Update player if exists
   if (playerEntity) {
     playerEntity.visible = true;
     updatePlayer(deltaTime);
-    updateGameUI({
+
+    // Get current player state for UI update
+    const playerState = {
       position: playerEntity.position,
       direction: playerEntity.userData?.direction || "N",
       model: playerEntity,
-    });
+    };
+
+    // Update game UI with player state
+    updateGameUI(playerState);
   }
 
+  // Update camera if following player
   if (thirdPersonCamera && playerEntity && cameraFollowActive) {
     updateCamera(deltaTime);
   }
 }
 
 export function toggleGameView(elements) {
-  if (
-    !elements?.body ||
-    !elements?.viewToggleBtn ||
-    !elements?.gameViewContainer ||
-    !elements?.sidebar
-  ) {
+  const { body, viewToggleBtn, gameViewContainer, sidebar } = elements;
+
+  // Validate required elements
+  if (!body || !viewToggleBtn || !gameViewContainer || !sidebar) {
     console.error("Toggle game view failed: missing required elements");
     return false;
   }
 
-  const viewLabel = elements.viewToggleBtn.querySelector(".view-label");
+  const viewLabel = viewToggleBtn.querySelector(".view-label");
   if (!viewLabel) {
     console.error("Toggle game view failed: view-label not found");
     return false;
   }
 
-  gameState.viewMode =
-    gameState.viewMode === VIEW_MODES.GAME
-      ? VIEW_MODES.SCROLL
-      : VIEW_MODES.GAME;
+  // Prevent toggling during transitions
+  if (gameState.isTransitioning) return isGameView();
 
-  const isGameViewMode = isGameView();
+  gameState.isTransitioning = true;
 
-  if (isGameViewMode) {
-    elements.body.classList.add("game-mode");
-    viewLabel.textContent = "Scroll View";
+  // Determine new view mode
+  const newViewMode = isGameView() ? VIEW_MODES.SCROLL : VIEW_MODES.GAME;
+  const switchingToGameView = newViewMode === VIEW_MODES.GAME;
 
-    const sidebarWidth = elements.sidebar.offsetWidth;
-    Object.assign(elements.gameViewContainer.style, {
+  // Update button text
+  viewLabel.textContent = switchingToGameView ? "Scroll View" : "Game View";
+
+  if (switchingToGameView) {
+    // Calculate sidebar width
+    const sidebarWidth = sidebar.offsetWidth;
+
+    // Apply all styles at once for better performance
+    Object.assign(gameViewContainer.style, {
       position: "fixed",
       top: "0",
       left: sidebarWidth + "px",
@@ -392,52 +471,86 @@ export function toggleGameView(elements) {
       height: "100%",
       zIndex: "100",
       display: "block",
+      opacity: "0", // Start transparent
     });
 
     updateGameViewSize(elements);
 
-    if (thirdPersonCamera && playerEntity) {
-      initCamController(thirdPersonCamera, playerEntity);
-    }
+    // Use setTimeout to batch DOM operations
+    setTimeout(() => {
+      gameViewContainer.style.transition = `opacity ${TRANSITION_DURATION}ms ease-in-out`;
+      gameViewContainer.style.opacity = "1";
+      body.classList.add("game-mode");
 
-    cameraFollowActive = true;
-
-    // Initialize audio when entering game mode
-    if (!audioInitialized && gameState.audioEnabled) {
-      initAudioSystem();
-    } else if (audioInitialized && gameState.audioEnabled && !musicPlaying) {
-      // Resume audio context if it was suspended
-      if (audioContext && audioContext.state === "suspended") {
-        audioContext.resume();
+      if (thirdPersonCamera && playerEntity) {
+        initCamController(thirdPersonCamera, playerEntity);
       }
-      playBackgroundMusic();
-    }
-  } else {
-    elements.body.classList.remove("game-mode");
-    viewLabel.textContent = "Game View";
-    elements.gameViewContainer.style.display = "none";
-    disposeGameUI();
 
-    // Suspend audio when exiting game mode to save resources
-    suspendAudioWhenInactive();
+      cameraFollowActive = true;
+
+      // Initialize game UI here
+      initGameUI(elements);
+
+      // Handle audio for game view
+      if (!audioState.initialized && gameState.audioEnabled) {
+        initAudioSystem();
+      } else if (
+        audioState.initialized &&
+        gameState.audioEnabled &&
+        !audioState.playing
+      ) {
+        if (audioState.context?.state === "suspended") {
+          audioState.context.resume();
+        }
+        resumeBackgroundMusic();
+      }
+
+      // Complete transition after animation finishes
+      setTimeout(() => {
+        gameState.viewMode = newViewMode;
+        gameState.isTransitioning = false;
+        gameViewContainer.style.transition = "";
+        renderFrame();
+      }, TRANSITION_DURATION);
+    }, 50);
+  } else {
+    // === SWITCHING TO SCROLL VIEW ===
+    gameViewContainer.style.transition = `opacity ${TRANSITION_DURATION}ms ease-out`;
+    gameViewContainer.style.opacity = "0";
+
+    // Pause audio when leaving game view
+    if (audioState.playing && gameState.audioEnabled) {
+      pauseBackgroundMusic();
+    }
+
+    // Complete transition after fade out
+    setTimeout(() => {
+      gameViewContainer.style.display = "none";
+      gameViewContainer.style.transition = "";
+      body.classList.remove("game-mode");
+      disposeGameUI();
+
+      gameState.viewMode = newViewMode;
+      gameState.isTransitioning = false;
+    }, TRANSITION_DURATION);
   }
 
   handleUserInteraction();
-  renderFrame();
-
-  return isGameViewMode;
+  return switchingToGameView;
 }
 
 export function updateGameViewSize(elements, width, height) {
   const canvas = elements?.mainGameCanvas;
   if (!canvas) return;
 
+  // Calculate dimensions if not provided
   if (!width || !height) {
     const sidebarWidth = elements?.sidebar?.offsetWidth || 0;
     width = window.innerWidth - sidebarWidth || 1;
     height = window.innerHeight || 1;
   }
 
+  // Only update if dimensions actually changed
   if (canvas.width !== width || canvas.height !== height) {
     canvas.width = width;
     canvas.height = height;
@@ -451,17 +564,19 @@ export function updateGameViewSize(elements, width, height) {
   }
 }
 
-// Create music toggle button in game controls
 function createMusicToggleButton(controlsBox) {
   if (!controlsBox) return;
 
+  // Create container
   const musicToggleContainer = document.createElement("div");
   musicToggleContainer.className = "control-group";
 
+  // Create label
   const musicToggleLabel = document.createElement("span");
   musicToggleLabel.textContent = "Music:";
   musicToggleLabel.className = "control-label";
 
+  // Create button
   const musicToggleBtn = document.createElement("button");
   musicToggleBtn.id = "music-toggle-btn";
   musicToggleBtn.className =
@@ -472,15 +587,15 @@ function createMusicToggleButton(controlsBox) {
     "aria-pressed",
     gameState.audioEnabled.toString()
   );
-
   musicToggleBtn.addEventListener("click", toggleBackgroundMusic);
 
+  // Assemble components
   musicToggleContainer.appendChild(musicToggleLabel);
   musicToggleContainer.appendChild(musicToggleBtn);
 
   // Add to controls box after the close button
   const closeBtn = controlsBox.querySelector(".close-btn");
-  if (closeBtn && closeBtn.parentNode) {
+  if (closeBtn?.parentNode) {
     closeBtn.parentNode.insertBefore(
       musicToggleContainer,
       closeBtn.nextSibling
@@ -491,6 +606,7 @@ function createMusicToggleButton(controlsBox) {
 }
 
 function initGameControlsPanel() {
+  // Wait for DOM to be ready
   document.addEventListener("DOMContentLoaded", () => {
     const controlsBox = document.querySelector(".game-controls-info");
     const closeBtn = document.querySelector(".close-btn");
@@ -499,12 +615,13 @@ function initGameControlsPanel() {
 
     if (!controlsBox || !closeBtn || !toggleBtn) return;
 
-    // Add music toggle button to controls
     createMusicToggleButton(controlsBox);
 
+    // Setup keyboard highlighting with Map for O(1) lookups
     const keyMap = new Map();
     allKeys.forEach((el) => keyMap.set(el.dataset.key, el));
 
+    // Set up event handlers
     closeBtn.addEventListener("click", () => {
       controlsBox.style.display = "none";
     });
@@ -514,8 +631,10 @@ function initGameControlsPanel() {
       toggleBtn.textContent = collapsed ? "+" : "-";
     });
 
+    // Create one handler for key events
     const updateKeyHighlight = (event, isPressed) => {
       let keyCode = event.code;
+      // Handle right shift same as left for consistency
       if (keyCode === "ShiftRight" && keyMap.has("ShiftLeft")) {
         keyCode = "ShiftLeft";
       }
@@ -526,58 +645,53 @@ function initGameControlsPanel() {
       }
     };
 
+    // Add event listeners
     document.addEventListener("keydown", (e) => updateKeyHighlight(e, true));
     document.addEventListener("keyup", (e) => updateKeyHighlight(e, false));
 
-    setTimeout(() => {
-      controlsBox.style.opacity = 1;
-    }, 100);
+    // Slight delay for smooth animations
+    setTimeout(() => (controlsBox.style.opacity = 1), 100);
   });
 }
 
-// Clean up audio resources to prevent memory leaks
 export function disposeAudio() {
-  if (musicSource) {
-    try {
-      musicSource.stop();
-    } catch (e) {
-      // Ignore if already stopped
-    }
-    musicSource.disconnect();
-    musicSource = null;
+  // Stop and disconnect audio source
+  if (audioState.musicSource) {
+    if (audioState.playing) audioState.musicSource.stop();
+    audioState.musicSource.disconnect();
+    audioState.musicSource = null;
   }
 
-  if (gainNode) {
-    gainNode.disconnect();
-  }
+  // Disconnect and close audio nodes
+  if (audioState.gainNode) audioState.gainNode.disconnect();
+  if (audioState.context) audioState.context.close();
 
-  if (audioContext) {
-    audioContext.close();
-  }
-
-  musicPlaying = false;
-  audioInitialized = false;
+  // Reset audio state
+  audioState.playing = false;
+  audioState.initialized = false;
+  audioState.pausedAt = 0;
 }
 
-// Handle page visibility changes to optimize audio performance
+// Page visibility handling for audio optimization
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") {
-    // Suspend audio when page is not visible
-    if (audioContext && audioContext.state === "running") {
-      audioContext.suspend();
+    if (audioState.context?.state === "running") {
+      if (audioState.playing) {
+        // Save position when tab becomes hidden
+        audioState.pausedAt =
+          (audioState.context.currentTime - audioState.startTime) %
+          audioState.musicBuffer.duration;
+      }
+      audioState.context.suspend();
     }
   } else if (document.visibilityState === "visible") {
-    // Resume audio when page becomes visible again (if in game mode and enabled)
     if (
-      audioContext &&
-      audioContext.state === "suspended" &&
+      audioState.context?.state === "suspended" &&
       isGameView() &&
       gameState.audioEnabled
     ) {
-      audioContext.resume();
-      if (!musicPlaying) {
-        playBackgroundMusic();
-      }
+      audioState.context.resume();
+      if (!audioState.playing) resumeBackgroundMusic();
     }
   }
 });
@@ -586,6 +700,8 @@ export async function initGame() {
   if (gameState.isInitialized) return;
 
   initGameControlsPanel();
+
+  // Get all required DOM elements at once
   const elements = {
     viewToggleBtn: document.getElementById("view-toggle-btn"),
     mainGameCanvas: document.getElementById("main-game-canvas"),
@@ -594,6 +710,7 @@ export async function initGame() {
     body: document.body,
   };
 
+  // Validate required elements
   if (
     !elements.viewToggleBtn ||
     !elements.mainGameCanvas ||
@@ -606,28 +723,50 @@ export async function initGame() {
     return;
   }
 
+  // Add CSS for transitions - do once
+  const style = document.createElement("style");
+  style.textContent = `
+    #game-view-container {
+      transition: opacity 0.5s ease-in-out;
+    }
+    .game-mode-transition {
+      transition: all 0.5s ease-in-out;
+    }
+  `;
+  document.head.appendChild(style);
+
+  // Initialize game scene
   await initGameScene();
   elements.gameViewContainer.style.display = "none";
 
+  // Set up view toggle
   elements.viewToggleBtn.addEventListener("click", () => {
-    const isGameViewMode = toggleGameView(elements);
-    if (isGameViewMode) {
-      initGameUI(elements);
-    }
+    toggleGameView(elements);
   });
 
+  // Set initial view size
   updateGameViewSize(elements);
+
+  // Debounce resize handler for performance
   window.addEventListener(
     "resize",
     debounce(() => {
-      if (isGameView()) updateGameViewSize(elements);
+      if (isGameView()) {
+        updateGameViewSize(elements);
+        // Reposition UI elements on resize
+        if (
+          document.getElementById("altitude-meter") &&
+          document.getElementById("compass-rose")
+        ) {
+          const { altitudeCanvas, compassCanvas } = getUI();
+          positionUIElements();
+        }
+      }
     }, 200)
   );
 
-  // Add window unload event listener to clean up resources
-  window.addEventListener("beforeunload", () => {
-    disposeAudio();
-  });
+  // Clean up resources on page unload
+  window.addEventListener("beforeunload", disposeAudio);
 
   gameState.isInitialized = true;
 }

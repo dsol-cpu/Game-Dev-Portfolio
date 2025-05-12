@@ -80,13 +80,15 @@ section {
 }
 
 section .container {
+  position: relative;
   min-height: 100vh;
   background-color: var(--light-color);
   margin: 3px;
   border-width: 5px;
   border-color: var(--accent-color);
+  display: flex;
+  flex-direction: column;
 }
-
 .skill-bar {
   margin-bottom: 1.5rem;
 }
@@ -125,6 +127,7 @@ section .container {
   gap: 1rem;
   margin-bottom: 2rem;
   flex-wrap: wrap;
+  z-index: 2;
 }
 
 .filter-button {
@@ -154,6 +157,7 @@ section .container {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 2rem;
+  z-index: 1;
 }
 
 /* Enhanced Portfolio Item Styling */

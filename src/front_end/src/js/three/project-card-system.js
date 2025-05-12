@@ -3,22 +3,17 @@
  * Combines project card creation/management with optimized ThreeJS rendering
  */
 
-import { projectCardData } from "../data/project";
 import { C } from "../constants/constants.js";
+import { projectCardData } from "../data/project";
 import {
   PerspectiveCamera,
-  Vector3,
   Raycaster,
-  Vector2,
+  Vector3,
 } from "../extern/three/three.module.min.js";
 import { handleUserInteraction } from "../user-interaction.js";
-import {
-  calculateModelPositions,
-  getModel,
-  getModelPosition,
-} from "./model-manager.js";
-import { getScene, registerCamera, renderFrame } from "./threejs-manager.js";
 import { isLowPoweredDevice } from "../utils/device";
+import { calculateModelPositions, getModel } from "./model-manager.js";
+import { getScene, registerCamera, renderFrame } from "./threejs-manager.js";
 
 // DOM cache and scene references
 const domCache = {
@@ -408,7 +403,7 @@ function createMainCanvas() {
   canvas.height = portfolioSection.clientHeight || C.DEFAULT_HEIGHT;
 
   portfolioSection.style.position = "relative";
-  portfolioSection.prepend(canvas);
+  portfolioSection.append(canvas);
 
   return canvas;
 }
@@ -424,7 +419,6 @@ function setupMainCamera(canvas) {
     C.FAR
   );
 
-  // FIXED: Position camera directly in front of models
   projectCamera.position.set(0, 0, 10); // Changed Y to 0 (was 5)
   projectCamera.lookAt(0, 0, 0);
 
@@ -432,10 +426,7 @@ function setupMainCamera(canvas) {
   projectCamera.up.set(0, 1, 0);
 
   const ctx = canvas.getContext("2d", { alpha: true });
-  cameraIndex = registerCamera(projectCamera, ctx, {
-    type: "portfolio",
-    elementId: canvas.id,
-  });
+  cameraIndex = registerCamera(projectCamera, ctx);
 }
 
 async function setupProjects() {

@@ -1,3 +1,5 @@
+// Refactored game-ui.js file
+
 import { getCurrentHeight, getHeightLimits, getDirection } from "./player.js";
 import { debounce } from "../utils/helper.js";
 
@@ -13,30 +15,48 @@ let compassCanvas, compassCtx;
 let gameContainer;
 let heightLimits = { min: -50, max: 50 };
 
-export function initGameUI(elements) {
-  if (!elements?.gameViewContainer)
-    return console.error("Game UI init failed: no container");
-
+// New function to create and return UI elements
+export function getUI() {
   try {
     heightLimits = getHeightLimits();
   } catch {}
 
-  gameContainer = elements.gameViewContainer;
-
+  // Create altitude meter
   altitudeCanvas = document.createElement("canvas");
   altitudeCanvas.width = ALTITUDE_WIDTH;
   altitudeCanvas.height = ALTITUDE_HEIGHT;
   altitudeCanvas.id = "altitude-meter";
   altitudeCanvas.classList.add("game-ui-element");
+  altitudeCtx = altitudeCanvas.getContext("2d");
 
+  // Create compass
   compassCanvas = document.createElement("canvas");
   compassCanvas.width = compassCanvas.height = COMPASS_SIZE;
   compassCanvas.id = "compass-rose";
   compassCanvas.classList.add("game-ui-element");
-
-  altitudeCtx = altitudeCanvas.getContext("2d");
   compassCtx = compassCanvas.getContext("2d");
 
+  return {
+    altitudeCanvas,
+    compassCanvas,
+  };
+}
+
+// Refactored initGameUI function
+export function initGameUI(elements) {
+  if (!elements?.gameViewContainer)
+    return console.error("Game UI init failed: no container");
+
+  gameContainer = elements.gameViewContainer;
+
+  // Get UI elements from getUI function
+  const { altitudeCanvas: altitude, compassCanvas: compass } = getUI();
+
+  // Store references to the canvas elements
+  altitudeCanvas = altitude;
+  compassCanvas = compass;
+
+  // Add UI elements to the container
   gameContainer.appendChild(altitudeCanvas);
   gameContainer.appendChild(compassCanvas);
 
