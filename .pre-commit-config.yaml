@@ -1,13 +1,13 @@
 repos:
   - repo: https://github.com/gitguardian/ggshield
-    rev: v1.38.1
+    rev: v1.39.0
     hooks:
       - id: ggshield
         language_version: python3
         stages: [pre-commit]
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.1.0
+    rev: v5.0.0
     hooks:
       - id: check-merge-conflict
       - id: trailing-whitespace
@@ -19,12 +19,12 @@ repos:
         exclude: "tsconfig.json"
 
   - repo: https://github.com/bridgecrewio/checkov.git
-    rev: 2.0.975
+    rev: 3.2.416
     hooks:
       - id: checkov
 
   - repo: https://github.com/Agilicus/pre-commit-hook-k8svalidate.git
-    rev: v0.0.8
+    rev: v0.2.0
     hooks:
       - id: k8svalidate
         files: .yaml$
