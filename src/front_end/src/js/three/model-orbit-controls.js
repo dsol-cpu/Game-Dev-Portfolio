@@ -300,8 +300,6 @@ function setupModelInteraction(state) {
       // Update positions
       cacheViewWindowPositions();
       updateModelPositions();
-
-      renderFrame();
     }
   });
 
@@ -400,8 +398,6 @@ function updateModelPositions() {
     model.updateMatrix();
     model.updateMatrixWorld(true);
   });
-
-  renderFrame();
 }
 
 /**
@@ -427,10 +423,6 @@ function setupModelRotationAnimations() {
         needsRender = true;
       }
     });
-
-    if (needsRender) {
-      renderFrame();
-    }
 
     animationFrameId = requestAnimationFrame(animateModels);
   }

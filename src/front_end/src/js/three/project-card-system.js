@@ -14,7 +14,7 @@ import { updateOverlay } from "../grid-overlay.js";
 import { handleUserInteraction } from "../user-interaction.js";
 import { isLowPoweredDevice } from "../utils/device";
 import { calculateModelPositions, getModel } from "./model-manager.js";
-import { getScene, registerCamera, renderFrame } from "./threejs-manager.js";
+import { getScene, registerCamera } from "./threejs-manager.js";
 
 // DOM cache and scene references
 const domCache = {
@@ -349,7 +349,6 @@ function addNewProject(data) {
         projectModels.set(data.modelName, model);
         cacheViewWindowPositions();
         positionModelForItem(model, data.modelName);
-        renderFrame();
       }
     });
   }
@@ -417,10 +416,10 @@ function createMainCanvas() {
  */
 function setupMainCamera(canvas) {
   projectCamera = new PerspectiveCamera(
-    C.DEFAULT_FOV,
+    45,
     canvas.width / canvas.height,
-    C.NEAR,
-    C.FAR
+    0.1,
+    10
   );
 
   projectCamera.position.set(0, 0, 10); // Changed Y to 0 (was 5)
@@ -453,7 +452,6 @@ async function setupProjects() {
   });
 
   await Promise.all(loadPromises);
-  renderFrame();
 }
 
 async function loadProjectModel(modelName) {
@@ -598,7 +596,6 @@ function setupInteractions() {
       projectCamera.updateProjectionMatrix();
       cacheViewWindowPositions();
       updateModelPositions();
-      renderFrame();
     }
   });
 
@@ -703,8 +700,6 @@ function setupDragInteraction(canvas, state) {
     state.lastX = event.clientX;
     state.lastY = event.clientY;
 
-    renderFrame();
-
     // Mark as dragging to prevent click
     if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) {
       state.dragging = true;
@@ -772,7 +767,6 @@ function setupScrollInteraction() {
         model.scale.copy(model.userData.currentScale);
         model.updateMatrix();
         model.updateMatrixWorld(true);
-        renderFrame();
       }
     });
   });
@@ -888,8 +882,6 @@ function applyRotationInertia(model, speed) {
     inertiaSpeed.x *= friction;
     inertiaSpeed.y *= friction;
 
-    renderFrame();
-
     // Continue animation until speed is negligible
     if (
       Math.abs(inertiaSpeed.x) > 0.0001 ||
@@ -911,7 +903,6 @@ function setupResizeObserver() {
   const observer = new ResizeObserver(() => {
     cacheViewWindowPositions();
     updateModelPositions();
-    renderFrame();
   });
 
   // Observe each item and the grid
@@ -993,7 +984,6 @@ export function animateModels(deltaTime) {
 
   // Only render if models were actually updated
   if (needsRender) {
-    renderFrame();
   }
 
   animationFrameId = requestAnimationFrame(animateModels);
@@ -1106,7 +1096,6 @@ function animateTransition({ start, target, lookAt, onComplete }) {
 
     projectCamera.position.lerpVectors(start, target, t);
     projectCamera.lookAt(lookAt);
-    renderFrame();
 
     if (progress < 1) {
       animationFrameId = requestAnimationFrame(animate);

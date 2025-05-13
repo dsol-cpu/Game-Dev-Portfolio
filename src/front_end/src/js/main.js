@@ -105,11 +105,6 @@ function frameUpdateCallback(timestamp) {
   // Get the frame-capped deltaTime
   const deltaTime = getDeltaTime();
 
-  // Run physics and other fixed-timestep systems
-  // runFixedUpdates((fixedDeltaTime) => {
-  //   // Any logic that needs to run at fixed timesteps (like physics)
-  //   // Put physics code here if you have any
-  // });
   if (isGameView()) {
     updateIslandBobbing(deltaTime);
     updateGameLoop(deltaTime);
@@ -121,8 +116,6 @@ function frameUpdateCallback(timestamp) {
 // Clean up function - call this when unloading the app if needed
 function cleanup() {
   stopFrameCappedLoop();
-  // Any other cleanup...
 }
 
-// Optional: Handle cleanup when the page is unloaded
 window.addEventListener("beforeunload", cleanup);

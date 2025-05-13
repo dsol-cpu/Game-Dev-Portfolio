@@ -9,15 +9,15 @@ import {
 } from "../extern/three/three.module.min.js";
 import { handleUserInteraction } from "../user-interaction.js";
 import { debounce } from "../utils/helper.js";
+import { audioController } from "./audio-controller.js";
 import { initCamController, updateCamera } from "./camera-follow.js";
+import { disposeGameUI, initGameUI, updateGameUI } from "./game-ui.js";
 import {
   createPlayerModel,
   initPlayerControls,
   updatePlayer,
 } from "./player.js";
-import { getScene, registerCamera, renderFrame } from "./threejs-manager.js";
-import { initGameUI, updateGameUI, disposeGameUI } from "./game-ui.js";
-import { audioController } from "./audio-controller.js";
+import { getScene, registerCamera } from "./threejs-manager.js";
 
 const COLORS = {
   clouds: 0xffffff,
@@ -318,7 +318,6 @@ export function toggleGameView(elements) {
         gameState.viewMode = newViewMode;
         gameState.isTransitioning = false;
         gameViewContainer.style.transition = "";
-        renderFrame();
       }, TRANSITION_DURATION);
     }, 50);
   } else {
@@ -383,8 +382,6 @@ export function updateGameViewSize(elements, width, height) {
       thirdPersonCamera.aspect = width / height;
       thirdPersonCamera.updateProjectionMatrix();
     }
-
-    renderFrame();
   }
 }
 
