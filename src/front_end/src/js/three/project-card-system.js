@@ -10,6 +10,7 @@ import {
   Raycaster,
   Vector3,
 } from "../extern/three/three.module.min.js";
+import { updateOverlay } from "../grid-overlay.js";
 import { handleUserInteraction } from "../user-interaction.js";
 import { isLowPoweredDevice } from "../utils/device";
 import { calculateModelPositions, getModel } from "./model-manager.js";
@@ -128,6 +129,7 @@ function createProjectCard(project) {
       borderRadius: "8px",
       overflow: "hidden",
       cursor: "pointer",
+      "z-index": 3,
     });
 
     // Add model interaction hint text
@@ -297,6 +299,8 @@ function toggleExpand(e, id) {
   const backdrop = getBackdrop();
   if (backdrop) backdrop.classList.toggle("active", expanding);
   document.body.classList.toggle("overflow-hidden", expanding);
+
+  updateOverlay();
 }
 
 /**
@@ -625,7 +629,6 @@ function setupInteractions() {
     cursor: "pointer",
   });
 
-  resetButton.addEventListener("click", resetView);
   const portfolioSection = canvas.parentElement;
   if (portfolioSection) portfolioSection.appendChild(resetButton);
 }

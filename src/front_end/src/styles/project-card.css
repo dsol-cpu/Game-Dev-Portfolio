@@ -30,20 +30,21 @@
 }
 
 /* Expanded state */
-.game-preview.expanded {
+.game-preview.portfolio-item.expanded {
   width: 500px;
   height: auto;
   max-height: 80vh;
   cursor: default;
-  z-index: 10;
+  z-index: 100;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
   transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1),
     transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
 }
 
-.game-preview.expanded.expand-left {
+.game-preview.portfolio-item.expanded.expand-left {
   position: relative;
-  z-index: 20; /* Higher than standard expanded cards */
+  z-index: 100;
   transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1),
     transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
   transform: translateX(-140px);
@@ -340,7 +341,6 @@
   transform: translateY(-2px);
 }
 
-/* Additional styles for animation */
 .backdrop {
   position: fixed;
   top: 0;
@@ -350,16 +350,18 @@
   background-color: rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(3px);
   -webkit-backdrop-filter: blur(3px);
-  z-index: 5;
   opacity: 0;
   visibility: hidden;
   transition: opacity 0.3s ease;
   user-select: none;
+  pointer-events: none;
 }
 
 .backdrop.active {
   opacity: 1;
   visibility: visible;
+  pointer-events: auto;
+  z-index: 1;
 }
 
 .game-preview.expanded .threejs-canvas {

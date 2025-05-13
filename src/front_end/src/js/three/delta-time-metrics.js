@@ -126,6 +126,9 @@ export function createDeltaTimeMetricsOverlay() {
   let animFrameId = null;
   let lastTime = performance.now();
 
+  // Track if the overlay is transitioning (for display property handling)
+  let isTransitioning = false;
+
   // Pre-calculate graph elements for reuse
   const thresholdLines = [0, 1 / 3, 2 / 3, 1].map((ratio) =>
     Math.floor(canvas.height * ratio)
@@ -138,28 +141,46 @@ export function createDeltaTimeMetricsOverlay() {
   function toggleVisibility(event) {
     if (event && event.key === "F2") {
       isVisible = !isVisible;
-      container.style.opacity = isVisible ? "1" : "0";
-      container.style.transform = isVisible
-        ? "translateY(0)"
-        : "translateY(20px)";
 
-      // Stop/start animation loop based on visibility
       if (isVisible) {
-        if (!animFrameId) requestUpdate();
+        // Make sure the container is displayed before transitioning in
+        container.style.display = "block";
+        // Use a small delay to ensure the display change has taken effect
+        setTimeout(() => {
+          container.style.opacity = "1";
+          container.style.transform = "translateY(0)";
+        }, 10);
+
+        // Restart animation loop if needed
+        if (!animFrameId) {
+          requestUpdate();
+        }
       } else {
+        // Start transition out
+        container.style.opacity = "0";
+        container.style.transform = "translateY(20px)";
+        isTransitioning = true;
+
+        // Hide the container after transition completes
+        setTimeout(() => {
+          if (!isVisible) {
+            // Double-check visibility hasn't changed
+            container.style.display = "none";
+          }
+          isTransitioning = false;
+        }, 300);
+
+        // Stop animation loop
         if (animFrameId) {
           cancelAnimationFrame(animFrameId);
           animFrameId = null;
         }
-        // Use timeout for display change to allow CSS transition
-        setTimeout(() => (container.style.display = "none"), 300);
       }
 
       if (event) event.preventDefault();
     }
   }
 
-  // Optimized event listener (using passive where possible)
   window.addEventListener("keydown", toggleVisibility, { passive: false });
 
   // Cache focus check to reduce frequent DOM access
@@ -188,7 +209,6 @@ export function createDeltaTimeMetricsOverlay() {
     const delta = getDeltaTime();
     const fps = delta > 0 ? 1000 / (delta * 1000) : 0;
 
-    // Optimized circular buffer
     fpsHistory[historyIndex] = fps;
     historyIndex = (historyIndex + 1) % maxHistory;
     if (!historyFilled && historyIndex === 0) historyFilled = true;
@@ -252,11 +272,9 @@ export function createDeltaTimeMetricsOverlay() {
     }
   }
 
-  // Optimized graph drawing
   function drawFpsGraph() {
     if (!historyFilled && historyIndex === 0) return;
 
-    // Clear with direct call (faster than clearRect)
     ctx.fillStyle = "rgb(0,0,0)";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -330,7 +348,7 @@ export function createDeltaTimeMetricsOverlay() {
 
   // Use requestAnimationFrame for update (more efficient than setInterval)
   function requestUpdate() {
-    if (!isVisible) return;
+    if (!isVisible && !isTransitioning) return;
 
     const now = performance.now();
     const elapsed = now - lastTime;

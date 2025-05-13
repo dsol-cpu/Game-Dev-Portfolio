@@ -1,7 +1,7 @@
-// Refactored game-ui.js file
-
 import { getCurrentHeight, getHeightLimits, getDirection } from "./player.js";
 import { debounce } from "../utils/helper.js";
+
+import { audioController, toggleBackgroundMusic } from "./audio-controller.js";
 
 const ALTITUDE_WIDTH = 40;
 const ALTITUDE_HEIGHT = 200;
@@ -12,10 +12,10 @@ const UI_FG_ALPHA = 0.9;
 
 let altitudeCanvas, altitudeCtx;
 let compassCanvas, compassCtx;
+let volumeSlider, speakerButton;
 let gameContainer;
 let heightLimits = { min: -50, max: 50 };
 
-// New function to create and return UI elements
 export function getUI() {
   try {
     heightLimits = getHeightLimits();
@@ -36,13 +36,61 @@ export function getUI() {
   compassCanvas.classList.add("game-ui-element");
   compassCtx = compassCanvas.getContext("2d");
 
+  const volumeControlContainer = createVolumeControl();
+
   return {
     altitudeCanvas,
     compassCanvas,
+    volumeControlContainer,
   };
 }
 
-// Refactored initGameUI function
+function createVolumeControl() {
+  // Create volume control container
+  const volumeControlContainer = document.createElement("div");
+  volumeControlContainer.id = "volume-control-container";
+  volumeControlContainer.classList.add("game-ui-element");
+
+  // Create speaker button
+  speakerButton = document.createElement("button");
+  speakerButton.id = "speaker-button";
+  speakerButton.innerHTML = audioController.audioEnabled ? "🔊" : "🔇"; // Set initial state based on AudioController
+  speakerButton.classList.add("volume-control-btn");
+  speakerButton.title = "Mute/Unmute";
+  speakerButton.addEventListener("click", () => {
+    const isEnabled = toggleBackgroundMusic();
+    updateSpeakerIcon(isEnabled);
+  });
+
+  // Create volume slider
+  volumeSlider = document.createElement("input");
+  volumeSlider.type = "range";
+  volumeSlider.min = "0";
+  volumeSlider.max = "1";
+  volumeSlider.step = "0.1";
+  // Use the stored volume value instead of directly accessing gainNode
+  volumeSlider.value = audioController.getVolume
+    ? audioController.getVolume().toString()
+    : "0.5";
+  volumeSlider.id = "volume-slider";
+  volumeSlider.classList.add("volume-control-slider");
+  volumeSlider.addEventListener("input", (e) => {
+    const volume = parseFloat(e.target.value);
+    audioController.setVolume(volume);
+  });
+
+  // Assemble volume control
+  volumeControlContainer.appendChild(speakerButton);
+  volumeControlContainer.appendChild(volumeSlider);
+
+  return volumeControlContainer;
+}
+
+function updateSpeakerIcon(isEnabled) {
+  if (!speakerButton) return;
+  speakerButton.innerHTML = isEnabled ? "🔊" : "🔇";
+}
+
 export function initGameUI(elements) {
   if (!elements?.gameViewContainer)
     return console.error("Game UI init failed: no container");
@@ -50,7 +98,11 @@ export function initGameUI(elements) {
   gameContainer = elements.gameViewContainer;
 
   // Get UI elements from getUI function
-  const { altitudeCanvas: altitude, compassCanvas: compass } = getUI();
+  const {
+    altitudeCanvas: altitude,
+    compassCanvas: compass,
+    volumeControlContainer,
+  } = getUI();
 
   // Store references to the canvas elements
   altitudeCanvas = altitude;
@@ -60,10 +112,18 @@ export function initGameUI(elements) {
   gameContainer.appendChild(altitudeCanvas);
   gameContainer.appendChild(compassCanvas);
 
+  // Add volume control
+  if (volumeControlContainer) {
+    gameContainer.appendChild(volumeControlContainer);
+  }
+
   positionUIElements();
   addGameUIStyles();
 
   window.addEventListener("resize", debounce(positionUIElements, 200));
+
+  // Sync UI with audio controller state
+  syncVolumeUI();
 }
 
 function positionUIElements() {
@@ -77,7 +137,7 @@ function positionUIElements() {
     right: `${UI_PADDING}px`,
     width: `${ALTITUDE_WIDTH}px`,
     height: `${ALTITUDE_HEIGHT}px`,
-    zIndex: "101",
+    zIndex: "4",
   });
 
   Object.assign(compassCanvas.style, {
@@ -86,8 +146,24 @@ function positionUIElements() {
     left: `${UI_PADDING}px`,
     width: `${COMPASS_SIZE}px`,
     height: `${COMPASS_SIZE}px`,
-    zIndex: "101",
+    zIndex: "4",
   });
+
+  // Position volume control at top-left
+  const volumeContainer = document.getElementById("volume-control-container");
+  if (volumeContainer) {
+    Object.assign(volumeContainer.style, {
+      position: "absolute",
+      top: `${UI_PADDING}px`,
+      left: `${UI_PADDING}px`,
+      zIndex: "102", // Ensure visibility
+      display: "flex",
+      alignItems: "center",
+      backgroundColor: `rgba(0, 0, 0, ${UI_BG_ALPHA})`,
+      padding: "10px",
+      borderRadius: "5px",
+    });
+  }
 }
 
 function addGameUIStyles() {
@@ -104,6 +180,25 @@ function addGameUIStyles() {
       }
       #altitude-meter.at-limit {
         box-shadow: 0 0 10px rgba(255, 100, 100, 0.5);
+      }
+      #volume-control-container {
+        pointer-events: auto;
+      }
+      .volume-control-btn {
+        background: none;
+        border: none;
+        font-size: 20px;
+        cursor: pointer;
+        margin-right: 10px;
+        opacity: 0.8;
+        transition: opacity 0.2s;
+      }
+      .volume-control-btn:hover {
+        opacity: 1;
+      }
+      .volume-control-slider {
+        width: 100px;
+        cursor: pointer;
       }
     `;
     document.head.appendChild(style);
@@ -257,16 +352,41 @@ export function updateGameUI(playerState) {
   updateCompass(rotation);
 }
 
+// Function to synchronize volume UI with AudioController state
+export function syncVolumeUI() {
+  if (!audioController.initialized) return;
+
+  // Update volume slider value with the stored volume, not the actual gain value
+  if (volumeSlider && audioController.getVolume) {
+    volumeSlider.value = audioController.getVolume().toString();
+  } else if (volumeSlider && audioController.gainNode) {
+    // Fallback to the old way
+    volumeSlider.value = audioController.gainNode.gain.value.toString();
+  }
+
+  // Update speaker button icon
+  if (speakerButton) {
+    updateSpeakerIcon(audioController.audioEnabled);
+  }
+}
+
 export function disposeGameUI() {
   if (altitudeCanvas?.parentNode)
     altitudeCanvas.parentNode.removeChild(altitudeCanvas);
   if (compassCanvas?.parentNode)
     compassCanvas.parentNode.removeChild(compassCanvas);
 
+  // Remove volume control
+  const volumeContainer = document.getElementById("volume-control-container");
+  if (volumeContainer?.parentNode)
+    volumeContainer.parentNode.removeChild(volumeContainer);
+
   window.removeEventListener("resize", positionUIElements);
 
   altitudeCanvas =
     compassCanvas =
+    volumeSlider =
+    speakerButton =
     altitudeCtx =
     compassCtx =
     gameContainer =

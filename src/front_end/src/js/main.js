@@ -3,6 +3,7 @@
  * Handles bootstrapping and coordination between modules.
  */
 import { initBlogPosts } from "./blog.js";
+import { initGridOverlay } from "./grid-overlay.js";
 import { initNavigation } from "./navigation.js";
 import { initPortfolioFilters } from "./portfolio-filters.js";
 
@@ -46,6 +47,7 @@ async function initializeApp() {
   initNavigation();
 
   initProjectCards();
+  // initGridOverlay();
   // Only initialize the ThreeJS scenes and models if you don't have a doodoo computer
   if (isLowPoweredDevice()) {
     document.getElementById("view-toggle-btn").style.display = "none";

@@ -258,9 +258,15 @@
       var(--secondary-color)
     )
     border-box;
+
+  /* Standard syntax */
+  mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+
+  /* WebKit-specific fallback */
   -webkit-mask: linear-gradient(#fff 0 0) padding-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: destination-out;
-  mask-composite: exclude;
+
   opacity: 0;
   transition: opacity 0.3s ease;
 }
