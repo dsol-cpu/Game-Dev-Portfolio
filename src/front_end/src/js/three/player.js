@@ -160,6 +160,7 @@ export async function createPlayerModel() {
   const shipModel = await getModel("portfolioShip");
 
   shipModel.quaternion.identity();
+  shipModel.scale.set(1, 1, 1);
   ship.add(shipModel);
   ship.position.set(0, CONSTANTS[10], 0); // MIN_HEIGHT
 
