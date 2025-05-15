@@ -7,7 +7,7 @@ import {
   Matrix4,
   Vector3,
   Box3,
-  SRGBColorSpace
+  SRGBColorSpace,
 } from "../extern/three/three.module.min.js";
 import { getFallbackCube } from "./model-manager.js";
 
@@ -69,15 +69,17 @@ let resizeTimeout;
 export function initThreeJSManager() {
   // Try to create WebGL2 renderer first
   try {
-    const canvas = document.createElement('canvas');
-    const gl2Context = canvas.getContext('webgl2', {powerPreference: 'high-performance'});
+    const canvas = document.createElement("canvas");
+    const gl2Context = canvas.getContext("webgl2", {
+      powerPreference: "high-performance",
+    });
 
     if (gl2Context) {
       // WebGL 2.0 is available
       renderer = new WebGLRenderer({
         ...RENDERER_OPTIONS,
         canvas: canvas,
-        context: gl2Context
+        context: gl2Context,
       });
       console.log("Using WebGL 2.0 renderer");
     } else {

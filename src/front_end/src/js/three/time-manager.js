@@ -230,9 +230,8 @@ function frameLoop(timestamp) {
   const rawDelta = (timestamp - lastTimestamp) / 1000;
   lastTimestamp = timestamp;
 
-  // Handle tab becoming visible after being hidden
   // If delta is exceptionally large, it likely means the tab was inactive
-  if (rawDelta > MAX_DELTA_TIME * 2) {
+  if (rawDelta > MAX_DELTA_TIME) {
     // Reset timing info rather than trying to recover
     clock.getDelta(); // Discard large delta
     deltaTime = FIXED_DELTA_TIME;

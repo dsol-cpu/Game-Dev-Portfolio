@@ -540,6 +540,3 @@ export async function initGame() {
 
   gameState.isInitialized = true;
 }
-
-// Export gameState for components that need audio state
-export { gameState };

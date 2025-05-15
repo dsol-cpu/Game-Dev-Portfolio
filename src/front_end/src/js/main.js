@@ -45,10 +45,14 @@ async function initializeApp() {
   // Initialize navigation
   initNavigation();
 
+  initPortfolioFilters();
+
   initProjectCards();
+  initBlogPosts();
+
   // initGridOverlay();
   // Only initialize the ThreeJS scenes and models if you don't have a doodoo computer
-  if (isLowPoweredDevice()) {
+  if (!isLowPoweredDevice()) {
     document.getElementById("view-toggle-btn").style.display = "none";
   } else {
     preloadModels(["babyTurtle", "portfolioShip", "globe"]);
@@ -60,13 +64,9 @@ async function initializeApp() {
     if (import.meta.env.DEV) {
       createDeltaTimeMetricsOverlay();
     }
+    // Start the frame-capped main loop instead of calling mainLoop directly
+    startFrameCappedLoop(frameUpdateCallback);
   }
-
-  initPortfolioFilters();
-  initBlogPosts();
-
-  // Start the frame-capped main loop instead of calling mainLoop directly
-  startFrameCappedLoop(frameUpdateCallback);
 }
 
 function initAboutCanvas() {
