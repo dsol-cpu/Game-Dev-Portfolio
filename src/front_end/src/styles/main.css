@@ -354,28 +354,39 @@ section .container {
 .game-view-container {
   position: fixed;
   top: 0;
-  left: 240px; /* Width of sidebar */
+  left: var(--sidebar-width, 240px); /* Use CSS variable if defined, fallback to 240px */
   right: 0;
   bottom: 0;
   background-color: var(--bg-color);
   display: none; /* Hidden by default */
   z-index: 100;
+  overflow: hidden; /* Prevent any scrolling */
 }
 
-.game-mode .main-content {
+/* When game mode is active */
+body.game-mode .main-content {
   display: none;
 }
 
-.game-mode .game-view-container {
+body.game-mode .game-view-container {
   display: block;
-  background-color: skyblue;
 }
 
 #main-game-canvas {
   width: 100%;
   height: 100%;
   display: block;
+  background-color: skyblue; /* Temporary background for visibility */
 }
+
+canvas#main-game-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
 
 /* Game Controls Info Styling */
 .game-view-container .game-controls-info {

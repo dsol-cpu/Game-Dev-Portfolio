@@ -245,10 +245,6 @@
   }
 }
 
-.game-controls-info {
-  animation: fadeIn 0.5s ease-out;
-}
-
 /* Collapsed State */
 .game-controls-info.collapsed {
   width: auto;

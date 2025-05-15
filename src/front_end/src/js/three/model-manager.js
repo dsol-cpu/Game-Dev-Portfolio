@@ -1,5 +1,5 @@
 /**
- * @fileoverview Simplified model manager for Three.js applications.
+ * @fileoverview Model manager
  * Handles model loading, caching, memory management, and texture optimization.
  */
 
@@ -16,39 +16,39 @@ import {
 
 import { GLTFLoader } from "../extern/three/GLTFLoader.js";
 
-// Configuration constants
-const CONFIG = {
+// Configuration constants - using frozen objects to prevent modification
+const CONFIG = Object.freeze({
   FALLBACK_CUBE_NAME: "fallbackCube",
   MODEL_LOAD_TIMEOUT: 10000, // ms
-  TEXTURE_OPTIMIZATION: {
+  TEXTURE_OPTIMIZATION: Object.freeze({
     ENABLED: true,
-    MAX_TEXTURE_SIZE: 512, // Maximum texture dimension (power of 2)
-    MIN_TEXTURE_SIZE: 64, // Minimum texture dimension (power of 2)
-    QUALITY_LEVELS: {
-      // Different quality presets
+    MAX_TEXTURE_SIZE: 512,
+    MIN_TEXTURE_SIZE: 64,
+    QUALITY_LEVELS: Object.freeze({
       LOW: 64,
       MEDIUM: 256,
       HIGH: 512,
-    },
-    MIPMAP: false, // Whether to generate mipmaps
-    FILTER: "LINEAR", // Texture filtering method: LINEAR or NEAREST
-    ANISOTROPY: 1, // Anisotropic filtering level (1 = disabled)
-  },
-};
+    }),
+    MIPMAP: false,
+    FILTER: "LINEAR",
+    ANISOTROPY: 1,
+  }),
+});
 
-// Create a single shared fallback cube
-const FALLBACK_CUBE = new Mesh(
-  new BoxGeometry(1, 1, 1),
-  new MeshNormalMaterial()
-);
-FALLBACK_CUBE.position.set(0, 0, 100);
+// Create a single shared fallback cube (cached once)
+const FALLBACK_CUBE = (() => {
+  const cube = new Mesh(new BoxGeometry(1, 1, 1), new MeshNormalMaterial());
+  cube.position.set(0, 0, 100);
+  return cube;
+})();
 
-// Simple state management
+// State management with Map objects for better performance with string keys
 const state = {
-  models: {},
-  modelLoadPromises: {},
-  modelPositions: {},
-  textureQuality: "MEDIUM", // Default texture quality
+  models: new Map(),
+  modelLoadPromises: new Map(),
+  modelPositions: new Map(),
+  textureQuality: "MEDIUM",
+  textureCache: new WeakMap(), // Cache optimized textures by reference
 };
 
 /**
@@ -61,11 +61,11 @@ function getFallbackCube() {
 /**
  * Set texture quality level
  * @param {string} qualityLevel - 'LOW', 'MEDIUM', or 'HIGH'
+ * @returns {boolean} Success indicator
  */
 function setTextureQuality(qualityLevel) {
   if (CONFIG.TEXTURE_OPTIMIZATION.QUALITY_LEVELS[qualityLevel] !== undefined) {
     state.textureQuality = qualityLevel;
-    console.log(`Texture quality set to: ${qualityLevel}`);
     return true;
   }
   console.warn(`Invalid quality level: ${qualityLevel}`);
@@ -74,6 +74,7 @@ function setTextureQuality(qualityLevel) {
 
 /**
  * Get the current texture max size based on quality setting
+ * @returns {number} Max texture size
  */
 function getCurrentTextureMaxSize() {
   return (
@@ -91,41 +92,37 @@ function getOptimalTextureSize(originalSize) {
   const maxSize = getCurrentTextureMaxSize();
   const minSize = CONFIG.TEXTURE_OPTIMIZATION.MIN_TEXTURE_SIZE;
 
-  // Find the nearest power of 2 that's less than or equal to the original size
+  // Bitwise approach to find nearest power of 2 (faster than loop)
   let size = 1;
-  while (size * 2 <= originalSize && size * 2 <= maxSize) {
-    size *= 2;
+  while (size << 1 <= originalSize && size << 1 <= maxSize) {
+    size <<= 1;
   }
 
-  // Don't go below the minimum size
   return Math.max(size, minSize);
 }
 
 /**
  * Optimize a texture to reduce memory usage while maintaining visual quality
  * @param {THREE.Texture} texture - The texture to optimize
+ * @returns {THREE.Texture} Optimized texture
  */
 function optimizeTexture(texture) {
   if (!texture || !CONFIG.TEXTURE_OPTIMIZATION.ENABLED) return texture;
 
-  // Store original dimensions
-  const originalWidth = texture.image ? texture.image.width : 0;
-  const originalHeight = texture.image ? texture.image.height : 0;
+  // Check if we've already processed this texture
+  if (state.textureCache.has(texture)) return texture;
 
-  if (originalWidth === 0 || originalHeight === 0) return texture;
+  const image = texture.image;
+  if (!image || !image.width || !image.height) return texture;
 
   // Calculate optimal dimensions
+  const originalWidth = image.width;
+  const originalHeight = image.height;
   const optimalWidth = getOptimalTextureSize(originalWidth);
   const optimalHeight = getOptimalTextureSize(originalHeight);
 
   // Only resize if needed
   if (optimalWidth < originalWidth || optimalHeight < originalHeight) {
-    // Log what we're doing
-    console.log(
-      `Optimizing texture: ${originalWidth}x${originalHeight} -> ${optimalWidth}x${optimalHeight}`
-    );
-
-    // Create a canvas for resizing
     const canvas = document.createElement("canvas");
     canvas.width = optimalWidth;
     canvas.height = optimalHeight;
@@ -134,34 +131,22 @@ function optimizeTexture(texture) {
     // Use high-quality image scaling
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(image, 0, 0, optimalWidth, optimalHeight);
 
-    // Draw the original image scaled down
-    ctx.drawImage(texture.image, 0, 0, optimalWidth, optimalHeight);
-
-    // Replace the texture's image with our resized version
     texture.image = canvas;
     texture.needsUpdate = true;
   }
 
-  // Apply filtering based on configuration
+  // Apply filtering based on configuration (use constants directly)
+  const useNearestFilter = CONFIG.TEXTURE_OPTIMIZATION.FILTER === "NEAREST";
   texture.generateMipmaps = CONFIG.TEXTURE_OPTIMIZATION.MIPMAP;
-  texture.minFilter =
-    CONFIG.TEXTURE_OPTIMIZATION.FILTER === "NEAREST"
-      ? NearestFilter
-      : CONFIG.TEXTURE_OPTIMIZATION.MIPMAP
-      ? LinearFilter
-      : LinearFilter;
-  texture.magFilter =
-    CONFIG.TEXTURE_OPTIMIZATION.FILTER === "NEAREST"
-      ? NearestFilter
-      : LinearFilter;
-
-  // Set anisotropy
+  texture.minFilter = useNearestFilter ? NearestFilter : LinearFilter;
+  texture.magFilter = useNearestFilter ? NearestFilter : LinearFilter;
   texture.anisotropy = CONFIG.TEXTURE_OPTIMIZATION.ANISOTROPY;
+  texture.wrapS = texture.wrapT = RepeatWrapping;
 
-  // Use repeat wrapping for better tiling if texture is used for that
-  texture.wrapS = RepeatWrapping;
-  texture.wrapT = RepeatWrapping;
+  // Mark as processed
+  state.textureCache.set(texture, true);
 
   return texture;
 }
@@ -173,6 +158,22 @@ function optimizeTexture(texture) {
 function optimizeModelTextures(model) {
   if (!model) return;
 
+  // Common texture map names
+  const textureMaps = [
+    "map",
+    "normalMap",
+    "bumpMap",
+    "displacementMap",
+    "roughnessMap",
+    "metalnessMap",
+    "alphaMap",
+    "aoMap",
+    "emissiveMap",
+    "envMap",
+    "lightMap",
+    "specularMap",
+  ];
+
   // Process all materials in the model
   model.traverse((node) => {
     if (!node.isMesh || !node.material) return;
@@ -182,24 +183,8 @@ function optimizeModelTextures(model) {
       : [node.material];
 
     materials.forEach((material) => {
-      // Process all texture maps in the material
-      const textureMaps = [
-        "map",
-        "normalMap",
-        "bumpMap",
-        "displacementMap",
-        "roughnessMap",
-        "metalnessMap",
-        "alphaMap",
-        "aoMap",
-        "emissiveMap",
-        "envMap",
-        "lightMap",
-        "specularMap",
-      ];
-
       textureMaps.forEach((mapName) => {
-        if (material[mapName] && material[mapName].isTexture) {
+        if (material[mapName]?.isTexture) {
           optimizeTexture(material[mapName]);
         }
       });
@@ -209,33 +194,36 @@ function optimizeModelTextures(model) {
 
 /**
  * Get a model with simplified caching
- * If the model is already loaded or loading, returns the existing instance
+ * @param {string} modelName - Name of the model to load
+ * @returns {Promise<THREE.Object3D>} Promise resolving to the model
  */
 async function getModel(modelName) {
   // Use fallback if no model name provided
   if (!modelName) return getFallbackCube();
 
   // Return from cache if available
-  if (state.models[modelName]) {
-    return state.models[modelName];
+  if (state.models.has(modelName)) {
+    return state.models.get(modelName);
   }
 
   // Return existing promise if already loading
-  if (state.modelLoadPromises[modelName]) {
-    return state.modelLoadPromises[modelName];
+  if (state.modelLoadPromises.has(modelName)) {
+    return state.modelLoadPromises.get(modelName);
   }
 
   // Start new load process
   const modelUrl = `/models/${modelName}.glb`;
   const loadPromise = new Promise((resolve) => {
     const loader = new GLTFLoader();
+    let isResolved = false;
 
     // Setup loading timeout
     const timeoutId = setTimeout(() => {
-      if (!state.models[modelName]) {
+      if (!isResolved) {
         console.warn(`Model load timeout: ${modelName}`);
         const fallback = getFallbackCube();
-        state.models[modelName] = fallback;
+        state.models.set(modelName, fallback);
+        isResolved = true;
         resolve(fallback);
       }
     }, CONFIG.MODEL_LOAD_TIMEOUT);
@@ -245,32 +233,34 @@ async function getModel(modelName) {
       modelUrl,
       (gltf) => {
         clearTimeout(timeoutId);
+        if (isResolved) return;
+
         const model = gltf.scene;
-
-        // Optimize textures after loading but before setup
         optimizeModelTextures(model);
-
-        state.models[modelName] = model;
         setupModel(model);
-        console.log(`Loaded model: ${modelName} with optimized textures`);
+        state.models.set(modelName, model);
+        isResolved = true;
         resolve(model);
       },
       undefined,
       (error) => {
         clearTimeout(timeoutId);
+        if (isResolved) return;
+
         console.error(`Model failed to load: ${modelName}`, error);
         const fallback = getFallbackCube();
-        state.models[modelName] = fallback;
+        state.models.set(modelName, fallback);
+        isResolved = true;
         resolve(fallback);
       }
     );
   });
 
-  state.modelLoadPromises[modelName] = loadPromise;
+  state.modelLoadPromises.set(modelName, loadPromise);
 
   // Clean up the promise reference once loaded
-  loadPromise.then(() => {
-    delete state.modelLoadPromises[modelName];
+  loadPromise.finally(() => {
+    state.modelLoadPromises.delete(modelName);
   });
 
   return loadPromise;
@@ -278,6 +268,7 @@ async function getModel(modelName) {
 
 /**
  * Setup model transformations
+ * @param {THREE.Object3D} model - The model to set up
  */
 function setupModel(model) {
   if (!model) return;
@@ -294,8 +285,7 @@ function setupModel(model) {
   // Scale to normalized size if needed
   const maxDim = Math.max(size.x, size.y, size.z);
   if (maxDim > 0 && (maxDim < 0.5 || maxDim > 2)) {
-    const scale = 1 / maxDim;
-    model.scale.multiplyScalar(scale);
+    model.scale.multiplyScalar(1 / maxDim);
   }
 
   // Add random rotation for variety
@@ -303,52 +293,8 @@ function setupModel(model) {
 }
 
 /**
- * Dispose model and free resources
- */
-function disposeModel(modelName, scene = null) {
-  if (!state.models[modelName]) return;
-
-  const model = state.models[modelName];
-
-  // Don't dispose the fallback cube
-  if (model === FALLBACK_CUBE) {
-    delete state.models[modelName];
-    return;
-  }
-
-  // Remove from scene if provided
-  if (scene && model.parent === scene) {
-    scene.remove(model);
-  }
-
-  // Dispose geometries and materials
-  model.traverse((child) => {
-    if (child.isMesh) {
-      // Dispose geometry
-      if (child.geometry) {
-        child.geometry.dispose();
-      }
-
-      // Dispose material
-      if (child.material) {
-        if (Array.isArray(child.material)) {
-          child.material.forEach((mat) => {
-            disposeTextures(mat);
-            mat.dispose();
-          });
-        } else {
-          disposeTextures(child.material);
-          child.material.dispose();
-        }
-      }
-    }
-  });
-
-  delete state.models[modelName];
-}
-
-/**
  * Dispose textures from a material
+ * @param {Material} material - Material containing textures to dispose
  */
 function disposeTextures(material) {
   if (!material) return;
@@ -370,97 +316,158 @@ function disposeTextures(material) {
   ];
 
   textureProps.forEach((prop) => {
-    if (material[prop] && material[prop].isTexture) {
+    if (material[prop]?.isTexture) {
+      state.textureCache.delete(material[prop]);
       material[prop].dispose();
     }
   });
 }
 
 /**
+ * Dispose model and free resources
+ * @param {string} modelName - Name of the model to dispose
+ * @param {Scene} scene - Scene containing the model
+ */
+function disposeModel(modelName, scene = null) {
+  if (!state.models.has(modelName)) return;
+
+  const model = state.models.get(modelName);
+
+  // Don't dispose the fallback cube
+  if (model === FALLBACK_CUBE) {
+    state.models.delete(modelName);
+    return;
+  }
+
+  // Remove from scene if provided
+  if (scene && model.parent === scene) {
+    scene.remove(model);
+  }
+
+  // Dispose geometries and materials
+  model.traverse((child) => {
+    if (!child.isMesh) return;
+
+    // Dispose geometry
+    if (child.geometry) {
+      child.geometry.dispose();
+    }
+
+    // Dispose material(s)
+    if (child.material) {
+      if (Array.isArray(child.material)) {
+        child.material.forEach((mat) => {
+          disposeTextures(mat);
+          mat.dispose();
+        });
+      } else {
+        disposeTextures(child.material);
+        child.material.dispose();
+      }
+    }
+  });
+
+  state.models.delete(modelName);
+}
+
+/**
  * Calculate model positions in a grid layout
+ * @param {string[]} modelNames - Model names to position
+ * @param {number} gridSize - Size of grid cells
  */
 function calculateModelPositions(modelNames = [], gridSize = 12) {
   // If no model names provided, use existing models
   if (modelNames.length === 0) {
-    modelNames = Object.keys(state.models);
+    modelNames = Array.from(state.models.keys());
   }
 
-  // Calculate grid dimensions
+  // Calculate grid dimensions with bit shift for performance
   const gridSide = Math.ceil(Math.sqrt(modelNames.length));
+  const halfGrid = (gridSide - 1) / 2;
 
   // Position models in grid
   modelNames.forEach((name, index) => {
     const row = Math.floor(index / gridSide);
     const col = index % gridSide;
 
-    const offsetX = (col - (gridSide - 1) / 2) * gridSize;
-    const offsetZ = (row - (gridSide - 1) / 2) * gridSize;
+    const offsetX = (col - halfGrid) * gridSize;
+    const offsetZ = (row - halfGrid) * gridSize;
 
-    state.modelPositions[name] = new Vector3(offsetX, 0, offsetZ);
+    state.modelPositions.set(name, new Vector3(offsetX, 0, offsetZ));
   });
 
   // Ensure fallback cube is at origin
-  state.modelPositions[CONFIG.FALLBACK_CUBE_NAME] = new Vector3(0, 0, 0);
+  state.modelPositions.set(CONFIG.FALLBACK_CUBE_NAME, new Vector3(0, 0, 0));
 }
 
 /**
  * Get model position by name
+ * @param {string} modelName - Name of the model
+ * @returns {THREE.Vector3} Position vector
  */
 function getModelPosition(modelName) {
-  return state.modelPositions[modelName] || new Vector3(0, 0, 0);
+  return state.modelPositions.get(modelName) || new Vector3(0, 0, 0);
 }
 
 /**
  * Update model position based on stored positions
+ * @param {string} modelName - Name of the model to update
  */
 function updateModelPosition(modelName) {
-  if (modelName && state.models[modelName] && state.modelPositions[modelName]) {
-    const model = state.models[modelName];
-    const position = state.modelPositions[modelName];
-    model.position.set(position.x, position.y, position.z);
+  // Update specific model if provided
+  if (
+    modelName &&
+    state.models.has(modelName) &&
+    state.modelPositions.has(modelName)
+  ) {
+    const model = state.models.get(modelName);
+    const position = state.modelPositions.get(modelName);
+    model.position.copy(position);
     return;
   }
 
   // Update all models' positions
-  Object.entries(state.models).forEach(([name, model]) => {
-    const position = state.modelPositions[name];
+  state.models.forEach((model, name) => {
+    const position = state.modelPositions.get(name);
     if (position) {
-      model.position.set(position.x, position.y, position.z);
+      model.position.copy(position);
     }
   });
 }
 
 /**
  * Update model scale
+ * @param {string} modelName - Name of the model to scale
+ * @param {number} scale - Scale factor
  */
 function updateModelScale(modelName, scale) {
-  const model = state.models[modelName];
+  const model = state.models.get(modelName);
   if (model) {
-    model.scale.set(scale, scale, scale);
+    model.scale.setScalar(scale);
   }
 }
 
 /**
  * Preload a list of models
+ * @param {string[]} modelNames - Array of model names to preload
  */
 function preloadModels(modelNames = []) {
   if (!Array.isArray(modelNames) || modelNames.length === 0) return;
 
   // Load each model in parallel
-  modelNames.forEach((name) => {
-    if (typeof name === "string" && name.trim() !== "") {
-      getModel(name).catch((err) => {
-        console.warn(`Failed to preload model: ${name}`, err);
-      });
-    }
-  });
+  Promise.allSettled(
+    modelNames
+      .filter((name) => typeof name === "string" && name.trim() !== "")
+      .map((name) => getModel(name))
+  ).catch((err) => console.warn("Model preload batch error:", err));
 }
 
 /**
  * Get all currently loaded models
+ * @returns {Object} Object containing all loaded models
  */
 function getLoadedModels() {
-  return { ...state.models };
+  return Object.fromEntries(state.models);
 }
 
 // Export public API

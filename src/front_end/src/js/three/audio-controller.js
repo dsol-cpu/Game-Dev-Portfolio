@@ -64,8 +64,9 @@ class AudioController {
   /**
    * Play background music
    * @param {number} [resumeFromPosition=0] - Position to resume from
+   * @param {boolean} [immediate=false] - Whether to start immediately without fade-in
    */
-  play(resumeFromPosition = 0) {
+  play(resumeFromPosition = 0, immediate = false) {
     // Skip if not ready or already playing
     if (!this.context || !this.musicBuffer || this.playing) return;
 
@@ -78,13 +79,22 @@ class AudioController {
     this.musicSource.loop = true;
     this.musicSource.connect(this.gainNode);
 
-    // Fade in for smooth transition
     const currentVolume = this.audioEnabled ? this.lastVolume : 0;
-    this.gainNode.gain.setValueAtTime(0, this.context.currentTime);
-    this.gainNode.gain.linearRampToValueAtTime(
-      currentVolume,
-      this.context.currentTime + 1
-    );
+
+    if (immediate) {
+      // Set volume immediately without fade
+      this.gainNode.gain.setValueAtTime(
+        currentVolume,
+        this.context.currentTime
+      );
+    } else {
+      // Fade in for smooth transition
+      this.gainNode.gain.setValueAtTime(0, this.context.currentTime);
+      this.gainNode.gain.linearRampToValueAtTime(
+        currentVolume,
+        this.context.currentTime + 1
+      );
+    }
 
     // Start playback from specified position
     this.musicSource.start(0, resumeFromPosition);
@@ -94,53 +104,55 @@ class AudioController {
 
   /**
    * Pause background music
+   * @param {boolean} [immediate=false] - Whether to pause immediately without fade-out
    */
-  pause() {
+  pause(immediate = false) {
     if (!this.musicSource || !this.playing) return;
 
     // Calculate and store current position
     this.pausedAt =
       (this.context.currentTime - this.startTime) % this.musicBuffer.duration;
 
-    // Fade out smoothly
-    this.gainNode.gain.setValueAtTime(
-      this.gainNode.gain.value,
-      this.context.currentTime
-    );
-    this.gainNode.gain.linearRampToValueAtTime(
-      0,
-      this.context.currentTime + 0.5
-    );
-
-    // Stop after fade completes
-    setTimeout(() => {
+    if (immediate) {
+      // Stop immediately without fade
       if (this.musicSource) {
         this.musicSource.stop();
         this.musicSource.disconnect();
         this.musicSource = null;
       }
       this.playing = false;
-    }, 500);
+    } else {
+      // Fade out smoothly
+      this.gainNode.gain.setValueAtTime(
+        this.gainNode.gain.value,
+        this.context.currentTime
+      );
+      this.gainNode.gain.linearRampToValueAtTime(
+        0,
+        this.context.currentTime + 0.5
+      );
+
+      // Stop after fade completes
+      setTimeout(() => {
+        if (this.musicSource) {
+          this.musicSource.stop();
+          this.musicSource.disconnect();
+          this.musicSource = null;
+        }
+        this.playing = false;
+      }, 500);
+    }
   }
 
   /**
    * Stop background music completely
+   * @param {boolean} [immediate=false] - Whether to stop immediately without fade-out
    */
-  stop() {
+  stop(immediate = false) {
     if (!this.musicSource) return;
 
-    // Fade out smoothly
-    this.gainNode.gain.setValueAtTime(
-      this.gainNode.gain.value,
-      this.context.currentTime
-    );
-    this.gainNode.gain.linearRampToValueAtTime(
-      0,
-      this.context.currentTime + 0.5
-    );
-
-    // Stop after fade completes and reset
-    setTimeout(() => {
+    if (immediate) {
+      // Stop immediately without fade
       if (this.musicSource) {
         this.musicSource.stop();
         this.musicSource.disconnect();
@@ -148,14 +160,36 @@ class AudioController {
       }
       this.playing = false;
       this.pausedAt = 0;
-    }, 500);
+    } else {
+      // Fade out smoothly
+      this.gainNode.gain.setValueAtTime(
+        this.gainNode.gain.value,
+        this.context.currentTime
+      );
+      this.gainNode.gain.linearRampToValueAtTime(
+        0,
+        this.context.currentTime + 0.5
+      );
+
+      // Stop after fade completes and reset
+      setTimeout(() => {
+        if (this.musicSource) {
+          this.musicSource.stop();
+          this.musicSource.disconnect();
+          this.musicSource = null;
+        }
+        this.playing = false;
+        this.pausedAt = 0;
+      }, 500);
+    }
   }
 
   /**
    * Toggle background music on/off
+   * @param {boolean} [immediate=false] - Whether to toggle immediately without fades
    * @returns {boolean} New audio enabled state
    */
-  toggleMusic() {
+  toggleMusic(immediate = false) {
     this.audioEnabled = !this.audioEnabled;
 
     // If audio is now enabled
@@ -166,21 +200,40 @@ class AudioController {
         return this.audioEnabled;
       }
 
-      // Restore volume to last known level
-      if (this.gainNode) {
-        this.gainNode.gain.setTargetAtTime(
-          this.lastVolume,
-          this.context.currentTime,
-          0.1
-        );
+      if (immediate) {
+        // Set volume immediately
+        if (this.gainNode) {
+          this.gainNode.gain.setValueAtTime(
+            this.lastVolume,
+            this.context.currentTime
+          );
+        }
+      } else {
+        // Smooth transition
+        if (this.gainNode) {
+          this.gainNode.gain.setTargetAtTime(
+            this.lastVolume,
+            this.context.currentTime,
+            0.1
+          );
+        }
       }
 
       // Play if not already playing
-      if (!this.playing) this.play(this.pausedAt);
+      if (!this.playing) this.play(this.pausedAt, immediate);
     } else {
-      // Mute but keep playing to maintain position
-      if (this.gainNode) {
-        this.gainNode.gain.setTargetAtTime(0, this.context.currentTime, 0.1);
+      if (immediate) {
+        // Mute immediately
+        if (this.gainNode) {
+          this.gainNode.gain.setValueAtTime(0, this.context.currentTime);
+        }
+        // Actually pause the audio to save resources
+        this.pause(true);
+      } else {
+        // Gradual fade out
+        if (this.gainNode) {
+          this.gainNode.gain.setTargetAtTime(0, this.context.currentTime, 0.1);
+        }
       }
     }
 
@@ -190,8 +243,9 @@ class AudioController {
   /**
    * Update audio volume
    * @param {number} volume - Volume level between 0 and 1
+   * @param {boolean} [immediate=false] - Whether to change volume immediately
    */
-  setVolume(volume) {
+  setVolume(volume, immediate = false) {
     if (!this.gainNode) {
       console.warn("Audio system not initialized. Cannot update volume.");
       return;
@@ -206,12 +260,20 @@ class AudioController {
     try {
       // Only apply volume if audio is enabled
       if (this.audioEnabled) {
-        // Smoothly transition volume
-        this.gainNode.gain.setTargetAtTime(
-          clampedVolume,
-          this.context.currentTime,
-          0.1 // smooth transition time (100ms)
-        );
+        if (immediate) {
+          // Change volume immediately
+          this.gainNode.gain.setValueAtTime(
+            clampedVolume,
+            this.context.currentTime
+          );
+        } else {
+          // Smoothly transition volume
+          this.gainNode.gain.setTargetAtTime(
+            clampedVolume,
+            this.context.currentTime,
+            0.1 // smooth transition time (100ms)
+          );
+        }
       }
 
       // Update volume slider UI if it exists
@@ -240,24 +302,32 @@ class AudioController {
 
   /**
    * Restore audio state
+   * @param {boolean} [immediate=true] - Whether to restore immediately without fades
    * Useful when coming back from hidden to visible state
    */
-  restoreAudioState() {
+  restoreAudioState(immediate = true) {
     if (!this.initialized) return;
 
     if (this.audioEnabled) {
       // Resume playing if it should be playing
       if (!this.playing) {
-        this.play(this.pausedAt);
+        this.play(this.pausedAt, immediate);
       }
 
       // Make sure the volume is correct
       if (this.gainNode) {
-        this.gainNode.gain.setTargetAtTime(
-          this.lastVolume,
-          this.context.currentTime,
-          0.1
-        );
+        if (immediate) {
+          this.gainNode.gain.setValueAtTime(
+            this.lastVolume,
+            this.context.currentTime
+          );
+        } else {
+          this.gainNode.gain.setTargetAtTime(
+            this.lastVolume,
+            this.context.currentTime,
+            0.1
+          );
+        }
       }
     }
 
@@ -266,10 +336,29 @@ class AudioController {
   }
 
   /**
+   * Immediately handle visibility change by pausing/resuming audio
+   * @param {boolean} isVisible - Whether the page is visible
+   * @param {boolean} isGameView - Whether game view is currently active
+   */
+  handleVisibilityChange(isVisible, isGameView) {
+    if (!this.initialized) return;
+
+    if (!isVisible) {
+      if (this.playing) {
+        // Immediately pause when hidden
+        this.pause(true);
+      }
+    } else if (isVisible && isGameView && this.audioEnabled) {
+      // Immediately restore when becoming visible in game view
+      this.play(this.pausedAt, true);
+    }
+  }
+
+  /**
    * Dispose of audio resources
    */
   dispose() {
-    // Stop and disconnect audio source
+    // Stop and disconnect audio source immediately
     if (this.musicSource) {
       if (this.playing) this.musicSource.stop();
       this.musicSource.disconnect();
@@ -292,10 +381,10 @@ class AudioController {
 export const audioController = new AudioController();
 
 // Convenience export functions for easier use in other modules
-export function toggleBackgroundMusic() {
-  return audioController.toggleMusic();
+export function toggleBackgroundMusic(immediate = false) {
+  return audioController.toggleMusic(immediate);
 }
 
-export function updateAudioVolume(volume) {
-  audioController.setVolume(volume);
+export function updateAudioVolume(volume, immediate = false) {
+  audioController.setVolume(volume, immediate);
 }

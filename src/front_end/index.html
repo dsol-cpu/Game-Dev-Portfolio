@@ -122,6 +122,38 @@
         });
       });
     </script>
+    <style>
+      /* Custom styles to fix game view container */
+      :root {
+        --sidebar-width: 240px;
+      }
+
+      .game-view-container {
+        position: fixed;
+        top: 0;
+        left: var(--sidebar-width);
+        right: 0;
+        bottom: 0;
+        background-color: var(--bg-color);
+        display: none;
+        z-index: 100;
+        overflow: hidden;
+      }
+
+      body.game-mode .main-content {
+        display: none;
+      }
+
+      body.game-mode .game-view-container {
+        display: block;
+      }
+
+      #main-game-canvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+    </style>
   </head>
 
   <body>
@@ -304,121 +336,101 @@
 
     <div id="game-view-container" class="game-view-container">
       <canvas id="main-game-canvas">
-        <div id="mobile-controls" class="mobile-controls hidden">
-          <!-- Left side - Joystick -->
-          <div id="joystick-container" class="joystick-container">
+        Your browser does not support the HTML5 canvas element.
+      </canvas>
+      <div id="mobile-controls" class="mobile-controls hidden">
+        <!-- Left side - Joystick -->
+        <div id="joystick-container" class="joystick-container">
+          <svg
+            viewBox="0 0 128 128"
+            width="100%"
+            height="100%"
+            style="overflow: visible"
+          >
+            <!-- Base circle -->
+            <circle cx="64" cy="64" r="64" fill="rgba(0, 0, 0, 0.3)"></circle>
+
+            <!-- Joystick knob -->
+            <g
+              id="joystick-knob"
+              transform="translate(64, 64)"
+              style="transition: transform 0.2s ease-out"
+            >
+              <circle
+                cx="0"
+                cy="0"
+                r="32"
+                fill="rgba(255, 255, 255, 0.8)"
+                stroke="#555"
+                stroke-width="1"
+              ></circle>
+            </g>
+          </svg>
+        </div>
+
+        <!-- Right side - Altitude buttons -->
+        <div class="altitude-controls">
+          <!-- UP button -->
+          <button id="altitude-up" class="altitude-button" aria-label="Up">
             <svg
-              viewBox="0 0 128 128"
+              class="icon-up"
+              viewBox="0 0 64 64"
               width="100%"
               height="100%"
-              style="overflow: visible"
             >
-              <!-- Base circle -->
-              <circle cx="64" cy="64" r="64" fill="rgba(0, 0, 0, 0.3)"></circle>
-
-              <!-- Joystick knob -->
-              <g
-                id="joystick-knob"
-                transform="translate(64, 64)"
-                style="transition: transform 0.2s ease-out"
-              >
-                <circle
-                  cx="0"
-                  cy="0"
-                  r="32"
-                  fill="rgba(255, 255, 255, 0.8)"
-                  stroke="#555"
-                  stroke-width="1"
-                ></circle>
-              </g>
+              <!-- Up arrow icon -->
+              <circle
+                cx="32"
+                cy="32"
+                r="30"
+                fill="rgba(0,0,0,0.3)"
+                stroke="#555"
+                stroke-width="1"
+              ></circle>
+              <path
+                d="M20 36 L32 20 L44 36"
+                stroke="#FFFFFF"
+                stroke-width="4"
+                fill="none"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              ></path>
             </svg>
-          </div>
+          </button>
 
-          <!-- Right side - Altitude buttons -->
-          <div class="altitude-controls">
-            <!-- UP button -->
-            <button id="altitude-up" class="altitude-button" aria-label="Up">
-              <svg
-                class="icon-up"
-                viewBox="0 0 64 64"
-                width="100%"
-                height="100%"
-              >
-                <!-- Up arrow icon -->
-                <circle
-                  cx="32"
-                  cy="32"
-                  r="30"
-                  fill="rgba(0,0,0,0.3)"
-                  stroke="#555"
-                  stroke-width="1"
-                ></circle>
-                <path
-                  d="M20 36 L32 20 L44 36"
-                  stroke="#FFFFFF"
-                  stroke-width="4"
-                  fill="none"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                ></path>
-              </svg>
-            </button>
-
-            <!-- DOWN button -->
-            <button
-              id="altitude-down"
-              class="altitude-button"
-              aria-label="Down"
+          <!-- DOWN button -->
+          <button
+            id="altitude-down"
+            class="altitude-button"
+            aria-label="Down"
+          >
+            <svg
+              class="icon-down"
+              viewBox="0 0 64 64"
+              width="100%"
+              height="100%"
             >
-              <svg
-                class="icon-down"
-                viewBox="0 0 64 64"
-                width="100%"
-                height="100%"
-              >
-                <!-- Down arrow icon -->
-                <circle
-                  cx="32"
-                  cy="32"
-                  r="30"
-                  fill="rgba(0,0,0,0.3)"
-                  stroke="#555"
-                  stroke-width="1"
-                ></circle>
-                <path
-                  d="M20 28 L32 44 L44 28"
-                  stroke="#FFFFFF"
-                  stroke-width="4"
-                  fill="none"
-                  stroke-linecap="round"
-                  stroke-linejoin="round"
-                ></path>
-              </svg>
-            </button>
-          </div>
+              <!-- Down arrow icon -->
+              <circle
+                cx="32"
+                cy="32"
+                r="30"
+                fill="rgba(0,0,0,0.3)"
+                stroke="#555"
+                stroke-width="1"
+              ></circle>
+              <path
+                d="M20 28 L32 44 L44 28"
+                stroke="#FFFFFF"
+                stroke-width="4"
+                fill="none"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              ></path>
+            </svg>
+          </button>
         </div>
-      </canvas>
-      <!-- SVG Icons for reference -->
-      <svg class="game-icons" xmlns="http://www.w3.org/2000/svg">
-        <symbol id="icon-wasd" viewBox="0 0 24 24">
-          <path
-            d="M4,2H20A2,2 0 0,1 22,4V20A2,2 0 0,1 20,22H4A2,2 0 0,1 2,20V4A2,2 0 0,1 4,2M11,7H13V17H11V7M15,7H17V17H15V7M7,7H9V17H7V7Z"
-          ></path>
-        </symbol>
-        <symbol id="icon-space" viewBox="0 0 24 24">
-          <path
-            d="M18,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V4A2,2 0 0,0 18,2M18,20H6V4H18V20Z"
-          ></path>
-        </symbol>
-        <symbol id="icon-shift" viewBox="0 0 24 24">
-          <path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z"></path>
-        </symbol>
-        <symbol id="icon-controller" viewBox="0 0 24 24">
-          <path
-            d="M7.97,16L5,19C4.67,19.3 4.23,19.5 3.75,19.5A2.25,2.25 0 0,1 1.5,17.25C1.5,16.77 1.7,16.33 2,16L5,13H7.97L7.97,16M16.03,13H19L22,16C22.3,16.33 22.5,16.77 22.5,17.25A2.25,2.25 0 0,1 20.25,19.5C19.77,19.5 19.33,19.3 19,19L16.03,16V13M12,7A5,5 0 0,1 17,12H7A5,5 0 0,1 12,7M12,3A9,9 0 0,1 21,12A9,9 0 0,1 12,21A9,9 0 0,1 3,12A9,9 0 0,1 12,3Z"
-          ></path>
-        </symbol>
-      </svg>
+      </div>
 
       <!-- Game Controls Info Box -->
       <div class="game-controls-info">
@@ -464,7 +476,104 @@
         </div>
       </div>
     </div>
+    <!-- SVG Icons for reference -->
+    <svg class="game-icons" xmlns="http://www.w3.org/2000/svg">
+      <symbol id="icon-wasd" viewBox="0 0 24 24">
+        <path
+          d="M4,2H20A2,2 0 0,1 22,4V20A2,2 0 0,1 20,22H4A2,2 0 0,1 2,20V4A2,2 0 0,1 4,2M11,7H13V17H11V7M15,7H17V17H15V7M7,7H9V17H7V7Z"
+        ></path>
+      </symbol>
+      <symbol id="icon-space" viewBox="0 0 24 24">
+        <path
+          d="M18,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V4A2,2 0 0,0 18,2M18,20H6V4H18V20Z"
+        ></path>
+      </symbol>
+      <symbol id="icon-shift" viewBox="0 0 24 24">
+        <path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z"></path>
+      </symbol>
+      <symbol id="icon-controller" viewBox="0 0 24 24">
+        <path
+          d="M7.97,16L5,19C4.67,19.3 4.23,19.5 3.75,19.5A2.25,2.25 0 0,1 1.5,17.25C1.5,16.77 1.7,16.33 2,16L5,13H7.97L7.97,16M16.03,13H19L22,16C22.3,16.33 22.5,16.77 22.5,17.25A2.25,2.25 0 0,1 20.25,19.5C19.77,19.5 19.33,19.3 19,19L16.03,16V13M12,7A5,5 0 0,1 17,12H7A5,5 0 0,1 12,7M12,3A9,9 0 0,1 21,12A9,9 0 0,1 12,21A9,9 0 0,1 3,12A9,9 0 0,1 12,3Z"
+        ></path>
+      </symbol>
+    </svg>
     <script type="module" src="/src/js/svg-sprite-manager.js"></script>
     <script type="module" src="/src/js/main.js"></script>
+    <script>
+      // Fix for game view toggle functionality
+      document.addEventListener('DOMContentLoaded', function() {
+        // Get the view toggle button
+        const viewToggleBtn = document.getElementById('view-toggle-btn');
+
+        // Handle view toggle click
+        viewToggleBtn.addEventListener('click', function() {
+          // Toggle the game-mode class on the body
+          document.body.classList.toggle('game-mode');
+
+          // Update button text based on current mode
+          const isGameMode = document.body.classList.contains('game-mode');
+          const viewLabel = viewToggleBtn.querySelector('.view-label');
+
+          if (isGameMode) {
+            viewLabel.textContent = 'Website View';
+            // Initialize game canvas
+            initGameCanvas();
+          } else {
+            viewLabel.textContent = 'Game View';
+          }
+        });
+
+        // Function to initialize the game canvas
+        function initGameCanvas() {
+          const canvas = document.getElementById('main-game-canvas');
+
+          // Make sure canvas dimensions match its display size
+          canvas.width = canvas.clientWidth;
+          canvas.height = canvas.clientHeight;
+
+          // Get canvas context and draw something to show it's working
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw a sky gradient
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, '#87CEEB');
+            gradient.addColorStop(1, '#4682B4');
+
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw some simple clouds
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+
+            // Cloud 1
+            ctx.beginPath();
+            ctx.arc(100, 100, 30, 0, Math.PI * 2);
+            ctx.arc(130, 90, 25, 0, Math.PI * 2);
+            ctx.arc(160, 100, 35, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Cloud 2
+            ctx.beginPath();
+            ctx.arc(400, 150, 40, 0, Math.PI * 2);
+            ctx.arc(450, 140, 30, 0, Math.PI * 2);
+            ctx.arc(480, 150, 35, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+
+        // Handle window resize to keep canvas sized correctly
+        window.addEventListener('resize', function() {
+          if (document.body.classList.contains('game-mode')) {
+            const canvas = document.getElementById('main-game-canvas');
+            canvas.width = canvas.clientWidth;
+            canvas.height = canvas.clientHeight;
+            initGameCanvas();
+          }
+        });
+      });
+    </script>
   </body>
 </html>

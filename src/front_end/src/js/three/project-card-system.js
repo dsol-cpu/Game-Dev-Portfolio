@@ -1,10 +1,8 @@
 /**
  * @fileoverview Unified project card system with 3D model integration
- * Combines project card creation/management with optimized ThreeJS rendering
  */
 
 import { C } from "../constants/constants.js";
-import { projectCardData } from "../data/project";
 import {
   PerspectiveCamera,
   Raycaster,
@@ -15,6 +13,98 @@ import { handleUserInteraction } from "../user-interaction.js";
 import { isLowPoweredDevice } from "../utils/device";
 import { calculateModelPositions, getModel } from "./model-manager.js";
 import { getScene, registerCamera } from "./threejs-manager.js";
+import { debounce } from "../utils/helper.js";
+// Enums
+export const PortfolioCategory = Object.freeze({
+  GODOT: "godot",
+  UNREAL: "unreal",
+  UNITY: "unity",
+  WEB: "web",
+  MOBILE: "mobile",
+  GAME: "game",
+});
+
+export const TechTags = Object.freeze({
+  UNITY: "Unity",
+  CSHARP: "C#",
+  CPP: "C++",
+  PROCEDURAL: "Procedural Generation",
+  REACT: "React",
+  D3: "D3.js",
+  API: "API",
+});
+
+// Portfolio data - format compatible with new project card implementation
+export const PROJECT_CARD_DATA = [
+  {
+    id: "geospatial-visualizer",
+    category: PortfolioCategory.UNITY,
+    title: "Geospatial Visualizer",
+    tags: [TechTags.UNITY, TechTags.CSHARP],
+    shortDescription: "A visualization of geospatial information.",
+    demoUrl: "https://dsol-cpu.github.io/GeospatialDataVisualization-Aug2024/",
+    githubUrl:
+      "https://github.com/dsol-cpu/GeospatialDataVisualization-Aug2024",
+    modelName: "globe",
+    imageUrl: "/images/me.png",
+    imageAlt: "Geospatial Visualizer",
+    fullDescription: [
+      "A detailed visualization of geospatial information using Unity and C#.",
+      "This project demonstrates advanced features for visualizing complex map data.",
+    ],
+  },
+  {
+    id: "geospatial-visualizer-2",
+    category: PortfolioCategory.GODOT,
+    title: "Geospatial Visualizer",
+    tags: [TechTags.GODOT, TechTags.CPP],
+    shortDescription: "A visualization of geospatial information.",
+    demoUrl: "https://dsol-cpu.github.io/GeospatialDataVisualization-Aug2024/",
+    githubUrl:
+      "https://github.com/dsol-cpu/GeospatialDataVisualization-Aug2024",
+    modelName: "",
+    imageUrl: "/images/me.png",
+    imageAlt: "Geospatial Visualizer",
+    fullDescription: [
+      "A detailed visualization of geospatial information using Unity and C#.",
+      "This project demonstrates advanced features for visualizing complex map data.",
+    ],
+  },
+  {
+    id: "geospatial-visualizer-3",
+    category: PortfolioCategory.UNITY,
+    title: "Geospatial Visualizer",
+    tags: [TechTags.UNITY, TechTags.CSHARP],
+    shortDescription: "A visualization of geospatial information.",
+    demoUrl: "https://dsol-cpu.github.io/GeospatialDataVisualization-Aug2024/",
+    githubUrl:
+      "https://github.com/dsol-cpu/GeospatialDataVisualization-Aug2024",
+    modelName: "",
+    imageUrl: "/images/me.png",
+    imageAlt: "Geospatial Visualizer",
+    fullDescription: [
+      "A detailed visualization of geospatial information using Unity and C#.",
+      "This project demonstrates advanced features for visualizing complex map data.",
+    ],
+  },
+  {
+    id: "geospatial-visualizer-4",
+    category: PortfolioCategory.UNITY,
+    title: "Geospatial Visualizer",
+    tags: [TechTags.UNITY, TechTags.CSHARP],
+    shortDescription: "A visualization of geospatial information.",
+    demoUrl: "https://dsol-cpu.github.io/GeospatialDataVisualization-Aug2024/",
+    githubUrl:
+      "https://github.com/dsol-cpu/GeospatialDataVisualization-Aug2024",
+    modelName: "babyTurtle",
+    imageUrl: "/images/me.png",
+    imageAlt: "Geospatial Visualizer",
+    fullDescription: [
+      "A detailed visualization of geospatial information using Unity and C#.",
+      "This project demonstrates advanced features for visualizing complex map data.",
+    ],
+  },
+];
 
 // DOM cache and scene references
 const domCache = {
@@ -150,12 +240,20 @@ function createProjectCard(project) {
     interactionHint.textContent = "Drag to rotate";
 
     // Show/hide hint on hover
-    viewWindow.addEventListener("mouseenter", () => {
-      interactionHint.style.opacity = "0.7";
-    });
-    viewWindow.addEventListener("mouseleave", () => {
-      interactionHint.style.opacity = "0";
-    });
+    viewWindow.addEventListener(
+      "mouseenter",
+      () => {
+        interactionHint.style.opacity = "0.7";
+      },
+      { passive: true }
+    );
+    viewWindow.addEventListener(
+      "mouseleave",
+      () => {
+        interactionHint.style.opacity = "0";
+      },
+      { passive: true }
+    );
 
     viewWindow.appendChild(interactionHint);
     imageContainer.appendChild(viewWindow);
@@ -310,7 +408,7 @@ export function initProjectCards() {
   const grid = getPortfolioGrid();
   if (!grid) return;
 
-  renderProjectsGrid(projectCardData);
+  renderProjectsGrid(PROJECT_CARD_DATA);
   getBackdrop(); // Initialize backdrop
 }
 
@@ -419,7 +517,7 @@ function setupMainCamera(canvas) {
     45,
     canvas.width / canvas.height,
     0.1,
-    10
+    16
   );
 
   projectCamera.position.set(0, 0, 10); // Changed Y to 0 (was 5)
@@ -465,7 +563,8 @@ async function loadProjectModel(modelName) {
     }
 
     model.visible = true;
-    model.scale.set(0.5, 0.5, 0.5);
+
+    // Scale will be set in positionModelForItem based on container size
     model.userData.name = modelName;
     model.updateMatrix();
     model.matrixAutoUpdate = false;
@@ -476,7 +575,6 @@ async function loadProjectModel(modelName) {
     return null;
   }
 }
-
 function cacheViewWindowPositions() {
   const windows = document.querySelectorAll(".model-view-window");
   const canvas = domCache.mainCanvas;
@@ -504,6 +602,8 @@ function cacheViewWindowPositions() {
       y: -(centerY * 2 - 1), // Convert to ThreeJS Y coordinate system
       width: windowRect.width / canvasRect.width,
       height: windowRect.height / canvasRect.height,
+      pixelWidth: windowRect.width,
+      pixelHeight: windowRect.height,
     });
   });
 }
@@ -523,9 +623,30 @@ function positionModelForItem(model, modelName) {
     return;
   }
 
-  // Calculate suitable z-distance based on model size
+  // Calculate suitable z-distance based on model size and container dimensions
   const modelSize = getModelSize(model);
-  const zDistance = Math.max(6, modelSize * 5);
+
+  // Calculate scaling factor based on container size
+  // Scale models to fit nicely within their containers
+  const containerScale = Math.min(viewPos.width, viewPos.height) * 10;
+
+  // FIXED: Set scale to fit the model properly in view window at maximum zoom out
+  // This ensures the default view is the fully zoomed out view
+  const scaleFactor = (containerScale / modelSize) * 0.15; // More aggressive reduction
+
+  // Apply minimum scale as the default to ensure models are fully visible
+  // This makes the default view equivalent to maximum zoom out
+  const finalScale = Math.min(0.15, scaleFactor);
+
+  model.scale.set(finalScale, finalScale, finalScale);
+
+  // Save initial scale for reference
+  if (!model.userData.initialScale) {
+    model.userData.initialScale = finalScale;
+    model.userData.currentScale = model.scale.clone();
+  }
+
+  const zDistance = Math.max(6, modelSize * 3); // Increased to ensure models are fully visible
 
   // Convert to world coordinates
   const vector = new Vector3(viewPos.x, viewPos.y, 0.5);
@@ -534,15 +655,11 @@ function positionModelForItem(model, modelName) {
   vector.multiplyScalar(zDistance);
   vector.add(projectCamera.position);
 
-  // Position the model - FIXED: Don't use lookAt which causes slant
+  // Position the model
   model.position.copy(vector);
 
-  // FIXED: Reset rotation to default orientation instead of looking at camera
-  // This ensures models maintain consistent orientation in orthographic view
+  // Reset rotation to default orientation
   model.rotation.set(0, 0, 0);
-
-  // For animated models, we can set a slightly different default rotation
-  // that looks good in the front-facing orthographic camera
   model.rotation.y = Math.PI; // This rotates to face forward
 
   // Save original position for animations
@@ -587,17 +704,8 @@ function setupInteractions() {
     rotationSpeed: { x: 0, y: 0 },
   };
 
-  // Handle window resize
-  window.addEventListener("resize", () => {
-    if (canvas && projectCamera) {
-      canvas.width = canvas.clientWidth;
-      canvas.height = canvas.clientHeight;
-      projectCamera.aspect = canvas.width / canvas.height;
-      projectCamera.updateProjectionMatrix();
-      cacheViewWindowPositions();
-      updateModelPositions();
-    }
-  });
+  // Setup proper resize handler
+  setupWindowResizeHandler();
 
   // Setup drag interaction for model rotation
   setupDragInteraction(canvas, interactionState);
@@ -607,6 +715,9 @@ function setupInteractions() {
 
   // Setup scroll interaction for model scaling
   setupScrollInteraction();
+
+  // Setup resize observer for responsive updates
+  setupResizeObserver();
 
   // Add reset view button
   const resetButton = createElement("button", "reset-view-btn", {
@@ -626,8 +737,28 @@ function setupInteractions() {
     cursor: "pointer",
   });
 
+  resetButton.addEventListener("click", resetView);
+
   const portfolioSection = canvas.parentElement;
   if (portfolioSection) portfolioSection.appendChild(resetButton);
+}
+
+function setupWindowResizeHandler() {
+  // Handle window resize
+  window.addEventListener(
+    "resize",
+    debounce(() => {
+      const canvas = domCache.mainCanvas;
+      if (canvas && projectCamera) {
+        canvas.width = canvas.clientWidth;
+        canvas.height = canvas.clientHeight;
+        projectCamera.aspect = canvas.width / canvas.height;
+        projectCamera.updateProjectionMatrix();
+        cacheViewWindowPositions();
+        updateModelPositions();
+      }
+    }, 100)
+  );
 }
 
 /**
@@ -752,15 +883,22 @@ function setupScrollInteraction() {
       const delta = Math.sign(event.deltaY) * -0.05;
       const scaleFactor = 1 + delta;
 
-      // Get current scale
+      // Initialize current scale if not set
       if (!model.userData.currentScale) {
         model.userData.currentScale = model.scale.clone();
+        model.userData.initialScale = model.scale.x;
       }
 
-      // Apply scaling with limits
+      // Apply scaling with container-relative limits
+      const viewPos = viewWindowPositions.get(modelName);
+      if (!viewPos) return;
+
+      // Calculate size-appropriate min/max scales
+      const containerSize = Math.min(viewPos.width, viewPos.height);
+      const minScale = model.userData.initialScale * 0.5;
+      const maxScale = model.userData.initialScale * 3;
+
       const newScale = model.userData.currentScale.x * scaleFactor;
-      const minScale = 0.3;
-      const maxScale = 1.5;
 
       if (newScale >= minScale && newScale <= maxScale) {
         model.userData.currentScale.set(newScale, newScale, newScale);
@@ -900,24 +1038,51 @@ function applyRotationInertia(model, speed) {
 function setupResizeObserver() {
   if (!window.ResizeObserver) return;
 
-  const observer = new ResizeObserver(() => {
-    cacheViewWindowPositions();
-    updateModelPositions();
-  });
+  const observer = new ResizeObserver(
+    debounce(() => {
+      const canvas = domCache.mainCanvas;
+      if (canvas && projectCamera) {
+        // Update canvas dimensions
+        canvas.width = canvas.clientWidth;
+        canvas.height = canvas.clientHeight;
 
-  // Observe each item and the grid
+        // Update camera aspect ratio
+        projectCamera.aspect = canvas.width / canvas.height;
+        projectCamera.updateProjectionMatrix();
+
+        // Update positions and scale
+        cacheViewWindowPositions();
+        updateModelPositions();
+      }
+    }, 100)
+  );
+
+  // Observe each item, the grid, and the portfolio section
   document
     .querySelectorAll(".portfolio-item")
     .forEach((item) => observer.observe(item));
 
   const grid = getPortfolioGrid();
   if (grid) observer.observe(grid);
-}
 
+  const portfolioSection = getPortfolioSection();
+  if (portfolioSection) observer.observe(portfolioSection);
+}
 function updateModelPositions() {
-  projectModels.forEach((model, modelName) =>
-    positionModelForItem(model, modelName)
-  );
+  projectModels.forEach((model, modelName) => {
+    const viewPos = viewWindowPositions.get(modelName);
+    if (!viewPos) return;
+
+    // Update position
+    positionModelForItem(model, modelName);
+
+    // Re-apply custom scale if user had adjusted it
+    if (model.userData.currentScale && model.userData.initialScale) {
+      const ratio = model.userData.currentScale.x / model.userData.initialScale;
+      const newScale = model.scale.x * ratio;
+      model.scale.set(newScale, newScale, newScale);
+    }
+  });
 }
 
 /**
@@ -1082,10 +1247,10 @@ function resetView() {
 
 function animateTransition({ start, target, lookAt, onComplete }) {
   const duration = 1000; // ms
-  const startTime = Date.now();
+  const startTime = performance.now();
 
   function animate() {
-    const elapsed = Date.now() - startTime;
+    const elapsed = performance.now() - startTime;
     const progress = Math.min(elapsed / duration, 1);
 
     // Ease function

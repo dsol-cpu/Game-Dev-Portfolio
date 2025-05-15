@@ -3,7 +3,6 @@
  * Handles bootstrapping and coordination between modules.
  */
 import { initBlogPosts } from "./blog.js";
-import { initGridOverlay } from "./grid-overlay.js";
 import { initNavigation } from "./navigation.js";
 import { initPortfolioFilters } from "./portfolio-filters.js";
 

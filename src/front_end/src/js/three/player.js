@@ -1,10 +1,3 @@
-/**
- * @fileoverview High-Performance Airship Player Controller
- * Heavily optimized for maximum performance with object pooling, minimal allocations
- * and efficient computation patterns
- * Includes height constraints for controlling vertical movement boundaries
- */
-
 import {
   Euler,
   Quaternion,
@@ -14,7 +7,7 @@ import {
 } from "../extern/three/three.module.min.js";
 import { getModel } from "./model-manager.js";
 
-// Pre-allocated reusable objects - eliminates GC pressure
+// Reuse objects for all vector/quaternion operations
 const _v3 = new Vector3();
 const _quat = new Quaternion();
 const _euler = new Euler();
@@ -22,85 +15,122 @@ const _axisY = new Vector3(0, 1, 0);
 const _movementDir = new Vector3(0, 0, -1);
 const _camOffset = new Vector3(0, 0, 0);
 
-// Direction lookup - faster than calculating each time
-const DIRECTIONS = ["S", "SW", "W", "NW", "N", "NE", "E", "SE", "S"];
+// Fast bitwise key state tracking
+const KEY = {
+  FORWARD: 1,
+  BACKWARD: 2,
+  LEFT: 4,
+  RIGHT: 8,
+  UP: 16,
+  DOWN: 32,
+};
+
+// DOM element cache
+const keyElements = {};
+
+// Pack constants into TypedArrays for CPU cache optimization
+const CONSTANTS = new Float32Array([
+  12.0, // 0: MAX_SPEED
+  1.2, // 1: ACCELERATION
+  0.5, // 2: DECELERATION
+  3.0, // 3: TURN_RATE
+  9.0, // 4: VERTICAL_MAX
+  0.5, // 5: VERTICAL_ACCEL
+  0.5, // 6: VERTICAL_DECEL
+  Math.PI / 30, // 7: TILT_AMOUNT
+  3.0, // 8: TILT_SPEED
+  6.0, // 9: RESET_SPEED
+  -50, // 10: MIN_HEIGHT
+  50, // 11: MAX_HEIGHT
+  5, // 12: CAMERA_DISTANCE
+  2, // 13: CAMERA_HEIGHT
+  3, // 14: CAMERA_LOOK_AHEAD
+  (Math.PI / 30) * 1.2, // 15: PITCH_AMOUNT
+]);
+
+// Pre-computed pitch arrays for fast lookup
+const PITCH = {
+  FORWARD: new Float32Array([
+    CONSTANTS[15] * 0.3,
+    -CONSTANTS[15],
+    CONSTANTS[15],
+  ]),
+  BACKWARD: new Float32Array([
+    -CONSTANTS[15] * 0.3,
+    CONSTANTS[15],
+    -CONSTANTS[15],
+  ]),
+  IDLE: new Float32Array([0, CONSTANTS[15] * 0.5, -CONSTANTS[15] * 0.5]),
+};
+
+// Fast key map using integers instead of strings
+const CONTROL_KEY_MAP = new Map();
+["ArrowUp", "KeyW"].forEach((k) => CONTROL_KEY_MAP.set(k, KEY.FORWARD));
+["ArrowDown", "KeyS"].forEach((k) => CONTROL_KEY_MAP.set(k, KEY.BACKWARD));
+["ArrowLeft", "KeyA"].forEach((k) => CONTROL_KEY_MAP.set(k, KEY.LEFT));
+["ArrowRight", "KeyD"].forEach((k) => CONTROL_KEY_MAP.set(k, KEY.RIGHT));
+["Space"].forEach((k) => CONTROL_KEY_MAP.set(k, KEY.UP));
+["ShiftLeft", "ShiftRight"].forEach((k) => CONTROL_KEY_MAP.set(k, KEY.DOWN));
+
+const pendingKeyUpdates = new Map();
+let keyUpdateScheduled = false;
+
+function scheduleKeyUpdates() {
+  if (keyUpdateScheduled) return;
+  keyUpdateScheduled = true;
+
+  requestAnimationFrame(() => {
+    pendingKeyUpdates.forEach((active, key) => {
+      const el = keyElements[key];
+      if (el) {
+        if (active) {
+          el.classList.add("active");
+        } else {
+          el.classList.remove("active");
+        }
+      }
+    });
+    pendingKeyUpdates.clear();
+    keyUpdateScheduled = false;
+  });
+}
+
+// Material cache - prevent repeated material creation
+const MATERIALS = {};
+MATERIALS.BODY = new MeshPhongMaterial({
+  color: 0x3366cc,
+  shininess: 100,
+  specular: 0x111111,
+});
+MATERIALS.COCKPIT = new MeshPhongMaterial({
+  color: 0x66ccff,
+  shininess: 120,
+  opacity: 0.7,
+  transparent: true,
+});
+MATERIALS.WINGS = new MeshPhongMaterial({ color: 0x2255aa });
+MATERIALS.ENGINE = new MeshPhongMaterial({ color: 0x555555 });
+MATERIALS.GLOW = new MeshPhongMaterial({
+  color: 0xff7700,
+  emissive: 0xff5500,
+  transparent: true,
+  opacity: 0.8,
+});
+
+// Pre-calculated direction lookup (single array)
+const DIRECTIONS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
 const DIRECTION_LOOKUP = new Array(360);
 for (let i = 0; i < 360; i++) {
   DIRECTION_LOOKUP[i] = DIRECTIONS[Math.floor(((i + 22.5) % 360) / 45)];
 }
 
-// bitwise key state tracking (much faster than object property lookup)
-const KEY = {
-  FORWARD: 1 << 0, // W, ArrowUp
-  BACKWARD: 1 << 1, // S, ArrowDown
-  LEFT: 1 << 2, // A, ArrowLeft
-  RIGHT: 1 << 3, // D, ArrowRight
-  UP: 1 << 4, // Space
-  DOWN: 1 << 5, // Shift
-};
+// Cache Math functions for speed
+const abs = Math.abs;
+const min = Math.min;
+const max = Math.max;
+const floor = Math.floor;
 
-// Create DOM key element lookup table (cached for fast updates)
-const keyElements = {};
-
-// Constants - defined as numbers for performance
-const MAX_SPEED = 12.0;
-const ACCELERATION = 1.2;
-const DECELERATION = 0.5;
-const TURN_RATE = 3.0;
-const VERTICAL_MAX = 9.0;
-const VERTICAL_ACCEL = 0.5;
-const VERTICAL_DECEL = 0.5;
-const TILT_AMOUNT = Math.PI / 30;
-const TILT_SPEED = 3.0;
-const RESET_SPEED = 6.0;
-
-// Height constraints for the airship
-const MIN_HEIGHT = -50; // Minimum flying height (ground level + 1)
-const MAX_HEIGHT = 50; // Maximum flying height ceiling
-
-const CAMERA_DISTANCE = 5;
-const CAMERA_HEIGHT = 2;
-const CAMERA_LOOK_AHEAD = 3;
-
-// Control key mapping
-const CONTROL_KEY_MAP = {
-  ArrowUp: KEY.FORWARD,
-  KeyW: KEY.FORWARD,
-  ArrowDown: KEY.BACKWARD,
-  KeyS: KEY.BACKWARD,
-  ArrowLeft: KEY.LEFT,
-  KeyA: KEY.LEFT,
-  ArrowRight: KEY.RIGHT,
-  KeyD: KEY.RIGHT,
-  Space: KEY.UP,
-  ShiftLeft: KEY.DOWN,
-  ShiftRight: KEY.DOWN,
-};
-
-// Materials - created once and reused
-const MATERIALS = {
-  BODY: new MeshPhongMaterial({
-    color: 0x3366cc,
-    shininess: 100,
-    specular: 0x111111,
-  }),
-  COCKPIT: new MeshPhongMaterial({
-    color: 0x66ccff,
-    shininess: 120,
-    opacity: 0.7,
-    transparent: true,
-  }),
-  WINGS: new MeshPhongMaterial({ color: 0x2255aa }),
-  ENGINE: new MeshPhongMaterial({ color: 0x555555 }),
-  GLOW: new MeshPhongMaterial({
-    color: 0xff7700,
-    emissive: 0xff5500,
-    transparent: true,
-    opacity: 0.8,
-  }),
-};
-
-// Player state - centralized for quick access
+// Player state structure optimized for memory layout
 const player = {
   model: null,
   velocity: 0,
@@ -113,25 +143,25 @@ const player = {
   resetInProgress: false,
   currentPitch: 0,
   targetPitch: 0,
-  heightClamped: false, // Track if we're at height boundaries
+  heightClamped: false,
 };
 
-/**
- * Creates and initializes the player ship model
- * @return {Promise<Group>} The player ship model
- */
+// Fast direction lookup using pre-calculated array
+export function getDirection(rotation) {
+  // ~~ is faster than Math.floor for integers
+  const degrees = ~~(((((rotation * 180) / Math.PI) % 360) + 360) % 360);
+  return DIRECTION_LOOKUP[degrees];
+}
+
 export async function createPlayerModel() {
   if (player.model) return player.model;
 
   const ship = new Group();
   const shipModel = await getModel("portfolioShip");
 
-  // Optimize by setting quaternion directly rather than applying transforms
   shipModel.quaternion.identity();
   ship.add(shipModel);
-
-  // Initialize at minimum height
-  ship.position.set(0, MIN_HEIGHT, 0);
+  ship.position.set(0, CONSTANTS[10], 0); // MIN_HEIGHT
 
   player.orientation = new Quaternion();
   ship.quaternion.copy(player.orientation);
@@ -140,14 +170,10 @@ export async function createPlayerModel() {
   return ship;
 }
 
-/**
- * Sets up event listeners for player controls
- */
 export function initPlayerControls() {
-  window.addEventListener("keydown", handleKeyDown, false);
-  window.addEventListener("keyup", handleKeyUp, false);
+  window.addEventListener("keydown", handleKeyDown, { passive: false });
+  window.addEventListener("keyup", handleKeyUp, { passive: false });
 
-  // Cache DOM elements for faster updates
   document.querySelectorAll(".key[data-key]").forEach((el) => {
     keyElements[el.dataset.key] = el;
   });
@@ -158,202 +184,144 @@ export function initPlayerControls() {
     canvas.addEventListener("click", () => canvas.focus());
   }
 }
-
-/**
- * Handle keydown events optimized for performance
- * @param {KeyboardEvent} e - The keyboard event
- */
 function handleKeyDown(e) {
-  const keyBit = CONTROL_KEY_MAP[e.code];
+  const keyBit = CONTROL_KEY_MAP.get(e.code);
   if (keyBit !== undefined) {
     e.preventDefault();
     e.stopPropagation();
-
-    // Bitwise OR to set the key state bit
     player.keyState |= keyBit;
-
-    // Update UI if element exists (avoiding querySelector during gameplay)
-    const el = keyElements[e.code];
-    if (el) el.classList.add("active");
+    pendingKeyUpdates.set(e.code, true);
+    scheduleKeyUpdates();
   }
 }
 
-/**
- * Handle keyup events optimized for performance
- * @param {KeyboardEvent} e - The keyboard event
- */
 function handleKeyUp(e) {
-  const keyBit = CONTROL_KEY_MAP[e.code];
+  const keyBit = CONTROL_KEY_MAP.get(e.code);
   if (keyBit !== undefined) {
     e.preventDefault();
     e.stopPropagation();
-
-    // Bitwise AND with inverted bit to clear the key state
     player.keyState &= ~keyBit;
-
-    // Update UI if element exists
-    const el = keyElements[e.code];
-    if (el) el.classList.remove("active");
+    pendingKeyUpdates.set(e.code, false);
+    scheduleKeyUpdates();
   }
 }
 
-/**
- * Fast direction lookup from rotation angle
- * @param {number} rotation - Rotation in radians
- * @return {string} Cardinal direction
- */
-export function getDirection(rotation) {
-  // Convert to degrees and normalize to 0-359
-  const degrees = ((((rotation * 180) / Math.PI) % 360) + 360) % 360;
-
-  // Define direction sectors properly
-  if (degrees >= 337.5 || degrees < 22.5) return "N";
-  if (degrees >= 22.5 && degrees < 67.5) return "NE";
-  if (degrees >= 67.5 && degrees < 112.5) return "E";
-  if (degrees >= 112.5 && degrees < 157.5) return "SE";
-  if (degrees >= 157.5 && degrees < 202.5) return "S";
-  if (degrees >= 202.5 && degrees < 247.5) return "SW";
-  if (degrees >= 247.5 && degrees < 292.5) return "W";
-  if (degrees >= 292.5 && degrees < 337.5) return "NW";
-
-  return "N"; // Fallback
-}
-
-/**
- * Main player update function - runs every frame
- * @param {number} deltaTime - Time elapsed since last frame in seconds
- */
 export function updatePlayer(deltaTime) {
   const ship = player.model;
   if (!ship) return;
 
-  // Clamp deltaTime to prevent physics issues during lag spikes
-  const clampedDelta = Math.min(deltaTime, 0.1);
+  // Clamp deltaTime to prevent physics issues
+  const dt = min(deltaTime, 0.1);
 
   if (player.resetInProgress) {
-    updateOrientationReset(clampedDelta);
+    updateOrientationReset(dt);
   } else {
-    // Execute core update logic
-    updateMovement(clampedDelta);
-    updateTurning(clampedDelta);
-    updateTilt(clampedDelta);
-    applyTransforms(ship);
+    // Use local frame batch processing for CPU cache efficiency
+    const batch = updateMovementBatch(dt);
+    updateTurningAndTilt(dt, batch);
+    applyTransforms(ship, batch);
   }
 
-  // Update position cache
   player.position.copy(ship.position);
 }
 
-/**
- * Update player movement based on input
- * @param {number} deltaTime - Time since last frame in seconds
- */
-function updateMovement(deltaTime) {
+// Batch movement calculations to reduce function calls
+function updateMovementBatch(dt) {
   const keyState = player.keyState;
   const shipY = player.model.position.y;
-  player.heightClamped = false;
 
-  // Forward/backward movement - use bit masking for fast checks
-  const maxSpeed = MAX_SPEED * deltaTime;
-  const accel = ACCELERATION * deltaTime;
-  const decel = DECELERATION * deltaTime;
+  // Create local result batch for better CPU cache locality
+  const batch = {
+    forward: 0,
+    vertical: 0,
+    heightClamped: false,
+    tiltDir: 0,
+    turnRate: 0,
+  };
 
+  // Movement constants
+  const maxSpeed = CONSTANTS[0] * dt; // MAX_SPEED
+  const accel = CONSTANTS[1] * dt; // ACCELERATION
+  const decel = CONSTANTS[2] * dt; // DECELERATION
+  const vertMax = CONSTANTS[4] * dt; // VERTICAL_MAX
+  const vertAccel = CONSTANTS[5] * dt; // VERTICAL_ACCEL
+  const vertDecel = CONSTANTS[6] * dt; // VERTICAL_DECEL
+  const minHeight = CONSTANTS[10]; // MIN_HEIGHT
+  const maxHeight = CONSTANTS[11]; // MAX_HEIGHT
+
+  // Forward/backward - faster bitwise check
   if (keyState & KEY.FORWARD) {
-    player.velocity = Math.min(maxSpeed, player.velocity + accel);
+    player.velocity = min(maxSpeed, player.velocity + accel);
   } else if (keyState & KEY.BACKWARD) {
-    player.velocity = Math.max(-maxSpeed, player.velocity - accel);
+    player.velocity = max(-maxSpeed, player.velocity - accel);
   } else {
-    // Decelerate with sign check (faster than abs)
-    if (player.velocity > 0) {
-      player.velocity = Math.max(0, player.velocity - decel);
-    } else if (player.velocity < 0) {
-      player.velocity = Math.min(0, player.velocity + decel);
-    }
+    // Fast deceleration with sign check
+    player.velocity =
+      player.velocity > 0
+        ? max(0, player.velocity - decel)
+        : min(0, player.velocity + decel);
   }
 
-  // Vertical movement with height constraints
-  const vertMaxSpeed = VERTICAL_MAX * deltaTime;
-  const vertAccel = VERTICAL_ACCEL * deltaTime;
-  const vertDecel = VERTICAL_DECEL * deltaTime;
+  // Height limit checks
+  const atMaxHeight = shipY >= maxHeight;
+  const atMinHeight = shipY <= minHeight;
 
-  // Check if we're at height limits
-  const atMaxHeight = shipY >= MAX_HEIGHT;
-  const atMinHeight = shipY <= MIN_HEIGHT;
-
-  // Handle vertical movement input based on height constraints
+  // Vertical movement - using direct bit checks
   if (keyState & KEY.UP && !atMaxHeight) {
-    player.verticalVelocity = Math.min(
-      vertMaxSpeed,
-      player.verticalVelocity + vertAccel
-    );
+    player.verticalVelocity = min(vertMax, player.verticalVelocity + vertAccel);
   } else if (keyState & KEY.DOWN && !atMinHeight) {
-    player.verticalVelocity = Math.max(
-      -vertMaxSpeed,
+    player.verticalVelocity = max(
+      -vertMax,
       player.verticalVelocity - vertAccel
     );
   } else {
-    // Apply vertical deceleration
-    if (player.verticalVelocity > 0) {
-      player.verticalVelocity = Math.max(
-        0,
-        player.verticalVelocity - vertDecel
-      );
-    } else if (player.verticalVelocity < 0) {
-      player.verticalVelocity = Math.min(
-        0,
-        player.verticalVelocity + vertDecel
-      );
-    }
+    // Vertical deceleration
+    player.verticalVelocity =
+      player.verticalVelocity > 0
+        ? max(0, player.verticalVelocity - vertDecel)
+        : min(0, player.verticalVelocity + vertDecel);
   }
 
-  // Enforce height limits on velocity
+  // Height limit enforcement
   if (
     (atMaxHeight && player.verticalVelocity > 0) ||
     (atMinHeight && player.verticalVelocity < 0)
   ) {
     player.verticalVelocity = 0;
-    player.heightClamped = true;
+    batch.heightClamped = true;
   }
+
+  player.heightClamped = batch.heightClamped;
+  batch.forward = player.velocity;
+  batch.vertical = player.verticalVelocity;
+
+  return batch;
 }
 
-/**
- * Update player turning based on input
- * @param {number} deltaTime - Time since last frame in seconds
- */
-function updateTurning(deltaTime) {
+// Combine turning and tilt for fewer function calls and better locality
+function updateTurningAndTilt(dt, batch) {
   const keyState = player.keyState;
-  const turnRate = TURN_RATE * deltaTime;
+  const turnConst = CONSTANTS[3] * dt; // TURN_RATE
+  const tiltSpeed = CONSTANTS[8] * dt; // TILT_SPEED
 
+  // Turning calculation
   if (keyState & KEY.LEFT) {
-    player.turnRate = turnRate;
+    player.turnRate = turnConst;
   } else if (keyState & KEY.RIGHT) {
-    player.turnRate = -turnRate;
+    player.turnRate = -turnConst;
   } else {
     player.turnRate = 0;
   }
 
   if (player.turnRate !== 0) {
-    // Rotate around Y axis using our pre-allocated objects
     _quat.setFromAxisAngle(_axisY, player.turnRate);
     player.orientation.premultiply(_quat);
 
-    // Fast direction calculation
     _euler.setFromQuaternion(player.orientation, "YXZ");
     player.direction = getDirection(_euler.y);
   }
-}
 
-const PITCH_AMOUNT = TILT_AMOUNT * 1.2;
-const PITCH_FORWARD = [PITCH_AMOUNT * 0.3, -PITCH_AMOUNT, PITCH_AMOUNT];
-const PITCH_BACKWARD = [-PITCH_AMOUNT * 0.3, PITCH_AMOUNT, -PITCH_AMOUNT];
-const PITCH_IDLE = [0, PITCH_AMOUNT * 0.5, -PITCH_AMOUNT * 0.5];
-
-/**
- * Calculate and update tilt based on movement
- * @param {number} deltaTime - Time since last frame in seconds
- */
-function updateTilt(deltaTime) {
-  const keyState = player.keyState;
+  // Tilt calculation packed into the same function
   const velocity = player.velocity;
   const clamped = player.heightClamped;
 
@@ -362,73 +330,73 @@ function updateTilt(deltaTime) {
   const goingUp = keyState & KEY.UP && !clamped;
   const goingDown = keyState & KEY.DOWN && !clamped;
 
-  const directionIndex = goingDown ? 1 : goingUp ? 2 : 0;
+  // Fast index calculation
+  const dirIndex = goingDown ? 1 : goingUp ? 2 : 0;
 
-  let targetPitch = movingForward
-    ? PITCH_FORWARD[directionIndex]
-    : movingBackward
-    ? PITCH_BACKWARD[directionIndex]
-    : PITCH_IDLE[directionIndex];
+  // Lookup target pitch from pre-computed arrays
+  let targetPitch;
+  if (movingForward) {
+    targetPitch = PITCH.FORWARD[dirIndex];
+  } else if (movingBackward) {
+    targetPitch = PITCH.BACKWARD[dirIndex];
+  } else {
+    targetPitch = PITCH.IDLE[dirIndex];
+  }
 
   player.targetPitch = targetPitch;
 
-  const tiltLerpFactor = Math.min(1, TILT_SPEED * deltaTime);
+  // Fast lerp with clamping
+  const tiltLerpFactor = min(1, tiltSpeed);
   player.currentPitch += (targetPitch - player.currentPitch) * tiltLerpFactor;
+
+  batch.turnRate = player.turnRate;
 }
-/**
- * Apply calculated transformations to the ship model
- * @param {Group} ship - The ship model
- */
-function applyTransforms(ship) {
-  // Apply forward movement (reuse vector)
-  if (player.velocity !== 0) {
+
+function applyTransforms(ship, batch) {
+  // Apply forward movement using pre-allocated vector
+  if (batch.forward !== 0) {
     _movementDir
       .set(0, 0, -1)
       .applyQuaternion(player.orientation)
       .normalize()
-      .multiplyScalar(player.velocity);
+      .multiplyScalar(batch.forward);
 
     ship.position.add(_movementDir);
   }
 
-  // Apply vertical movement
-  if (player.verticalVelocity !== 0) {
-    ship.position.y += player.verticalVelocity;
+  // Apply vertical movement only if non-zero
+  if (batch.vertical !== 0) {
+    ship.position.y += batch.vertical;
   }
 
-  // Enforce height limits - fast min/max clamping
-  ship.position.y = Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, ship.position.y));
+  // Fast min/max clamping
+  ship.position.y = max(CONSTANTS[10], min(CONSTANTS[11], ship.position.y));
 
-  // Apply orientation efficiently
+  // Efficient orientation application
   _euler.setFromQuaternion(player.orientation, "YXZ");
   ship.quaternion.setFromEuler(
     _euler.set(player.currentPitch, _euler.y, 0, "YXZ")
   );
 }
 
-/**
- * Smooth orientation reset animation
- * @param {number} deltaTime - Time since last frame in seconds
- */
-function updateOrientationReset(deltaTime) {
+function updateOrientationReset(dt) {
   const ship = player.model;
-  const resetSpeed = RESET_SPEED * deltaTime;
+  const resetSpeed = CONSTANTS[9] * dt; // RESET_SPEED
 
-  // Get level orientation (only Y rotation)
   _euler.setFromQuaternion(player.orientation, "YXZ");
   _quat.setFromEuler(_euler.set(0, _euler.y, 0, "YXZ"));
 
-  // Smoothly interpolate to level orientation
+  // Fast orientation interpolation
   player.orientation.slerp(_quat, resetSpeed);
   ship.quaternion.setFromEuler(
     _euler.set(player.currentPitch, _euler.y, 0, "YXZ")
   );
 
-  // Reset pitch gradually
+  // Efficient pitch damping
   player.currentPitch *= 1 - resetSpeed;
 
-  // Check if reset is complete (single comparison)
-  if (Math.abs(player.currentPitch) < 0.01) {
+  // Fast completion check with cached Math.abs
+  if (abs(player.currentPitch) < 0.01) {
     player.resetInProgress = false;
     player.currentPitch = 0;
     ship.quaternion.setFromEuler(_euler.set(0, _euler.y, 0, "YXZ"));
@@ -436,61 +404,41 @@ function updateOrientationReset(deltaTime) {
   }
 }
 
-/**
- * Reset ship orientation to level
- */
 export function resetOrientation() {
   if (!player.model) return;
   player.resetInProgress = true;
   player.turnRate = 0;
 }
 
-/**
- * Update camera position relative to player
- * @param {Camera} camera - Three.js camera
- */
 export function updateCamera(camera) {
   const ship = player.model;
   if (!ship || !camera) return;
 
-  // Get ship forward direction using pre-allocated vector
+  // Single vector reuse for better performance
   _movementDir.set(0, 0, -1).applyQuaternion(player.orientation).normalize();
 
-  // Position camera behind ship (reuse vectors)
-  _camOffset.copy(_movementDir).multiplyScalar(-CAMERA_DISTANCE);
+  // Camera positioning with minimal allocations
+  _camOffset.copy(_movementDir).multiplyScalar(-CONSTANTS[12]); // CAMERA_DISTANCE
   camera.position
     .copy(ship.position)
     .add(_camOffset)
-    .add(_v3.set(0, CAMERA_HEIGHT, 0));
+    .add(_v3.set(0, CONSTANTS[13], 0)); // CAMERA_HEIGHT
 
-  // Look ahead of ship
-  _v3.copy(ship.position).add(_movementDir.multiplyScalar(CAMERA_LOOK_AHEAD));
+  _v3.copy(ship.position).add(
+    _movementDir.multiplyScalar(CONSTANTS[14]) // CAMERA_LOOK_AHEAD
+  );
   camera.lookAt(_v3);
 }
 
-/**
- * Get the current height of the airship
- * @return {number} Current height above ground
- */
 export function getCurrentHeight() {
-  return player.model ? player.model.position.y : MIN_HEIGHT;
+  return player.model ? player.model.position.y : CONSTANTS[10]; // MIN_HEIGHT
 }
 
-/**
- * Get the height limits of the airship
- * @return {Object} Object containing min and max height values
- */
 export function getHeightLimits() {
-  return {
-    min: MIN_HEIGHT,
-    max: MAX_HEIGHT,
-  };
+  return { min: CONSTANTS[10], max: CONSTANTS[11] };
 }
 
-/**
- * Clean up event listeners
- */
 export function disposePlayerControls() {
-  window.removeEventListener("keydown", handleKeyDown, false);
-  window.removeEventListener("keyup", handleKeyUp, false);
+  window.removeEventListener("keydown", handleKeyDown);
+  window.removeEventListener("keyup", handleKeyUp);
 }

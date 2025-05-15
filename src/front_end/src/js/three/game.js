@@ -18,6 +18,7 @@ import {
   updatePlayer,
 } from "./player.js";
 import { getScene, registerCamera } from "./threejs-manager.js";
+import { runFixedUpdates } from "./time-manager.js";
 
 const COLORS = {
   clouds: 0xffffff,
@@ -83,11 +84,28 @@ function initIslandBobbing(islands) {
   );
 }
 
+const sinCache = new Float32Array(628); // Cache for 0 to 2π with 0.01 precision
+function initSinCache() {
+  for (let i = 0; i < 628; i++) {
+    sinCache[i] = Math.sin(i * 0.01);
+  }
+}
+
+// Get sin value from cache with linear interpolation for smooth results
+function fastSin(x) {
+  const wrappedX = ((x % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+  const index = wrappedX * 100;
+  const lowIndex = Math.floor(index) % 628;
+  const highIndex = (lowIndex + 1) % 628;
+  const fraction = index - Math.floor(index);
+  return sinCache[lowIndex] * (1 - fraction) + sinCache[highIndex] * fraction;
+}
+
 export function updateIslandBobbing(deltaTime) {
   gameState.totalTime += deltaTime;
 
-  // Offload calculations to worker for large island counts
-  if (islands.length > 5 && gameWorker && !workerBusy) {
+  // Always use worker when available
+  if (gameWorker && !workerBusy) {
     workerBusy = true;
     gameWorker.postMessage({
       type: "calculateIslandAnimations",
@@ -103,7 +121,7 @@ export function updateIslandBobbing(deltaTime) {
     return;
   }
 
-  // Calculate island bobbing in main thread for small island counts
+  // Fallback to main thread calculation
   const smoothingFactor = 0.05 * Math.min(1, deltaTime * 60);
 
   for (let i = 0; i < islands.length; i++) {
@@ -113,7 +131,7 @@ export function updateIslandBobbing(deltaTime) {
 
     const newY =
       data.initialY +
-      Math.sin(gameState.totalTime * data.frequency + data.offset) *
+      fastSin(gameState.totalTime * data.frequency + data.offset) *
         data.amplitude;
 
     island.position.y += (newY - island.position.y) * smoothingFactor;
@@ -199,6 +217,7 @@ export async function initGameScene() {
   gameScene.add(playerEntity);
 
   // Initialize systems
+  initSinCache();
   initIslandBobbing(islands);
   initPlayerControls();
 
@@ -224,7 +243,11 @@ export function updateGameLoop(deltaTime) {
   // Update player if exists
   if (playerEntity) {
     playerEntity.visible = true;
-    updatePlayer(deltaTime);
+
+    runFixedUpdates((fixedDt) => {
+      updatePlayer(fixedDt);
+      updateIslandBobbing(fixedDt);
+    });
 
     // Get current player state for UI update
     const playerState = {
@@ -352,7 +375,7 @@ document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "hidden") {
     // Just pause when hidden if playing, but don't change enabled state
     if (audioController.playing && isGameView()) {
-      audioController.pause();
+      audioController.pause(true);
     }
   } else if (document.visibilityState === "visible") {
     // Restore audio state when becoming visible
@@ -438,7 +461,7 @@ document.addEventListener("visibilitychange", () => {
 
   if (document.visibilityState === "hidden") {
     if (audioController.playing && isGameView()) {
-      audioController.pause();
+      audioController.pause(true);
     }
   } else if (document.visibilityState === "visible") {
     if (isGameView() && gameState.audioEnabled && !audioController.playing) {
