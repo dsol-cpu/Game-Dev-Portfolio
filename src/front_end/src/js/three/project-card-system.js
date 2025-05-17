@@ -251,25 +251,66 @@ function createButtons(project, buttonType, projectId) {
   } else if (buttonType === "action") {
     // Create action buttons for expanded view
     if (project.demoUrl) {
-      fragment.appendChild(
-        createElement("a", "btn btn-primary", {
-          href: project.demoUrl,
-          target: "_blank",
-          rel: "noopener noreferrer",
-          textContent: "Live Demo",
-        })
-      );
+      // Create Live Demo button with proper styling
+      const demoButton = createElement("a", "btn btn-primary", {
+        href: project.demoUrl,
+        target: "_blank",
+        rel: "noopener noreferrer",
+      });
+
+      // Add play icon and text to demo button
+      demoButton.innerHTML = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="5 3 19 12 5 21 5 3"></polygon>
+        </svg>
+        <span>Live Demo</span>
+      `;
+      fragment.appendChild(demoButton);
     }
 
     if (project.githubUrl) {
-      fragment.appendChild(
-        createElement("a", "btn btn-secondary", {
-          href: project.githubUrl,
-          target: "_blank",
-          rel: "noopener noreferrer",
-          textContent: "Source Code",
-        })
-      );
+      // Create source code button
+      const sourceButton = createElement("a", "btn btn-secondary", {
+        href: project.githubUrl,
+        target: "_blank",
+        rel: "noopener noreferrer",
+      });
+
+      // Determine which icon to use based on URL
+      let iconSvg;
+      if (project.githubUrl.includes("github.com")) {
+        // GitHub icon
+        iconSvg = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
+          </svg>
+        `;
+      } else if (project.githubUrl.includes("gitlab.com")) {
+        // GitLab icon
+        iconSvg = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M22.65 14.39L12 22.13 1.35 14.39a.84.84 0 0 1-.3-.94l1.22-3.78 2.44-7.51A.42.42 0 0 1 4.82 2a.43.43 0 0 1 .58 0 .42.42 0 0 1 .11.18l2.44 7.49h8.1l2.44-7.51A.42.42 0 0 1 18.6 2a.43.43 0 0 1 .58 0 .42.42 0 0 1 .11.18l2.44 7.51L23 13.45a.84.84 0 0 1-.35.94z"></path>
+          </svg>
+        `;
+      } else if (project.githubUrl.includes("itch.io")) {
+        // Itch.io icon
+        iconSvg = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 5v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2zm12 10l-4-4-4 4V5h8v10z"></path>
+          </svg>
+        `;
+      } else {
+        // Generic code icon for other repositories
+        iconSvg = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="16 18 22 12 16 6"></polyline>
+            <polyline points="8 6 2 12 8 18"></polyline>
+          </svg>
+        `;
+      }
+
+      sourceButton.innerHTML = `${iconSvg}<span>Source Code</span>`;
+      fragment.appendChild(sourceButton);
     }
 
     // Add close button for mobile
@@ -282,25 +323,17 @@ function createButtons(project, buttonType, projectId) {
 
   return fragment;
 }
-
+const grid = getElement(".project-card-grid", "portfolioGrid");
 /**
  * Initialize project cards and 3D scene
  */
 export function initProjectCards() {
-  const grid = getElement(".project-card-grid", "portfolioGrid");
-  if (!grid) return;
-
   renderProjectsGrid(PROJECT_CARD_DATA);
   getBackdrop(); // Initialize backdrop
 }
 
 function renderProjectsGrid(projects) {
   if (!Array.isArray(projects)) return;
-
-  const grid = getElement(".project-card-grid", "portfolioGrid");
-  if (!grid) return;
-
-  grid.innerHTML = "";
 
   const fragment = document.createDocumentFragment();
   projects.forEach((project) => {
