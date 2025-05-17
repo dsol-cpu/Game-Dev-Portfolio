@@ -11,6 +11,12 @@
   --portfolio-card-border: rgba(116, 179, 255, 0.7);
 }
 
+.project-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 2rem;
+}
+
 .game-preview {
   width: 360px;
   height: 240px;
@@ -30,19 +36,21 @@
 }
 
 /* Expanded state */
-.game-preview.portfolio-item.expanded {
+.game-preview.project-card.expanded {
   width: 500px;
   height: auto;
   max-height: 80vh;
   cursor: default;
-  z-index: 100;
+  z-index: 10; /* Increased z-index */
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
   transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1),
     transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
+  background-color: transparent; /* Make the card background transparent */
+  overflow: visible; /* Allow canvas to be visible */
 }
 
-.game-preview.portfolio-item.expanded.expand-left {
+.game-preview.project-card.expanded.expand-left {
   position: relative;
   z-index: 100;
   transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1),
@@ -59,21 +67,18 @@
   user-select: none;
 }
 
-/* ThreeJS canvas styling */
+/* ThreeJS canvas styling - now the main focus */
 .threejs-canvas {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  z-index: 2;
+  z-index: 2; /* Raised to be above the base card */
   transition: width 0.3s ease-out, height 0.3s ease-out;
   user-select: none;
   will-change: width, height, transform;
-}
-
-.game-preview:hover:not(.expanded) .threejs-canvas {
-  transform: scale(1.08);
+  pointer-events: auto; /* Allow canvas interactions */
 }
 
 /* Fallback image styling */
@@ -97,10 +102,6 @@
   user-select: none;
 }
 
-.game-preview:hover:not(.expanded) .game-image {
-  transform: scale(1.08);
-}
-
 /* Overlay styles */
 .game-overlay {
   position: absolute;
@@ -108,13 +109,6 @@
   left: 0;
   right: 0;
   padding: 20px;
-  background: linear-gradient(
-    to top,
-    rgba(0, 0, 0, 0.85) 0%,
-    rgba(0, 0, 0, 0.7) 40%,
-    rgba(0, 0, 0, 0.4) 70%,
-    rgba(0, 0, 0, 0) 100%
-  );
   color: white;
   opacity: 0;
   transition: opacity 0.35s ease;
@@ -213,13 +207,18 @@
   transform: translateY(0);
 }
 
-/* Expanded content styles */
+/* Expanded content styles - now with transparency */
 .expanded-content {
   height: 0;
   overflow: hidden;
   transition: height 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-  background: white;
+  background: rgba(255, 255, 255, 0.85); /* Semi-transparent background */
+  backdrop-filter: blur(5px); /* Adds a blur effect to the background */
+  -webkit-backdrop-filter: blur(5px);
   user-select: none;
+  position: relative;
+  z-index: 5; /* Above the canvas */
+  border-radius: 0 0 16px 16px; /* Rounded corners only at the bottom */
 }
 
 .game-preview.expanded .expanded-content {
@@ -234,6 +233,8 @@
   transform: translateY(20px);
   transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1) 0.2s;
   user-select: none;
+  position: relative;
+  z-index: 5; /* Above the canvas */
 }
 
 .game-preview.expanded .expanded-content-inner {
@@ -281,6 +282,8 @@
   gap: 12px;
   margin-top: 24px;
   user-select: none;
+  position: relative;
+  z-index: 6; /* Ensure buttons are clickable */
 }
 
 .btn-full-details {
@@ -314,7 +317,7 @@
   backdrop-filter: blur(2px);
   -webkit-backdrop-filter: blur(2px);
   transition: all 0.2s ease;
-  z-index: 5;
+  z-index: 20; /* Increased z-index to be above everything */
   opacity: 0;
   visibility: hidden;
   user-select: none;
@@ -355,15 +358,89 @@
   transition: opacity 0.3s ease;
   user-select: none;
   pointer-events: none;
+  z-index: 8; /* Below expanded card but above other elements */
 }
 
 .backdrop.active {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
+}
+
+/* Fixed: Canvas positioned at z-index 9, between backdrop and card content */
+.threejs-canvas {
+  z-index: 9; /* Higher than backdrop (8) but lower than card content (10+) */
+}
+
+/* Make canvas visible through backdrop */
+.backdrop.active ~ .game-preview.expanded .threejs-canvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 9; /* Position between backdrop and expanded card */
+  pointer-events: auto; /* Allow interaction with the canvas */
+}
+
+/* Canvas container for expanded mode */
+.canvas-container {
+  position: absolute;
+  height: 240px;
+  width: 100%;
   z-index: 1;
 }
 
-.game-preview.expanded .threejs-canvas {
-  height: 240px;
+/* Ensure the expanded card with backdrop active has transparent body */
+.backdrop.active ~ .game-preview.expanded {
+  background-color: transparent;
+  z-index: 10; /* Above canvas but below close button */
+}
+
+/* Make expanded content background more transparent to see canvas */
+.backdrop.active ~ .game-preview.expanded .expanded-content {
+  background: rgba(255, 255, 255, 0.7); /* More transparent */
+  z-index: 10; /* Above canvas */
+}
+
+/* Ensure the expanded-content-inner stays above canvas */
+.backdrop.active ~ .game-preview.expanded .expanded-content-inner {
+  z-index: 10; /* Above canvas */
+}
+
+.model-view-window {
+  overscroll-behavior: none; /* Modern browsers */
+  touch-action: none; /* Disable browser handling of all panning and zooming gestures */
+  position: relative;
+  width: 100%;
+  height: 180px;
+  background-color: transparent;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  z-index: 5; /* Above canvas in non-expanded state */
+}
+
+/* Container for model content */
+.model-view-scroll-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  z-index: 5; /* Above canvas in non-expanded state */
+}
+
+.model-interaction-hint {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  background-color: rgba(0, 0, 0, 0.5);
+  color: white;
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  opacity: 0.7;
+  transition: opacity 0.3s;
+  pointer-events: none;
+  z-index: 11; /* Ensure it's visible above canvas */
 }

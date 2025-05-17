@@ -3,14 +3,15 @@
  * Adds a responsive overlay layer that fills spaces between cards while keeping card spaces transparent
  */
 
+import { TWO_PI } from "./constants/constants.js";
 import { debounce } from "./utils/helper.js";
 
 // Configuration
 const CONFIG = {
   overlayClass: "grid-overlay",
-  cardSelector: ".portfolio-item",
+  cardSelector: ".project-card",
   canvasSelector: ".portfolio-canvas",
-  gridSelector: ".portfolio-grid",
+  gridSelector: ".project-card-grid",
   sectionSelector: ".portfolio-section, #portfolio, .portfolio",
   debounceTime: 150,
   patterns: [
@@ -187,7 +188,7 @@ function drawRadialPattern(ctx, size) {
   for (let x = 0; x < size; x += 10) {
     for (let y = 0; y < size; y += 10) {
       ctx.beginPath();
-      ctx.arc(x, y, 1, 0, Math.PI * 2);
+      ctx.arc(x, y, 1, 0, TWO_PI);
       ctx.fill();
     }
   }

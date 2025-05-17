@@ -26,3 +26,7 @@ node_modules/
 
 # Vite Cache
 .vite-cache
+
+# SonarQube Server and CLI
+sonar-project.properties
+.scannerwork/*

@@ -140,7 +140,7 @@ class SvgSpriteManager {
 
   processSvgData(svgData) {
     // Use regex for faster file name extraction once
-    const fileNameRegex = /([^\/]+)\.svg$/;
+    const fileNameRegex = /([^\\/]{1,255})\.svg$/;
     const themeRegex = /-(light|dark)$/;
 
     // Pre-calculate keys outside loop
@@ -149,11 +149,11 @@ class SvgSpriteManager {
     // Batch SVG processing
     for (const [path, content] of Object.entries(svgData)) {
       try {
-        const fileNameMatch = path.match(fileNameRegex);
+        const fileNameMatch = RegExp(fileNameRegex).exec(path);
         if (!fileNameMatch) continue;
 
         const fileName = fileNameMatch[1];
-        const themeMatch = fileName.match(themeRegex);
+        const themeMatch = RegExp(themeRegex).exec(fileName);
 
         const base = themeMatch ? fileName.replace(themeRegex, "") : fileName;
         const isLight = themeMatch && themeMatch[1] === "light";

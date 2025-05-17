@@ -19,7 +19,7 @@ import {
 } from "./player.js";
 import { getScene, registerCamera } from "./threejs-manager.js";
 import { runFixedUpdates } from "./time-manager.js";
-
+import { random } from "../utils/random.js";
 const COLORS = {
   clouds: 0xffffff,
   islandSide: 0x8b4513,
@@ -27,6 +27,7 @@ const COLORS = {
   shipBody: 0x3366cc,
   shipAccent: 0x66ccff,
 };
+import { TWO_PI } from "../constants/constants.js";
 
 export const ISLAND_DATA = [
   { name: "Home Island", position: new Vector3(0, 0, 1000), section: "home" },
@@ -77,26 +78,27 @@ function initIslandBobbing(islands) {
   islands.forEach(() =>
     islandAnimationData.push({
       initialY: islands[islandAnimationData.length].position.y,
-      amplitude: 0.2 + Math.random() * 0.15,
-      frequency: 0.5 + Math.random() * 0.3,
-      offset: Math.random() * Math.PI * 2,
+      amplitude: 0.2 + random() * 0.15,
+      frequency: 0.5 + random() * 0.3,
+      offset: random() * TWO_PI,
     })
   );
 }
 
-const sinCache = new Float32Array(628); // Cache for 0 to 2π with 0.01 precision
+const ANGLE_COUNT = 628;
+const sinCache = new Float32Array(ANGLE_COUNT); // Cache for 0 to 2π with 0.01 precision
 function initSinCache() {
-  for (let i = 0; i < 628; i++) {
+  for (let i = 0; i < ANGLE_COUNT; i++) {
     sinCache[i] = Math.sin(i * 0.01);
   }
 }
 
 // Get sin value from cache with linear interpolation for smooth results
 function fastSin(x) {
-  const wrappedX = ((x % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+  const wrappedX = ((x % TWO_PI) + TWO_PI) % TWO_PI;
   const index = wrappedX * 100;
-  const lowIndex = Math.floor(index) % 628;
-  const highIndex = (lowIndex + 1) % 628;
+  const lowIndex = Math.floor(index) % ANGLE_COUNT;
+  const highIndex = (lowIndex + 1) % ANGLE_COUNT;
   const fraction = index - Math.floor(index);
   return sinCache[lowIndex] * (1 - fraction) + sinCache[highIndex] * fraction;
 }
@@ -167,8 +169,8 @@ export async function initGameScene() {
   for (let i = 0; i < ISLAND_DATA.length; i++) {
     const { position, section, name } = ISLAND_DATA[i];
     const islandGroup = new Group();
-    const baseSize = 2 + Math.random() * 0.5;
-    const topSize = 2 + Math.random() * 0.5;
+    const baseSize = 2 + random() * 0.5;
+    const topSize = 2 + random() * 0.5;
 
     // Create base and top meshes
     const base = new Mesh(islandBaseGeometry.clone(), islandBaseMaterial);
@@ -192,12 +194,12 @@ export async function initGameScene() {
   // Create clouds - batch process
   for (let i = 0; i < 8; i++) {
     const cloud = new Mesh(cloudGeometry.clone(), cloudMaterial);
-    const scale = 0.8 + Math.random() * 1.5;
+    const scale = 0.8 + random() * 1.5;
 
     cloud.position.set(
-      Math.random() * -0.5,
-      5 + Math.random() * 8,
-      (Math.random() * 1000 - 0.5) * 40
+      random() * -0.5,
+      5 + random() * 8,
+      (random() * 1000 - 0.5) * 40
     );
     cloud.scale.set(scale, scale * 0.6, scale);
     gameScene.add(cloud);
@@ -499,7 +501,6 @@ export async function initGame() {
     return;
   }
 
-  // Add CSS for transitions - do once
   const style = document.createElement("style");
   style.textContent = `
     #game-view-container {

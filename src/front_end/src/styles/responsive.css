@@ -2,7 +2,7 @@
 
 /* Large devices (desktops, less than 1200px) */
 @media (max-width: 1200px) {
-  .portfolio-grid {
+  .project-card-grid {
     grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
   }
 }
@@ -55,7 +55,7 @@
     justify-content: center;
   }
 
-  .portfolio-grid {
+  .project-card-grid {
     grid-template-columns: 1fr;
     justify-items: center;
   }

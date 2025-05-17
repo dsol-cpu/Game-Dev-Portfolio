@@ -15,6 +15,8 @@ import {
 } from "../extern/three/three.module.min.js";
 
 import { GLTFLoader } from "../extern/three/GLTFLoader.js";
+import { TWO_PI } from "../constants/constants.js";
+import { random } from "../utils/random.js";
 
 // Configuration constants - using frozen objects to prevent modification
 const CONFIG = Object.freeze({
@@ -110,16 +112,19 @@ function optimizeTexture(texture) {
   if (!texture || !CONFIG.TEXTURE_OPTIMIZATION.ENABLED) return texture;
 
   // Check if we've already processed this texture
-  if (state.textureCache.has(texture)) return texture;
+  if (state.textureCache.has(texture)) return state.textureCache.get(texture);
 
   const image = texture.image;
-  if (!image || !image.width || !image.height) return texture;
+  if (!image?.width || !image?.height) return texture;
 
   // Calculate optimal dimensions
   const originalWidth = image.width;
   const originalHeight = image.height;
   const optimalWidth = getOptimalTextureSize(originalWidth);
   const optimalHeight = getOptimalTextureSize(originalHeight);
+
+  // Create a new texture if resizing is needed
+  let optimizedTexture = texture;
 
   // Only resize if needed
   if (optimalWidth < originalWidth || optimalHeight < originalHeight) {
@@ -133,22 +138,30 @@ function optimizeTexture(texture) {
     ctx.imageSmoothingQuality = "high";
     ctx.drawImage(image, 0, 0, optimalWidth, optimalHeight);
 
-    texture.image = canvas;
-    texture.needsUpdate = true;
+    // Create a new texture with the same properties but using our canvas
+    optimizedTexture = texture.clone();
+    optimizedTexture.image = canvas;
+    optimizedTexture.needsUpdate = true;
+
+    // Preserve important properties from original texture
+    optimizedTexture.repeat.copy(texture.repeat);
+    optimizedTexture.offset.copy(texture.offset);
+    optimizedTexture.center.copy(texture.center);
+    optimizedTexture.rotation = texture.rotation;
   }
 
   // Apply filtering based on configuration (use constants directly)
   const useNearestFilter = CONFIG.TEXTURE_OPTIMIZATION.FILTER === "NEAREST";
-  texture.generateMipmaps = CONFIG.TEXTURE_OPTIMIZATION.MIPMAP;
-  texture.minFilter = useNearestFilter ? NearestFilter : LinearFilter;
-  texture.magFilter = useNearestFilter ? NearestFilter : LinearFilter;
-  texture.anisotropy = CONFIG.TEXTURE_OPTIMIZATION.ANISOTROPY;
-  texture.wrapS = texture.wrapT = RepeatWrapping;
+  optimizedTexture.generateMipmaps = CONFIG.TEXTURE_OPTIMIZATION.MIPMAP;
+  optimizedTexture.minFilter = useNearestFilter ? NearestFilter : LinearFilter;
+  optimizedTexture.magFilter = useNearestFilter ? NearestFilter : LinearFilter;
+  optimizedTexture.anisotropy = CONFIG.TEXTURE_OPTIMIZATION.ANISOTROPY;
+  optimizedTexture.wrapS = optimizedTexture.wrapT = RepeatWrapping;
 
-  // Mark as processed
-  state.textureCache.set(texture, true);
+  // Store in cache
+  state.textureCache.set(texture, optimizedTexture);
 
-  return texture;
+  return optimizedTexture;
 }
 
 /**
@@ -289,7 +302,7 @@ function setupModel(model) {
   }
 
   // Add random rotation for variety
-  model.rotation.y = Math.random() * Math.PI * 2;
+  model.rotation.y = random() * TWO_PI;
 }
 
 /**

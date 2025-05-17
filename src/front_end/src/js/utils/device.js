@@ -95,7 +95,7 @@ function getQuickPerformanceEstimate() {
         canvas.getContext("webgl") ||
         canvas.getContext("experimental-webgl")
       );
-    } catch (e) {
+    } catch {
       webGLSupported = false;
     }
 
@@ -108,7 +108,7 @@ function getQuickPerformanceEstimate() {
     if (score >= 70) return PERFORMANCE_LEVELS.HIGH;
     if (score >= 40) return PERFORMANCE_LEVELS.MEDIUM;
     return PERFORMANCE_LEVELS.LOW;
-  } catch (e) {
+  } catch {
     return PERFORMANCE_LEVELS.MEDIUM; // Fallback to medium on error
   }
 }
@@ -149,7 +149,7 @@ function checkWebGLSupport() {
         // GPU tier detection with more comprehensive database
         gpuTier = detectGPUTier(renderer);
       }
-    } catch (e) {
+    } catch {
       console.warn("WebGL renderer info unavailable");
     }
 
@@ -239,7 +239,7 @@ function detectGPUTier(renderer) {
 
   // Tier 3: Mid-range dedicated GPUs and high-end integrated
   if (
-    /nvidia gtx\s*[1-9][0-9]{2,}|radeon\s*(rx\s*5|vega)|iris xe|mali-g7|adreno\s*[6-7]/i.test(
+    /nvidia gtx\s*[1-9]\d{2,}|radeon\s*(rx\s*5|vega)|iris xe|mali-g7|adreno\s*[6-7]/i.test(
       r
     ) ||
     /apple\s*m1/i.test(r)
@@ -442,7 +442,7 @@ function checkHardwareCapabilities() {
     : 20;
 
   // Device type score adjustment
-  const deviceTypeScore =
+  let deviceTypeScore =
     result.deviceType === "desktop"
       ? 20
       : result.deviceType === "tablet"
@@ -545,7 +545,7 @@ function checkBrowserPerformance() {
     // Array operations
     const array = new Float64Array(benchmarkSize);
     for (let i = 0; i < benchmarkSize; i++) {
-      array[i] = Math.random();
+      array[i] = random();
     }
 
     // Sort benchmark (partial, to avoid excessive time)
@@ -683,7 +683,7 @@ function getCachedPerformance() {
     }
 
     return null;
-  } catch (e) {
+  } catch {
     return null;
   }
 }
@@ -713,7 +713,7 @@ export function hasWebGLSupport() {
       canvas.getContext("webgl") ||
       canvas.getContext("experimental-webgl")
     );
-  } catch (e) {
+  } catch {
     return false;
   }
 }

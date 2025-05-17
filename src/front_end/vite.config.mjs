@@ -1,31 +1,100 @@
+import { spawn } from "child_process";
+import { promises as fs } from "fs";
+import path, { dirname } from "path";
+import { visualizer } from "rollup-plugin-visualizer";
+import { fileURLToPath } from "url";
 import { defineConfig } from "vite";
-import { createHtmlPlugin } from "vite-plugin-html";
-import imagemin from "vite-plugin-imagemin";
-import compression from "vite-plugin-compression2";
 import { chunkSplitPlugin } from "vite-plugin-chunk-split";
+import compression from "vite-plugin-compression2";
 import glsl from "vite-plugin-glsl";
 import gltf from "vite-plugin-gltf";
-import { visualizer } from "rollup-plugin-visualizer";
-import path from "path";
-import { exec } from "child_process";
-import { promises as fs } from "fs";
-import { fileURLToPath } from "url";
-import { dirname } from "path";
+import { createHtmlPlugin } from "vite-plugin-html";
+import imagemin from "vite-plugin-imagemin";
+import crypto from "crypto";
 
 // Get the current directory
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Audio compression plugin
+// Generate secure random hash for filenames
+const generateSecureHash = () => {
+  const timestamp = Date.now().toString(36);
+  const randomBytes = crypto.randomBytes(4).toString("hex");
+  return `${timestamp}-${randomBytes}`;
+};
+
+// Safely run a command using spawn with proper error handling
+const safelyRunCommand = (command, args, options = {}) => {
+  return new Promise((resolve, reject) => {
+    const childProcess = spawn(command, args, {
+      ...options,
+      shell: false, // Avoid shell interpretation of arguments
+    });
+
+    let stdout = "";
+    let stderr = "";
+
+    childProcess.stdout?.on("data", (data) => {
+      stdout += data.toString();
+    });
+
+    childProcess.stderr?.on("data", (data) => {
+      stderr += data.toString();
+    });
+
+    childProcess.on("error", (error) => {
+      reject({ error, stdout, stderr });
+    });
+
+    childProcess.on("close", (code) => {
+      if (code === 0) {
+        resolve({ success: true, stdout, stderr });
+      } else {
+        reject({
+          success: false,
+          code,
+          stdout,
+          stderr,
+          error: new Error(`Command exited with code ${code}`),
+        });
+      }
+    });
+  });
+};
+
+// Check if a command is available in the system
+const checkCommandAvailability = async (command) => {
+  try {
+    // Use the '-h' flag which most commands support for help
+    // This minimizes any side effects while checking availability
+    const args = command === "ffmpeg" ? ["-version"] : ["-h"];
+    await safelyRunCommand(command, args);
+    return true;
+  } catch (error) {
+    return false;
+  }
+};
+
+// Audio compression plugin with improved security and error handling
 const audioCompressionPlugin = () => {
   return {
     name: "audio-compression-plugin",
-    // This hook runs after the build is complete
     closeBundle: async () => {
       const audioDir = path.resolve(__dirname, "public/audio");
       const outputDir = path.resolve(__dirname, "build/assets/audio");
 
       try {
+        // Check if ffmpeg is available first
+        const ffmpegAvailable = await checkCommandAvailability("ffmpeg");
+        if (!ffmpegAvailable) {
+          console.warn(
+            "\x1b[33m%s\x1b[0m",
+            "⚠️  WARNING: FFmpeg is not installed or not in PATH. Audio compression will be skipped.\n" +
+              "   Please install FFmpeg to enable audio compression: https://ffmpeg.org/download.html"
+          );
+          return;
+        }
+
         // Create output directory if it doesn't exist
         await fs.mkdir(outputDir, { recursive: true });
 
@@ -33,75 +102,172 @@ const audioCompressionPlugin = () => {
         const files = await fs.readdir(audioDir);
 
         // Filter for audio files
+        const supportedExtensions = [".mp3", ".wav", ".ogg", ".m4a", ".flac"];
         const audioFiles = files.filter((file) =>
-          [".mp3", ".wav", ".ogg", ".m4a", ".flac"].includes(
-            path.extname(file).toLowerCase()
-          )
+          supportedExtensions.includes(path.extname(file).toLowerCase())
         );
 
         console.log(`Found ${audioFiles.length} audio files to compress...`);
 
-        // Process each audio file
-        for (const file of audioFiles) {
-          const inputPath = path.join(audioDir, file);
-          const fileName = path.parse(file).name;
-          const fileExt = path.extname(file).toLowerCase();
+        // Process each audio file with proper error handling
+        const compressionResults = await Promise.allSettled(
+          audioFiles.map(async (file) => {
+            try {
+              const inputPath = path.join(audioDir, file);
+              const fileName = path.parse(file).name;
+              const fileExt = path.extname(file).toLowerCase();
 
-          // Create a hash for the filename to match your build configuration pattern
-          const hash =
-            Date.now().toString(36) +
-            Math.random().toString(36).substring(2, 5);
-          const outputFileName = `${fileName}.${hash}${fileExt}`;
-          const outputPath = path.join(outputDir, outputFileName);
+              // Validate file exists before processing
+              await fs.access(inputPath);
 
-          // Different compression settings based on file type
-          let ffmpegCmd = "";
+              // Create a hash for the filename to match your build configuration pattern
+              const hash = generateSecureHash();
 
-          if (fileExt === ".mp3") {
-            // MP3 compression with 128kbps bitrate
-            ffmpegCmd = `ffmpeg -i "${inputPath}" -c:a libmp3lame -b:a 128k "${outputPath}"`;
-          } else if (fileExt === ".wav") {
-            // Compress WAV to better quality MP3 (192kbps)
-            ffmpegCmd = `ffmpeg -i "${inputPath}" -c:a libmp3lame -b:a 192k "${outputPath}"`;
-          } else if (fileExt === ".ogg") {
-            // Ogg Vorbis compression with quality level 5
-            ffmpegCmd = `ffmpeg -i "${inputPath}" -c:a libvorbis -q:a 5 "${outputPath}"`;
-          } else if (fileExt === ".m4a") {
-            // AAC compression with 128kbps
-            ffmpegCmd = `ffmpeg -i "${inputPath}" -c:a aac -b:a 128k "${outputPath}"`;
-          } else if (fileExt === ".flac") {
-            // Convert FLAC to high quality MP3 (192kbps)
-            const outputMp3 = outputPath.replace(".flac", ".mp3");
-            ffmpegCmd = `ffmpeg -i "${inputPath}" -c:a libmp3lame -b:a 192k "${outputMp3}"`;
-          }
+              // Determine output format and path
+              let outputFileName;
+              let outputFormat;
+              let ffmpegArgs;
 
-          if (ffmpegCmd) {
-            console.log(`Compressing: ${file} -> ${outputFileName}`);
-            await new Promise((resolve, reject) => {
-              exec(ffmpegCmd, (error, stdout, stderr) => {
-                if (error) {
-                  console.error(`Error compressing ${file}: ${error.message}`);
-                  reject(error);
-                  return;
-                }
+              // Set appropriate compression settings based on file type
+              switch (fileExt) {
+                case ".mp3":
+                  outputFileName = `${fileName}.${hash}.mp3`;
+                  outputFormat = "mp3";
+                  ffmpegArgs = [
+                    "-i",
+                    inputPath,
+                    "-c:a",
+                    "libmp3lame",
+                    "-b:a",
+                    "128k",
+                    path.join(outputDir, outputFileName),
+                  ];
+                  break;
+                case ".wav":
+                  outputFileName = `${fileName}.${hash}.mp3`;
+                  outputFormat = "mp3";
+                  ffmpegArgs = [
+                    "-i",
+                    inputPath,
+                    "-c:a",
+                    "libmp3lame",
+                    "-b:a",
+                    "192k",
+                    path.join(outputDir, outputFileName),
+                  ];
+                  break;
+                case ".ogg":
+                  outputFileName = `${fileName}.${hash}.ogg`;
+                  outputFormat = "ogg";
+                  ffmpegArgs = [
+                    "-i",
+                    inputPath,
+                    "-c:a",
+                    "libvorbis",
+                    "-q:a",
+                    "5",
+                    path.join(outputDir, outputFileName),
+                  ];
+                  break;
+                case ".m4a":
+                  outputFileName = `${fileName}.${hash}.m4a`;
+                  outputFormat = "m4a";
+                  ffmpegArgs = [
+                    "-i",
+                    inputPath,
+                    "-c:a",
+                    "aac",
+                    "-b:a",
+                    "128k",
+                    path.join(outputDir, outputFileName),
+                  ];
+                  break;
+                case ".flac":
+                  outputFileName = `${fileName}.${hash}.mp3`;
+                  outputFormat = "mp3";
+                  ffmpegArgs = [
+                    "-i",
+                    inputPath,
+                    "-c:a",
+                    "libmp3lame",
+                    "-b:a",
+                    "192k",
+                    path.join(outputDir, outputFileName),
+                  ];
+                  break;
+                default:
+                  throw new Error(`Unsupported audio format: ${fileExt}`);
+              }
+
+              if (ffmpegArgs) {
+                console.log(`Compressing: ${file} -> ${outputFileName}`);
+
+                // Use the safer spawn method instead of exec
+                const result = await safelyRunCommand("ffmpeg", ffmpegArgs);
                 console.log(`Successfully compressed ${file}`);
-                resolve();
-              });
-            });
-          }
-        }
+                return { file, success: true, outputFormat };
+              }
 
-        console.log("Audio compression complete!");
+              return {
+                file,
+                success: false,
+                reason: "No ffmpeg command created",
+              };
+            } catch (err) {
+              console.error(`Error processing ${file}: ${err.message}`);
+              return { file, success: false, error: err.message };
+            }
+          })
+        );
+
+        // Summary of compression results
+        const successful = compressionResults.filter(
+          (r) => r.status === "fulfilled" && r.value?.success
+        ).length;
+        const failed = compressionResults.length - successful;
+
+        console.log(
+          `Audio compression complete! ${successful} successful, ${failed} failed`
+        );
+
+        if (failed > 0) {
+          console.warn(
+            "Some audio files could not be compressed. Check logs for details."
+          );
+        }
       } catch (error) {
-        console.error("Error during audio compression:", error);
+        console.error("Error during audio compression setup:", error);
       }
     },
   };
 };
 
+// Helper function to check if ffmpeg is installed
+const checkFFmpegInstallation = () => {
+  return {
+    name: "check-ffmpeg-plugin",
+    buildStart: async () => {
+      const ffmpegAvailable = await checkCommandAvailability("ffmpeg");
+      if (!ffmpegAvailable) {
+        console.warn(
+          "\x1b[33m%s\x1b[0m",
+          "⚠️  WARNING: FFmpeg is not installed or not in PATH. Audio compression will be skipped.\n" +
+            "   Please install FFmpeg to enable audio compression: https://ffmpeg.org/download.html"
+        );
+      } else {
+        console.log("✅ FFmpeg detected - audio compression enabled");
+      }
+    },
+  };
+};
+
+// Update the plugins list to include the check for FFmpeg
 export default defineConfig({
   plugins: [
-    // HTML processing and minification
+    // Check for FFmpeg before starting the build
+    checkFFmpegInstallation(),
+
+    // Rest of plugins remain the same
     createHtmlPlugin({
       minify: {
         collapseWhitespace: true,
@@ -112,14 +278,8 @@ export default defineConfig({
         minifyJS: true,
       },
     }),
-
-    // Add GLSL shader support (important for Three.js)
     glsl(),
-
-    // GLTF model optimization
     gltf(),
-
-    // Image optimization
     imagemin({
       gifsicle: { optimizationLevel: 7, interlaced: false },
       optipng: { optimizationLevel: 7 },
@@ -134,24 +294,16 @@ export default defineConfig({
           { name: "removeDimensions", active: true },
         ],
       },
-      webp: { quality: 80 }, // Add WebP conversion
+      webp: { quality: 80 },
     }),
-
-    // Intelligent code splitting (adapted for vanilla JS)
     chunkSplitPlugin({
       strategy: "default",
       customSplitting: {
-        // Split Three.js into its own chunk
         three: [/three\.module\.js/, /three\/examples\/jsm/],
-        // Put all vendor code in a separate chunk
         vendor: [/node_modules/],
       },
     }),
-
-    // Audio compression with FFmpeg
     audioCompressionPlugin(),
-
-    // Compression options
     compression({
       algorithm: "brotliCompress",
       threshold: 10240,
@@ -161,7 +313,6 @@ export default defineConfig({
         level: 11,
       },
     }),
-
     compression({
       algorithm: "gzip",
       threshold: 10240,
@@ -169,8 +320,6 @@ export default defineConfig({
       deleteOriginFile: false,
       compressionOptions: { level: 9 },
     }),
-
-    // Bundle size visualization (creates stats.html after build)
     visualizer({
       filename: "stats.html",
       gzipSize: true,
@@ -280,10 +429,6 @@ export default defineConfig({
     strictPort: false, // Allow Vite to try other ports if 5173 is in use
     cors: true,
     hmr: {
-      // protocol: "ws",
-      // host: "localhost",
-      // port: 5173,
-      // clientPort: 5173,
       overlay: true,
     },
     watch: {

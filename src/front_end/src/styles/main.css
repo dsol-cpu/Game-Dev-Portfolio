@@ -127,7 +127,7 @@ section .container {
   gap: 1rem;
   margin-bottom: 2rem;
   flex-wrap: wrap;
-  z-index: 2;
+  z-index: 3;
 }
 
 .filter-button {
@@ -150,155 +150,6 @@ section .container {
   border-color: var(--secondary-color);
   transform: translateY(-3px);
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-}
-
-/* Enhanced Portfolio Grid */
-.portfolio-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 2rem;
-  z-index: 2;
-}
-
-/* Enhanced Portfolio Item Styling */
-.portfolio-item {
-  border-radius: 12px;
-  overflow: hidden;
-  box-shadow: var(--portfolio-card-shadow);
-  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  background-color: var(--portfolio-card-bg);
-  border: 2px solid var(--portfolio-card-border);
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  position: relative;
-}
-
-.portfolio-item::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 4px;
-  background: linear-gradient(
-    90deg,
-    var(--primary-color),
-    var(--secondary-color)
-  );
-  z-index: 2;
-}
-
-.portfolio-item:hover {
-  transform: translateY(-15px) scale(1.02);
-  box-shadow: 0 20px 30px rgba(0, 0, 0, 0.25);
-  border-color: var(--secondary-color);
-}
-
-.portfolio-img,
-.portfolio-canvas {
-  height: 220px;
-  overflow: hidden;
-  position: relative;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.portfolio-img::after,
-.portfolio-canvas::after {
-  content: "";
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  height: 50%;
-  background: linear-gradient(to top, var(--portfolio-card-bg), transparent);
-  pointer-events: none;
-}
-
-.threejs-canvas {
-  display: block;
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
-}
-
-/* Enhanced Portfolio Info */
-.portfolio-info {
-  padding: 1.75rem;
-  background-color: var(--portfolio-card-bg);
-  text-align: center;
-  border-top: 1px solid rgba(126, 182, 255, 0.2);
-}
-
-.portfolio-title {
-  font-size: 1.4rem;
-  margin-bottom: 0.75rem;
-  font-family: "Orbitron", sans-serif;
-  color: var(--portfolio-title-color);
-  font-weight: 700;
-  text-shadow: 0 0 10px rgba(126, 182, 255, 0.3);
-  letter-spacing: 0.5px;
-}
-
-.portfolio-category {
-  color: var(--portfolio-category-color);
-  font-size: 0.95rem;
-  margin-bottom: 1.25rem;
-  text-transform: uppercase;
-  letter-spacing: 1.5px;
-  font-weight: 600;
-  display: inline-block;
-  padding: 4px 12px;
-  background: rgba(255, 219, 148, 0.1);
-  border-radius: 20px;
-}
-
-.portfolio-desc {
-  margin-bottom: 1.5rem;
-  font-size: 1rem;
-  line-height: 1.6;
-  color: var(--portfolio-text-color);
-}
-
-.portfolio-links {
-  display: flex;
-  gap: 1.25rem;
-  justify-content: center;
-}
-
-.portfolio-links a {
-  padding: 0.6rem 1.2rem;
-  background-color: var(--primary-color);
-  color: white !important;
-  border-radius: 6px;
-  text-decoration: none;
-  font-size: 0.95rem;
-  transition: all 0.3s ease;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  border: 1px solid transparent;
-  font-weight: 600;
-}
-
-.portfolio-links a:hover {
-  background-color: transparent;
-  color: var(--primary-color) !important;
-  border-color: var(--primary-color);
-  box-shadow: 0 0 15px rgba(126, 182, 255, 0.4);
-}
-
-/* ThreeJS Canvas */
-.canvas-container {
-  width: 100%;
-  height: 400px;
-  position: relative;
-  border-radius: 10px;
-  overflow: hidden;
-  margin-bottom: 2rem;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-  border: 2px solid var(--primary-color);
 }
 
 /* Contact form */
@@ -356,7 +207,6 @@ section .container {
   bottom: 0;
   background-color: var(--bg-color);
   display: none;
-  z-index: 100;
   overflow: hidden;
 }
 

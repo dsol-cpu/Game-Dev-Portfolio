@@ -2,12 +2,12 @@ import { getCurrentHeight, getHeightLimits, getDirection } from "./player.js";
 import { debounce } from "../utils/helper.js";
 import { audioController, toggleBackgroundMusic } from "./audio-controller.js";
 
-const ALTITUDE_WIDTH = 40;
-const ALTITUDE_HEIGHT = 200;
+const ALTITUDE_WIDTH = 35;
+const ALTITUDE_HEIGHT = 180;
 const COMPASS_SIZE = 100;
 const UI_PADDING = 20;
-const UI_BG_ALPHA = 0.7;
-const UI_FG_ALPHA = 0.9;
+const UI_BG_ALPHA = 0.65;
+const UI_FG_ALPHA = 0.95;
 
 // Cached UI elements and states for performance
 let altitudeCanvas, altitudeCtx;
@@ -19,8 +19,6 @@ let heightLimits = { min: -50, max: 50 };
 // Pre-calculated values
 const COMPASS_CENTER = COMPASS_SIZE / 2;
 const COMPASS_RADIUS = COMPASS_CENTER - 10;
-const COMPASS_DIRECTIONS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
-const COMPASS_ANGLES = COMPASS_DIRECTIONS.map((_, i) => (i * Math.PI) / 4);
 
 // Reusable objects for animations and rendering
 const altitudeFillGradients = {
@@ -36,6 +34,40 @@ let lastRotation = null;
 let isStylesAdded = false;
 let resizeTimeout = null;
 let uiInitialized = false;
+
+// UI theme colors in Skies of Arcadia style
+const UI_THEME = {
+  compass: {
+    bg: "rgba(34, 51, 68, 0.75)",
+    border: "rgba(155, 179, 205, 0.9)",
+    accent: "#c5a45c",
+    northPointer: "#e5b668",
+    text: "rgba(225, 235, 245, 0.95)",
+  },
+  altitude: {
+    bg: "rgba(34, 51, 68, 0.75)",
+    border: "rgba(155, 179, 205, 0.9)",
+    fill: {
+      start: "#5b98bd",
+      end: "#2c5a8c",
+    },
+    fillHigh: {
+      start: "#e5b668",
+      end: "#c5853c",
+    },
+    fillLow: {
+      start: "#8cadca",
+      end: "#496d8c",
+    },
+    text: "rgba(225, 235, 245, 0.95)",
+    tickMark: "rgba(155, 179, 205, 0.8)",
+  },
+  controls: {
+    bg: "rgba(34, 51, 68, 0.75)",
+    text: "rgba(225, 235, 245, 0.95)",
+    accent: "#c5a45c",
+  },
+};
 
 export function getUI() {
   // Get height limits once upfront
@@ -196,25 +228,25 @@ export function initGameUI(elements) {
 function initializeGradients() {
   if (!altitudeCtx) return;
 
-  // Maximum height gradient
+  // Maximum height gradient (high altitude)
   altitudeFillGradients.max = altitudeCtx.createLinearGradient(
     0,
     0,
     0,
     ALTITUDE_HEIGHT
   );
-  altitudeFillGradients.max.addColorStop(0, "#ff9966");
-  altitudeFillGradients.max.addColorStop(1, "#ff5500");
+  altitudeFillGradients.max.addColorStop(0, UI_THEME.altitude.fillHigh.start);
+  altitudeFillGradients.max.addColorStop(1, UI_THEME.altitude.fillHigh.end);
 
-  // Minimum height gradient
+  // Minimum height gradient (low altitude)
   altitudeFillGradients.min = altitudeCtx.createLinearGradient(
     0,
     0,
     0,
     ALTITUDE_HEIGHT
   );
-  altitudeFillGradients.min.addColorStop(0, "#ffcc66");
-  altitudeFillGradients.min.addColorStop(1, "#cc9933");
+  altitudeFillGradients.min.addColorStop(0, UI_THEME.altitude.fillLow.start);
+  altitudeFillGradients.min.addColorStop(1, UI_THEME.altitude.fillLow.end);
 
   // Normal gradient - will be adjusted during render
   altitudeFillGradients.normal = altitudeCtx.createLinearGradient(
@@ -223,8 +255,8 @@ function initializeGradients() {
     0,
     ALTITUDE_HEIGHT
   );
-  altitudeFillGradients.normal.addColorStop(0, "#66ccff");
-  altitudeFillGradients.normal.addColorStop(1, "#3366cc");
+  altitudeFillGradients.normal.addColorStop(0, UI_THEME.altitude.fill.start);
+  altitudeFillGradients.normal.addColorStop(1, UI_THEME.altitude.fill.end);
 }
 
 function positionUIElements() {
@@ -263,9 +295,10 @@ function positionUIElements() {
       zIndex: "10",
       display: "flex",
       alignItems: "center",
-      backgroundColor: `rgba(0, 0, 0, ${UI_BG_ALPHA})`,
-      padding: "10px",
+      backgroundColor: UI_THEME.controls.bg,
+      padding: "8px",
       borderRadius: "5px",
+      border: `1px solid ${UI_THEME.controls.accent}`,
       willChange: "transform",
     });
   }
@@ -284,9 +317,10 @@ function addGameUIStyles() {
     }
     #altitude-meter {
       transition: box-shadow 0.2s ease;
+      border: 1px solid ${UI_THEME.altitude.border};
     }
     #altitude-meter.at-limit {
-      box-shadow: 0 0 10px rgba(255, 100, 100, 0.5);
+      box-shadow: 0 0 10px rgba(255, 180, 40, 0.6);
     }
     #volume-control-container {
       pointer-events: auto;
@@ -297,15 +331,18 @@ function addGameUIStyles() {
       font-size: 20px;
       cursor: pointer;
       margin-right: 10px;
-      opacity: 0.8;
+      opacity: 0.9;
+      color: ${UI_THEME.controls.text};
       transition: opacity 0.2s;
     }
     .volume-control-btn:hover {
       opacity: 1;
+      color: ${UI_THEME.controls.accent};
     }
     .volume-control-slider {
-      width: 100px;
+      width: 80px;
       cursor: pointer;
+      accent-color: ${UI_THEME.controls.accent};
     }
   `;
   document.head.appendChild(style);
@@ -326,9 +363,10 @@ export function updateAltitudeMeter(altitude) {
   // Use clearRect to maintain transparency
   ctx.clearRect(0, 0, width, height);
 
-  // Draw semi-transparent background
-  ctx.fillStyle = `rgba(0, 0, 0, ${UI_BG_ALPHA})`;
-  ctx.fillRect(0, 0, width, height);
+  // Draw background with rounded corners
+  ctx.fillStyle = UI_THEME.altitude.bg;
+  roundedRect(ctx, 0, 0, width, height, 5);
+  ctx.fill();
 
   const normalizedAltitude = (altitude - min) / (max - min);
   const fillHeight = normalizedAltitude * (height - 10);
@@ -345,8 +383,8 @@ export function updateAltitudeMeter(altitude) {
   } else {
     // Update normal gradient positions
     const normalGradient = ctx.createLinearGradient(0, fillY, 0, height - 5);
-    normalGradient.addColorStop(0, "#66ccff");
-    normalGradient.addColorStop(1, "#3366cc");
+    normalGradient.addColorStop(0, UI_THEME.altitude.fill.start);
+    normalGradient.addColorStop(1, UI_THEME.altitude.fill.end);
     ctx.fillStyle = normalGradient;
   }
 
@@ -360,31 +398,43 @@ export function updateAltitudeMeter(altitude) {
     }
   }
 
-  // Draw altitude bar
-  ctx.fillRect(5, fillY, width - 10, fillHeight);
+  // Draw altitude bar with rounded corners
+  roundedRect(ctx, 5, fillY, width - 10, fillHeight, 3);
+  ctx.fill();
 
   // Draw border
-  ctx.strokeStyle = `rgba(255, 255, 255, ${UI_FG_ALPHA})`;
+  ctx.strokeStyle = UI_THEME.altitude.border;
   ctx.lineWidth = 2;
-  ctx.strokeRect(5, 5, width - 10, height - 10);
+  roundedRect(ctx, 5, 5, width - 10, height - 10, 3);
+  ctx.stroke();
 
-  ctx.fillStyle = `rgba(255, 255, 255, ${UI_FG_ALPHA})`;
-  ctx.textAlign = "right";
-  ctx.font = "10px Arial";
-
-  // Draw tick marks and labels (reusing calculated positions)
-  const tickCount = 5;
-  for (let i = 0; i <= tickCount; i++) {
-    const y = height - 5 - (i / tickCount) * (height - 10);
-    const altValue = min + (i / tickCount) * (max - min);
-    ctx.fillRect(5, y, 8, 1);
-    ctx.fillText(Math.round(altValue), width - 8, y + 3);
-  }
-
-  // Draw current altitude value
-  ctx.font = "bold 12px Arial";
+  // Draw current altitude indicator
+  ctx.fillStyle = UI_THEME.altitude.text;
+  ctx.font = "bold 12px 'Arial', sans-serif";
   ctx.textAlign = "center";
-  ctx.fillText(`${Math.round(altitude)}m`, width / 2, 20);
+  ctx.fillText(`${Math.round(altitude)}`, width / 2, 20);
+
+  // Draw minimal altitude tick marks
+  ctx.strokeStyle = UI_THEME.altitude.tickMark;
+  ctx.lineWidth = 1;
+
+  // Only draw 3 tick marks for a cleaner look
+  const tickPositions = [0.1, 0.5, 0.9]; // Bottom, middle, top
+
+  for (const pos of tickPositions) {
+    const y = height - 5 - pos * (height - 10);
+    // Draw tick on left side
+    ctx.beginPath();
+    ctx.moveTo(5, y);
+    ctx.lineTo(10, y);
+    ctx.stroke();
+
+    // Draw tick on right side
+    ctx.beginPath();
+    ctx.moveTo(width - 5, y);
+    ctx.lineTo(width - 10, y);
+    ctx.stroke();
+  }
 }
 
 export function updateCompass(rotation) {
@@ -401,8 +451,8 @@ export function updateCompass(rotation) {
   // Use clearRect for transparency
   ctx.clearRect(0, 0, size, size);
 
-  // Draw semi-transparent compass background
-  ctx.fillStyle = `rgba(0, 0, 0, ${UI_BG_ALPHA})`;
+  // Draw semi-transparent compass background with rounded corners
+  ctx.fillStyle = UI_THEME.compass.bg;
   ctx.beginPath();
   ctx.arc(COMPASS_CENTER, COMPASS_CENTER, COMPASS_RADIUS + 5, 0, Math.PI * 2);
   ctx.fill();
@@ -412,57 +462,105 @@ export function updateCompass(rotation) {
   ctx.rotate(-rotation);
 
   // Draw compass outline
-  ctx.strokeStyle = `rgba(255, 255, 255, ${UI_FG_ALPHA})`;
+  ctx.strokeStyle = UI_THEME.compass.border;
   ctx.lineWidth = 2;
   ctx.beginPath();
   ctx.arc(0, 0, COMPASS_RADIUS, 0, Math.PI * 2);
   ctx.stroke();
 
-  ctx.font = "bold 14px Arial";
+  // Draw North marker only for a cleaner look
+  const northAngle = 0; // North is at 0 radians
+  const northX = Math.sin(northAngle) * (COMPASS_RADIUS - 15);
+  const northY = -Math.cos(northAngle) * (COMPASS_RADIUS - 15);
+
+  ctx.font = "bold 16px 'Arial', sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
+  ctx.fillStyle = UI_THEME.compass.northPointer;
+  ctx.fillText("N", northX, northY);
 
-  // Draw direction labels (using pre-calculated values)
-  for (let i = 0; i < COMPASS_DIRECTIONS.length; i++) {
-    const dir = COMPASS_DIRECTIONS[i];
-    const angle = COMPASS_ANGLES[i];
-    const x = Math.sin(angle) * (COMPASS_RADIUS - 15);
-    const y = -Math.cos(angle) * (COMPASS_RADIUS - 15);
+  // Draw tick marks only
+  const cardinalPoints = [0, Math.PI / 2, Math.PI, (Math.PI * 3) / 2]; // N, E, S, W
 
-    ctx.fillStyle =
-      dir === direction ? "#66ccff" : `rgba(255, 255, 255, ${UI_FG_ALPHA})`;
-    ctx.fillText(dir, x, y);
+  for (const angle of cardinalPoints) {
+    const innerRadius = COMPASS_RADIUS - 10;
+    const outerRadius = COMPASS_RADIUS;
 
-    // Draw tick mark
-    const innerX = Math.sin(angle) * (COMPASS_RADIUS - 8);
-    const innerY = -Math.cos(angle) * (COMPASS_RADIUS - 8);
-    const outerX = Math.sin(angle) * COMPASS_RADIUS;
-    const outerY = -Math.cos(angle) * COMPASS_RADIUS;
+    const innerX = Math.sin(angle) * innerRadius;
+    const innerY = -Math.cos(angle) * innerRadius;
+    const outerX = Math.sin(angle) * outerRadius;
+    const outerY = -Math.cos(angle) * outerRadius;
 
+    ctx.strokeStyle =
+      angle === 0 ? UI_THEME.compass.northPointer : UI_THEME.compass.border;
+    ctx.lineWidth = angle === 0 ? 2 : 1.5;
     ctx.beginPath();
     ctx.moveTo(innerX, innerY);
     ctx.lineTo(outerX, outerY);
     ctx.stroke();
   }
 
-  // Draw pointer
-  ctx.fillStyle = "#f44336";
+  // Draw intermediate tick marks (NE, SE, SW, NW)
+  const intermediateAngles = [
+    Math.PI / 4,
+    (Math.PI * 3) / 4,
+    (Math.PI * 5) / 4,
+    (Math.PI * 7) / 4,
+  ];
+
+  for (const angle of intermediateAngles) {
+    const innerRadius = COMPASS_RADIUS - 5;
+    const outerRadius = COMPASS_RADIUS;
+
+    const innerX = Math.sin(angle) * innerRadius;
+    const innerY = -Math.cos(angle) * innerRadius;
+    const outerX = Math.sin(angle) * outerRadius;
+    const outerY = -Math.cos(angle) * outerRadius;
+
+    ctx.strokeStyle = UI_THEME.compass.border;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(innerX, innerY);
+    ctx.lineTo(outerX, outerY);
+    ctx.stroke();
+  }
+
+  // Draw compass pointer
+  ctx.fillStyle = UI_THEME.compass.accent;
   ctx.beginPath();
-  ctx.moveTo(0, -COMPASS_RADIUS + 25);
-  ctx.lineTo(8, 0);
-  ctx.lineTo(0, 10);
-  ctx.lineTo(-8, 0);
+  ctx.moveTo(0, -COMPASS_RADIUS + 20);
+  ctx.lineTo(6, -5);
+  ctx.lineTo(0, 5);
+  ctx.lineTo(-6, -5);
   ctx.closePath();
   ctx.fill();
+  ctx.strokeStyle = UI_THEME.compass.border;
+  ctx.lineWidth = 1;
+  ctx.stroke();
 
   ctx.restore();
 
-  // Draw direction text
-  ctx.fillStyle = `rgba(255, 255, 255, ${UI_FG_ALPHA})`;
-  ctx.font = "bold 16px Arial";
+  // Draw current direction in center
+  ctx.fillStyle = UI_THEME.compass.text;
+  ctx.font = "bold 14px 'Arial', sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(direction, COMPASS_CENTER, size - 15);
+  ctx.fillText(direction, COMPASS_CENTER, COMPASS_CENTER);
+}
+
+// Helper function to draw rounded rectangles
+function roundedRect(ctx, x, y, width, height, radius) {
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + width - radius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+  ctx.lineTo(x + width, y + height - radius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  ctx.lineTo(x + radius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
 }
 
 let animFrameId = null;

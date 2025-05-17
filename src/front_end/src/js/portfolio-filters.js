@@ -16,7 +16,7 @@ const state = {
  */
 function initPortfolioFilters() {
   state.buttons = document.querySelectorAll(".filter-button");
-  state.items = document.querySelectorAll(".portfolio-item");
+  state.items = document.querySelectorAll(".project-card");
 
   state.buttons.forEach((btn) =>
     btn.addEventListener("click", (e) => {
@@ -75,7 +75,7 @@ function applyFilter(filter) {
 
   // Process all items to determine visibility
   state.items.forEach((item, i) => {
-    const id = item.getAttribute("id") || `portfolio-item-${i}`;
+    const id = item.getAttribute("id") || `project-card-${i}`;
     let match =
       filter === ALL ||
       (item.getAttribute("data-category") || "").includes(filter);

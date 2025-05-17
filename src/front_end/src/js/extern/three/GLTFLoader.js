@@ -740,7 +740,7 @@ class GLTFMaterialsEmissiveStrengthExtension {
     const parser = this.parser;
     const materialDef = parser.json.materials[materialIndex];
 
-    if (!materialDef.extensions || !materialDef.extensions[this.name]) {
+    if (!materialDef.extensions?.[this.name]) {
       return Promise.resolve();
     }
 
@@ -771,8 +771,7 @@ class GLTFMaterialsClearcoatExtension {
     const parser = this.parser;
     const materialDef = parser.json.materials[materialIndex];
 
-    if (!materialDef.extensions || !materialDef.extensions[this.name])
-      return null;
+    if (!materialDef.extensions?.[this.name]) return null;
 
     return MeshPhysicalMaterial;
   }
@@ -781,7 +780,7 @@ class GLTFMaterialsClearcoatExtension {
     const parser = this.parser;
     const materialDef = parser.json.materials[materialIndex];
 
-    if (!materialDef.extensions || !materialDef.extensions[this.name]) {
+    if (!materialDef.extensions?.[this.name]) {
       return Promise.resolve();
     }
 
@@ -854,8 +853,7 @@ class GLTFMaterialsDispersionExtension {
     const parser = this.parser;
     const materialDef = parser.json.materials[materialIndex];
 
-    if (!materialDef.extensions || !materialDef.extensions[this.name])
-      return null;
+    if (!materialDef.extensions?.[this.name]) return null;
 
     return MeshPhysicalMaterial;
   }
@@ -864,7 +862,7 @@ class GLTFMaterialsDispersionExtension {
     const parser = this.parser;
     const materialDef = parser.json.materials[materialIndex];
 
-    if (!materialDef.extensions || !materialDef.extensions[this.name]) {
+    if (!materialDef.extensions?.[this.name]) {
       return Promise.resolve();
     }
 
@@ -894,8 +892,7 @@ class GLTFMaterialsIridescenceExtension {
     const parser = this.parser;
     const materialDef = parser.json.materials[materialIndex];
 
-    if (!materialDef.extensions || !materialDef.extensions[this.name])
-      return null;
+    if (!materialDef.extensions?.[this.name]) return null;
 
     return MeshPhysicalMaterial;
   }
@@ -904,7 +901,7 @@ class GLTFMaterialsIridescenceExtension {
     const parser = this.parser;
     const materialDef = parser.json.materials[materialIndex];
 
-    if (!materialDef.extensions || !materialDef.extensions[this.name]) {
+    if (!materialDef.extensions?.[this.name]) {
       return Promise.resolve();
     }
 
@@ -975,8 +972,7 @@ class GLTFMaterialsSheenExtension {
     const parser = this.parser;
     const materialDef = parser.json.materials[materialIndex];
 
-    if (!materialDef.extensions || !materialDef.extensions[this.name])
-      return null;
+    if (!materialDef.extensions?.[this.name]) return null;
 
     return MeshPhysicalMaterial;
   }
@@ -985,7 +981,7 @@ class GLTFMaterialsSheenExtension {
     const parser = this.parser;
     const materialDef = parser.json.materials[materialIndex];
 
-    if (!materialDef.extensions || !materialDef.extensions[this.name]) {
+    if (!materialDef.extensions?.[this.name]) {
       return Promise.resolve();
     }
 
@@ -1054,8 +1050,7 @@ class GLTFMaterialsTransmissionExtension {
     const parser = this.parser;
     const materialDef = parser.json.materials[materialIndex];
 
-    if (!materialDef.extensions || !materialDef.extensions[this.name])
-      return null;
+    if (!materialDef.extensions?.[this.name]) return null;
 
     return MeshPhysicalMaterial;
   }
@@ -1064,7 +1059,7 @@ class GLTFMaterialsTransmissionExtension {
     const parser = this.parser;
     const materialDef = parser.json.materials[materialIndex];
 
-    if (!materialDef.extensions || !materialDef.extensions[this.name]) {
+    if (!materialDef.extensions?.[this.name]) {
       return Promise.resolve();
     }
 
@@ -1107,8 +1102,7 @@ class GLTFMaterialsVolumeExtension {
     const parser = this.parser;
     const materialDef = parser.json.materials[materialIndex];
 
-    if (!materialDef.extensions || !materialDef.extensions[this.name])
-      return null;
+    if (!materialDef.extensions?.[this.name]) return null;
 
     return MeshPhysicalMaterial;
   }
@@ -1117,7 +1111,7 @@ class GLTFMaterialsVolumeExtension {
     const parser = this.parser;
     const materialDef = parser.json.materials[materialIndex];
 
-    if (!materialDef.extensions || !materialDef.extensions[this.name]) {
+    if (!materialDef.extensions?.[this.name]) {
       return Promise.resolve();
     }
 
@@ -1170,8 +1164,7 @@ class GLTFMaterialsIorExtension {
     const parser = this.parser;
     const materialDef = parser.json.materials[materialIndex];
 
-    if (!materialDef.extensions || !materialDef.extensions[this.name])
-      return null;
+    if (!materialDef.extensions?.[this.name]) return null;
 
     return MeshPhysicalMaterial;
   }
@@ -1180,7 +1173,7 @@ class GLTFMaterialsIorExtension {
     const parser = this.parser;
     const materialDef = parser.json.materials[materialIndex];
 
-    if (!materialDef.extensions || !materialDef.extensions[this.name]) {
+    if (!materialDef.extensions?.[this.name]) {
       return Promise.resolve();
     }
 
@@ -1209,8 +1202,7 @@ class GLTFMaterialsSpecularExtension {
     const parser = this.parser;
     const materialDef = parser.json.materials[materialIndex];
 
-    if (!materialDef.extensions || !materialDef.extensions[this.name])
-      return null;
+    if (!materialDef.extensions?.[this.name]) return null;
 
     return MeshPhysicalMaterial;
   }
@@ -1219,7 +1211,7 @@ class GLTFMaterialsSpecularExtension {
     const parser = this.parser;
     const materialDef = parser.json.materials[materialIndex];
 
-    if (!materialDef.extensions || !materialDef.extensions[this.name]) {
+    if (!materialDef.extensions?.[this.name]) {
       return Promise.resolve();
     }
 
@@ -1280,8 +1272,7 @@ class GLTFMaterialsBumpExtension {
     const parser = this.parser;
     const materialDef = parser.json.materials[materialIndex];
 
-    if (!materialDef.extensions || !materialDef.extensions[this.name])
-      return null;
+    if (!materialDef.extensions?.[this.name]) return null;
 
     return MeshPhysicalMaterial;
   }
@@ -1290,7 +1281,7 @@ class GLTFMaterialsBumpExtension {
     const parser = this.parser;
     const materialDef = parser.json.materials[materialIndex];
 
-    if (!materialDef.extensions || !materialDef.extensions[this.name]) {
+    if (!materialDef.extensions?.[this.name]) {
       return Promise.resolve();
     }
 
@@ -1328,8 +1319,7 @@ class GLTFMaterialsAnisotropyExtension {
     const parser = this.parser;
     const materialDef = parser.json.materials[materialIndex];
 
-    if (!materialDef.extensions || !materialDef.extensions[this.name])
-      return null;
+    if (!materialDef.extensions?.[this.name]) return null;
 
     return MeshPhysicalMaterial;
   }
@@ -1338,7 +1328,7 @@ class GLTFMaterialsAnisotropyExtension {
     const parser = this.parser;
     const materialDef = parser.json.materials[materialIndex];
 
-    if (!materialDef.extensions || !materialDef.extensions[this.name]) {
+    if (!materialDef.extensions?.[this.name]) {
       return Promise.resolve();
     }
 
@@ -1387,7 +1377,7 @@ class GLTFTextureBasisUExtension {
 
     const textureDef = json.textures[textureIndex];
 
-    if (!textureDef.extensions || !textureDef.extensions[this.name]) {
+    if (!textureDef.extensions?.[this.name]) {
       return null;
     }
 
@@ -1432,7 +1422,7 @@ class GLTFTextureWebPExtension {
 
     const textureDef = json.textures[textureIndex];
 
-    if (!textureDef.extensions || !textureDef.extensions[name]) {
+    if (!textureDef.extensions?.[name]) {
       return null;
     }
 
@@ -1469,7 +1459,7 @@ class GLTFTextureAVIFExtension {
 
     const textureDef = json.textures[textureIndex];
 
-    if (!textureDef.extensions || !textureDef.extensions[name]) {
+    if (!textureDef.extensions?.[name]) {
       return null;
     }
 
@@ -1503,13 +1493,13 @@ class GLTFMeshoptCompression {
     const json = this.parser.json;
     const bufferView = json.bufferViews[index];
 
-    if (bufferView.extensions && bufferView.extensions[this.name]) {
+    if (bufferView.extensions?.[this.name]) {
       const extensionDef = bufferView.extensions[this.name];
 
       const buffer = this.parser.getDependency("buffer", extensionDef.buffer);
       const decoder = this.parser.options.meshoptDecoder;
 
-      if (!decoder || !decoder.supported) {
+      if (!decoder?.supported) {
         if (
           json.extensionsRequired &&
           json.extensionsRequired.indexOf(this.name) >= 0
@@ -1583,11 +1573,7 @@ class GLTFMeshGpuInstancing {
     const json = this.parser.json;
     const nodeDef = json.nodes[nodeIndex];
 
-    if (
-      !nodeDef.extensions ||
-      !nodeDef.extensions[this.name] ||
-      nodeDef.mesh === undefined
-    ) {
+    if (!nodeDef.extensions?.[this.name] || nodeDef.mesh === undefined) {
       return null;
     }
 

@@ -376,7 +376,7 @@ function resetView() {
   setupModelRotationAnimations();
 
   // Remove highlighting
-  document.querySelectorAll(".portfolio-item").forEach((el) => {
+  document.querySelectorAll(".project-card").forEach((el) => {
     el.classList.remove("focused");
   });
 
@@ -414,13 +414,10 @@ function setupModelRotationAnimations() {
 
   // Animation loop
   function animateModels() {
-    let needsRender = false;
-
     projectModels.forEach((model) => {
       if (model.userData?.animate) {
         // Apply gentle rotation around Y axis
         model.rotation.y += model.userData.rotationSpeed || 0.005;
-        needsRender = true;
       }
     });
 

@@ -19,11 +19,12 @@ import {
   initProjectCardScene,
 } from "./three/project-card-system.js";
 import {
+  hasActiveCamera,
   initThreeJSManager,
   renderFrame,
-  hasActiveCamera,
 } from "./three/threejs-manager.js";
 // Import the new frame capping functions
+import { PerspectiveCamera } from "./extern/three/three.core.min.js";
 import {
   getDeltaTime,
   startFrameCappedLoop,
@@ -39,20 +40,15 @@ document.addEventListener("DOMContentLoaded", initializeApp);
  * Main initialization function
  */
 async function initializeApp() {
-  // Init user interaction tracking
   initUserInteraction();
-
-  // Initialize navigation
   initNavigation();
-
-  initPortfolioFilters();
-
   initProjectCards();
+  initPortfolioFilters();
   initBlogPosts();
 
   // initGridOverlay();
   // Only initialize the ThreeJS scenes and models if you don't have a doodoo computer
-  if (!isLowPoweredDevice()) {
+  if (isLowPoweredDevice()) {
     document.getElementById("view-toggle-btn").style.display = "none";
   } else {
     preloadModels(["babyTurtle", "portfolioShip", "globe"]);
@@ -86,7 +82,7 @@ function initAboutCanvas() {
   canvas.height = height;
 
   // Create and register camera
-  const camera = new PerspectiveCamera(60, width / height, C.NEAR, C.FAR);
+  const camera = new PerspectiveCamera(60, width / height, 0.1, 100);
   camera.position.set(0, 1, 5);
   camera.lookAt(0, 0, 0);
 
@@ -112,7 +108,6 @@ function frameUpdateCallback(timestamp) {
   renderFrame(deltaTime);
 }
 
-// Clean up function - call this when unloading the app if needed
 function cleanup() {
   stopFrameCappedLoop();
 }
