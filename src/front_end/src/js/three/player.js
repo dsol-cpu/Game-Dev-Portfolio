@@ -146,6 +146,14 @@ const player = {
   heightClamped: false,
 };
 
+/**
+ * Get the player's model object
+ * @returns {Object|null} The player's ship model or null if not created
+ */
+export function getPlayerModel() {
+  return player.model;
+}
+
 // Fast direction lookup using pre-calculated array
 export function getDirection(rotation) {
   // ~~ is faster than Math.floor for integers

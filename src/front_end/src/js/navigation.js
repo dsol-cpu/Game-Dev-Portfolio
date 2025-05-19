@@ -1,17 +1,23 @@
 /**
  * @fileoverview Handles site navigation with smooth scrolling to sections
+ * No dependency on ship navigation - focused only on standard scroll view
  */
 
 // Constants and cached DOM queries
-const navLinks = document.querySelectorAll(".nav-link");
-const sections = document.querySelectorAll("section");
 const ACTIVE_CLASS = "active";
+let navLinks;
+let sections;
 
 /**
  * Scroll to section and update active navigation state
  * @param {string} sectionId - ID of the section to scroll to
  */
-function scrollToSection(sectionId) {
+export function scrollToSection(sectionId) {
+  // Make sure we have our DOM elements
+  if (!navLinks) {
+    navLinks = document.querySelectorAll(".nav-link");
+  }
+
   const targetSection = document.getElementById(sectionId);
   if (!targetSection) return;
 
@@ -31,15 +37,21 @@ function scrollToSection(sectionId) {
 }
 
 /**
- * Initialize navigation system
+ * Initialize standard navigation system - for scroll view only
+ * @returns {Object} Navigation API with exported functions
  */
-function initNavigation() {
+export function initNavigation() {
+  // Cache DOM elements
+  navLinks = document.querySelectorAll(".nav-link");
+  sections = document.querySelectorAll("section");
+
   // Handle navigation link clicks with event delegation
   document.addEventListener("click", (e) => {
     const link = e.target.closest(".nav-link");
-    if (link) {
+    if (link && !window.isGameView?.()) {
       e.preventDefault();
-      scrollToSection(link.getAttribute("data-target"));
+      const sectionId = link.getAttribute("data-target");
+      scrollToSection(sectionId);
     }
   });
 
@@ -78,5 +90,3 @@ function initNavigation() {
 
   return { scrollToSection };
 }
-
-export { initNavigation };

@@ -1,12 +1,13 @@
 /**
- * @fileoverview Integration between site navigation and ship control
- * Connects sidebar navigation to ship travel functionality
+ * @fileoverview Ship navigation and autopilot controls
+ * Handles automated ship travel to destinations
  */
 
-import { initNavigation } from "./navigation.js";
 import { ISLAND_DATA } from "../three/game.js";
 import { isGameView, toggleGameView } from "./three/game.js";
 import { Vector3, Quaternion } from "./extern/three/three.module.min.js";
+import { scrollToSection } from "./navigation.js";
+import { getPlayerModel } from "./player.js";
 
 // Constants
 const SHIP_TRAVEL_SPEED = 20; // Speed for automated ship travel
@@ -197,8 +198,8 @@ function completeShipNavigation(playerModule) {
 
       // After view transition, scroll to section
       setTimeout(() => {
-        const { navAPI } = initNavigation();
-        navAPI.scrollToSection(shipNavState.targetSection);
+        // Use the imported scrollToSection function
+        scrollToSection(shipNavState.targetSection);
 
         // Resolve the navigation promise
         if (shipNavState.onArrivalCallback) {
@@ -220,10 +221,10 @@ function updateNavigationUI(progress) {
 }
 
 /**
- * Initialize enhanced navigation system
- * @returns {Object} Navigation API
+ * Initialize ship navigation system
+ * @returns {Object} Ship navigation API
  */
-export function initEnhancedNavigation() {
+export function initShipNavigation() {
   // Get required DOM elements
   const elements = {
     viewToggleBtn: document.getElementById("view-toggle-btn"),
@@ -233,46 +234,18 @@ export function initEnhancedNavigation() {
     body: document.body,
   };
 
-  // Initialize standard navigation
-  const { scrollToSection } = initNavigation();
-
-  // Override the click handler for navigation links
+  // Handle navigation link clicks in game view only
   document.addEventListener("click", (e) => {
     const link = e.target.closest(".nav-link");
-    if (link) {
+    if (link && isGameView()) {
       e.preventDefault();
       const sectionId = link.getAttribute("data-target");
-
-      // Start ship navigation to the section's island
-      navigateShipToSection(sectionId, elements).catch((error) => {
-        console.error("Navigation failed:", error);
-        // Fallback to regular scrolling
-        scrollToSection(sectionId);
-      });
-    }
-  });
-
-  // Extend player.js with needed functions if not already available
-  import("./game/player.js").then((playerModule) => {
-    // Save original update function
-    playerModule._originalUpdatePlayer = playerModule.updatePlayer;
-
-    // Add a getter for the player model if not available
-    if (!playerModule.getPlayerModel) {
-      playerModule.getPlayerModel = function () {
-        return playerModule.player?.model || null;
-      };
+      navigateShipToSection(sectionId, elements);
     }
   });
 
   return {
-    scrollToSection,
     navigateShipToSection: (sectionId) =>
       navigateShipToSection(sectionId, elements),
   };
-}
-
-//TODO: Make it so ship navigation is only added if we're not on a low powered/doodoo device.
-export function initShipNavigation() {
-  return initEnhancedNavigation();
 }

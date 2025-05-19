@@ -43,20 +43,22 @@ const safelyRunCommand = (command, args, options = {}) => {
     });
 
     childProcess.on("error", (error) => {
-      reject({ error, stdout, stderr });
+      reject(new Error({ error, stdout, stderr }));
     });
 
     childProcess.on("close", (code) => {
       if (code === 0) {
         resolve({ success: true, stdout, stderr });
       } else {
-        reject({
-          success: false,
-          code,
-          stdout,
-          stderr,
-          error: new Error(`Command exited with code ${code}`),
-        });
+        reject(
+          new Error({
+            success: false,
+            code,
+            stdout,
+            stderr,
+            error: new Error(`Command exited with code ${code}`),
+          })
+        );
       }
     });
   });
@@ -143,6 +145,8 @@ const audioCompressionPlugin = () => {
                     path.join(outputDir, outputFileName),
                   ];
                   break;
+                case ".flac":
+
                 case ".wav":
                   outputFileName = `${fileName}.${hash}.mp3`;
                   outputFormat = "mp3";
@@ -182,19 +186,6 @@ const audioCompressionPlugin = () => {
                     path.join(outputDir, outputFileName),
                   ];
                   break;
-                case ".flac":
-                  outputFileName = `${fileName}.${hash}.mp3`;
-                  outputFormat = "mp3";
-                  ffmpegArgs = [
-                    "-i",
-                    inputPath,
-                    "-c:a",
-                    "libmp3lame",
-                    "-b:a",
-                    "192k",
-                    path.join(outputDir, outputFileName),
-                  ];
-                  break;
                 default:
                   throw new Error(`Unsupported audio format: ${fileExt}`);
               }
@@ -202,8 +193,7 @@ const audioCompressionPlugin = () => {
               if (ffmpegArgs) {
                 console.log(`Compressing: ${file} -> ${outputFileName}`);
 
-                // Use the safer spawn method instead of exec
-                const result = await safelyRunCommand("ffmpeg", ffmpegArgs);
+                await safelyRunCommand("ffmpeg", ffmpegArgs);
                 console.log(`Successfully compressed ${file}`);
                 return { file, success: true, outputFormat };
               }

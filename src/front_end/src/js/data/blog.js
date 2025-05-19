@@ -1,6 +1,6 @@
 import fallback from "/images/you_can_do_it.jpeg";
 import cupil from "/images/cupil.png";
-
+import me from "/images/me.png";
 const BlogTag = Object.freeze({
   GENERAL: "General",
   REAL: "Real",
