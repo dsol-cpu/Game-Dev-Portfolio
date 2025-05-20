@@ -1,9 +1,9 @@
 /**
- * Enhanced Device Performance Detection Module
+ * Device Performance Detection Module
  *
- * A highly optimized, progressive enhancement approach to device capability detection
- * with caching, memoization, and advanced hardware fingerprinting.
- */
+ * Checks the device performance
+ *
+ * */
 
 // Constants and configuration
 export const PERFORMANCE_LEVELS = Object.freeze({

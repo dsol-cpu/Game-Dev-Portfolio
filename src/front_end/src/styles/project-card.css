@@ -366,68 +366,12 @@
   transform: translateY(-2px);
 }
 
-.backdrop {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.3s ease;
-  user-select: none;
-  pointer-events: none;
-  z-index: 8; /* Below expanded card but above other elements */
-}
-
-.backdrop.active {
-  opacity: 1;
-  visibility: visible;
-  pointer-events: auto;
-}
-
-/* Fixed: Canvas positioned at z-index 9, between backdrop and card content */
-.threejs-canvas {
-  z-index: 9; /* Higher than backdrop (8) but lower than card content (10+) */
-}
-
-/* Make canvas visible through backdrop */
-.backdrop.active ~ .game-preview.expanded .threejs-canvas {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  z-index: 9; /* Position between backdrop and expanded card */
-  pointer-events: auto; /* Allow interaction with the canvas */
-}
-
 /* Canvas container for expanded mode */
 .canvas-container {
   position: absolute;
   height: 240px;
   width: 100%;
   z-index: 1;
-}
-
-/* Ensure the expanded card with backdrop active has transparent body */
-.backdrop.active ~ .game-preview.expanded {
-  background-color: transparent;
-  z-index: 10; /* Above canvas but below close button */
-}
-
-/* Make expanded content background more transparent to see canvas */
-.backdrop.active ~ .game-preview.expanded .expanded-content {
-  background: rgba(255, 255, 255, 0.7); /* More transparent */
-  z-index: 10; /* Above canvas */
-}
-
-/* Ensure the expanded-content-inner stays above canvas */
-.backdrop.active ~ .game-preview.expanded .expanded-content-inner {
-  z-index: 10; /* Above canvas */
 }
 
 .model-view-window {
@@ -465,4 +409,49 @@
   transition: opacity 0.3s;
   pointer-events: none;
   z-index: 11; /* Ensure it's visible above canvas */
+}
+
+.hidden-card {
+  opacity: 0;
+  position: absolute;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0s linear 0.3s;
+  pointer-events: none;
+}
+
+/* Center the expanded card within its section */
+.section-centered-card {
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 100 !important;
+  margin: 0 !important;
+}
+
+/* Make sure the card has room to expand */
+.game-preview.project-card.expanded.section-centered-card {
+  width: 90%;
+  max-width: 800px;
+  max-height: 80vh;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+}
+
+/* Prevent body scroll when card is expanded */
+body.overflow-hidden {
+  overflow: hidden;
+}
+
+/* Make the portfolio section position relative for proper card centering */
+#portfolio {
+  position: relative !important;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .game-preview.project-card.expanded.section-centered-card {
+    width: 95%;
+    max-width: 500px;
+  }
 }

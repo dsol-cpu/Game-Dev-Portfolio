@@ -1,46 +1,21 @@
-/**
- * @fileoverview Unified project card system with 3D model integration
- */
-
 import {
   PerspectiveCamera,
   Raycaster,
   Vector3,
 } from "../extern/three/three.module.min.js";
-import { updateOverlay } from "../grid-overlay.js";
 import { isLowPoweredDevice } from "../utils/device";
 import { calculateModelPositions, getModel } from "./model-manager.js";
 import { getScene, registerCamera } from "./threejs-manager.js";
 import { debounce } from "../utils/helper.js";
 import { PROJECT_CARD_DATA } from "../data/projects.js";
-import { random } from "../utils/random.js";
 
-// DOM cache and scene references
 const domCache = {};
 let scene = null;
 let projectCamera = null;
 let cameraIndex = -1;
 let raycaster = null;
-let currentFocusedProject = null;
-let projectModels = new Map(); // model name -> model reference
-let animationFrameId = null;
-let viewWindowPositions = new Map(); // model name -> viewport position
-
-/**
- * DOM and UI helpers
- */
-function createElement(tag, className, attributes = {}) {
-  const el = document.createElement(tag);
-  if (className) el.className = className;
-  Object.entries(attributes).forEach(([key, val]) => {
-    if (val != null) {
-      key === "textContent"
-        ? (el.textContent = val)
-        : el.setAttribute(key, val);
-    }
-  });
-  return el;
-}
+let projectModels = new Map();
+let viewWindowPositions = new Map();
 
 function getElement(selector, cacheProp) {
   return (
@@ -49,83 +24,85 @@ function getElement(selector, cacheProp) {
   );
 }
 
-function getBackdrop() {
-  if (domCache.backdrop) return domCache.backdrop;
-
-  let backdrop = document.querySelector(".backdrop");
-  if (!backdrop) {
-    backdrop = createElement("div", "backdrop");
-    backdrop.onclick = (e) => {
-      const expandedCard = document.querySelector(".game-preview.expanded");
-      if (expandedCard) toggleExpand(e, expandedCard.id);
-    };
-    document.body.appendChild(backdrop);
-  }
-  domCache.backdrop = backdrop;
-  return backdrop;
+function createElement(tag, className, attributes = {}) {
+  const el = document.createElement(tag);
+  if (className) el.className = className;
+  Object.entries(attributes).forEach(([key, val]) => {
+    if (val == null) return;
+    key === "textContent" ? (el.textContent = val) : el.setAttribute(key, val);
+  });
+  return el;
 }
 
-/**
- * Project card functionality
- */
-function createProjectCard(project) {
-  if (!project?.id) return null;
+function createButtons(project, buttonType, projectId) {
+  const fragment = document.createDocumentFragment();
 
-  const card = createElement("div", "game-preview project-card", {
-    id: project.id,
-    "data-category": project.category || project.tags?.[0]?.toLowerCase() || "",
-    "data-model": project.modelName || "",
-  });
-
-  const imageContainer = createElement(
-    "div",
-    "game-image-container portfolio-canvas"
-  );
-  const isLowPower = isLowPoweredDevice();
-
-  // Add container based on device capability
-  if (isLowPower) {
-    addStaticImage(imageContainer, project);
-  } else {
-    addModelViewWindow(imageContainer, project);
+  if (buttonType === "overlay") {
+    const viewBtn = createElement("button", "btn btn-view", {
+      textContent: "View Details",
+    });
+    viewBtn.onclick = (e) => toggleExpand(e, projectId);
+    fragment.appendChild(viewBtn);
+    return fragment;
   }
 
-  // Add close button
-  const closeBtn = createElement("button", "btn-close", { textContent: "×" });
-  closeBtn.onclick = (e) => toggleExpand(e, project.id);
-  imageContainer.appendChild(closeBtn);
+  if (buttonType !== "action") return fragment;
 
-  // Create overlay with title and buttons
-  const overlay = createElement("div", "game-overlay");
-  overlay.appendChild(
-    createElement("h3", "game-title", {
-      textContent: project.title || "Untitled Project",
-    })
-  );
-  overlay.appendChild(createButtons(project, "overlay", project.id));
+  if (project.demoUrl) {
+    const demoButton = createElement("a", "btn btn-primary", {
+      href: project.demoUrl,
+      target: "_blank",
+      rel: "noopener noreferrer",
+    });
+    demoButton.innerHTML = `<svg aria-hidden="true"><use href="#icon-play-btn" /></svg><span>Live Demo</span>`;
+    fragment.appendChild(demoButton);
+  }
 
-  // Create expanded content
-  card.append(
-    imageContainer,
-    overlay,
-    createExpandedContent(project, project.id)
-  );
-  card.projectData = project;
-  return card;
+  if (project.githubUrl) {
+    const sourceButton = createElement("a", "btn btn-secondary", {
+      href: project.githubUrl,
+      target: "_blank",
+      rel: "noopener noreferrer",
+    });
+
+    let iconSvg;
+    if (project.githubUrl.includes("github.com")) {
+      iconSvg = `<svg aria-hidden="true"><use href="#icon-github" /></svg>`;
+    } else if (project.githubUrl.includes("gitlab.com")) {
+      iconSvg = `<svg aria-hidden="true"><use href="#icon-gitlab" /></svg>`;
+    } else if (project.githubUrl.includes("itch.io")) {
+      iconSvg = `<svg aria-hidden="true"><use href="#icon-itch" /></svg>`;
+    } else {
+      iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>`;
+    }
+
+    sourceButton.innerHTML = `${iconSvg}<span>Source Code</span>`;
+    fragment.appendChild(sourceButton);
+  }
+
+  const closeBtn = createElement("button", "btn btn-close-expanded", {
+    textContent: "Close",
+  });
+  closeBtn.onclick = (e) => toggleExpand(e, projectId);
+  fragment.appendChild(closeBtn);
+
+  return fragment;
 }
 
 function addStaticImage(container, project) {
+  if (!project.imageUrl) return;
+
   const imageElement = createElement("div", "game-image");
-  if (project.imageUrl) {
-    imageElement.style.backgroundImage = `url(${project.imageUrl})`;
-    container.appendChild(
-      createElement("img", "fallback-image", {
-        src: project.imageUrl,
-        alt: project.title || "Project image",
-        loading: "lazy",
-      })
-    );
-  }
+  imageElement.style.backgroundImage = `url(${project.imageUrl})`;
+
+  container.appendChild(
+    createElement("img", "fallback-image", {
+      src: project.imageUrl,
+      alt: project.title || "Project image",
+      loading: "lazy",
+    })
+  );
+
   container.appendChild(imageElement);
 }
 
@@ -133,12 +110,12 @@ function addModelViewWindow(container, project) {
   const viewWindow = createElement("div", "model-view-window", {
     "data-model-name": project.modelName || "",
   });
+
   const scrollContainer = createElement("div", "model-view-scroll-container");
   const interactionHint = createElement("div", "model-interaction-hint", {
     textContent: "Drag to rotate",
   });
 
-  // Show/hide hint on hover
   viewWindow.addEventListener(
     "mouseenter",
     () => (interactionHint.style.opacity = "0.7"),
@@ -165,7 +142,6 @@ function createExpandedContent(project, projectId) {
     })
   );
 
-  // Add tags
   const tagsContainer = createElement("div", "project-tags");
   if (project.tags?.length) {
     const fragment = document.createDocumentFragment();
@@ -178,7 +154,6 @@ function createExpandedContent(project, projectId) {
   }
   inner.appendChild(tagsContainer);
 
-  // Add descriptions
   if (project.shortDescription) {
     inner.appendChild(
       createElement("p", "project-description", {
@@ -197,11 +172,50 @@ function createExpandedContent(project, projectId) {
     });
   }
 
-  // Add action buttons
   inner.appendChild(createButtons(project, "action", projectId));
   expanded.appendChild(inner);
 
   return expanded;
+}
+
+function createProjectCard(project) {
+  if (!project?.id) return null;
+
+  const card = createElement("div", "game-preview project-card", {
+    id: project.id,
+    "data-category": project.category || project.tags?.[0]?.toLowerCase() || "",
+    "data-model": project.modelName || "",
+  });
+
+  const imageContainer = createElement(
+    "div",
+    "game-image-container portfolio-canvas"
+  );
+  const isLowPower = isLowPoweredDevice();
+
+  isLowPower
+    ? addStaticImage(imageContainer, project)
+    : addModelViewWindow(imageContainer, project);
+
+  const closeBtn = createElement("button", "btn-close", { textContent: "×" });
+  closeBtn.onclick = (e) => toggleExpand(e, project.id);
+  imageContainer.appendChild(closeBtn);
+
+  const overlay = createElement("div", "game-overlay");
+  overlay.appendChild(
+    createElement("h3", "game-title", {
+      textContent: project.title || "Untitled Project",
+    })
+  );
+  overlay.appendChild(createButtons(project, "overlay", project.id));
+
+  card.append(
+    imageContainer,
+    overlay,
+    createExpandedContent(project, project.id)
+  );
+  card.projectData = project;
+  return card;
 }
 
 function toggleExpand(e, id) {
@@ -214,161 +228,425 @@ function toggleExpand(e, id) {
   if (!card) return;
 
   const expanding = !card.classList.contains("expanded");
-
-  // Collapse other expanded cards
-  document.querySelectorAll(".game-preview.expanded").forEach((el) => {
-    if (el.id !== id) el.classList.remove("expanded", "expand-left");
-  });
-
-  // Toggle expanded state
-  card.classList.toggle("expanded", expanding);
+  const allCards = document.querySelectorAll(".game-preview.project-card");
+  const currentModelName = card.getAttribute("data-model");
 
   if (expanding) {
-    const rect = card.getBoundingClientRect();
-    card.classList.toggle("expand-left", rect.right + 160 > window.innerWidth);
-  } else {
-    card.classList.remove("expand-left");
-  }
-
-  // Handle backdrop and body scroll
-  const backdrop = getBackdrop();
-  if (backdrop) backdrop.classList.toggle("active", expanding);
-  document.body.classList.toggle("overflow-hidden", expanding);
-
-  updateOverlay();
-}
-
-function createButtons(project, buttonType, projectId) {
-  const fragment = document.createDocumentFragment();
-
-  if (buttonType === "overlay") {
-    // Create "View Details" button for the overlay
-    const viewBtn = createElement("button", "btn btn-view", {
-      textContent: "View Details",
-    });
-    viewBtn.onclick = (e) => toggleExpand(e, projectId);
-    fragment.appendChild(viewBtn);
-  } else if (buttonType === "action") {
-    // Create action buttons for expanded view
-    if (project.demoUrl) {
-      // Create Live Demo button with proper styling
-      const demoButton = createElement("a", "btn btn-primary", {
-        href: project.demoUrl,
-        target: "_blank",
-        rel: "noopener noreferrer",
-      });
-
-      // Add play icon and text to demo button
-      demoButton.innerHTML = `
-        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polygon points="5 3 19 12 5 21 5 3"></polygon>
-        </svg>
-        <span>Live Demo</span>
-      `;
-      fragment.appendChild(demoButton);
-    }
-
-    if (project.githubUrl) {
-      // Create source code button
-      const sourceButton = createElement("a", "btn btn-secondary", {
-        href: project.githubUrl,
-        target: "_blank",
-        rel: "noopener noreferrer",
-      });
-
-      // Determine which icon to use based on URL
-      let iconSvg;
-      if (project.githubUrl.includes("github.com")) {
-        // GitHub icon
-        iconSvg = `
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path>
-          </svg>
-        `;
-      } else if (project.githubUrl.includes("gitlab.com")) {
-        // GitLab icon
-        iconSvg = `
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M22.65 14.39L12 22.13 1.35 14.39a.84.84 0 0 1-.3-.94l1.22-3.78 2.44-7.51A.42.42 0 0 1 4.82 2a.43.43 0 0 1 .58 0 .42.42 0 0 1 .11.18l2.44 7.49h8.1l2.44-7.51A.42.42 0 0 1 18.6 2a.43.43 0 0 1 .58 0 .42.42 0 0 1 .11.18l2.44 7.51L23 13.45a.84.84 0 0 1-.35.94z"></path>
-          </svg>
-        `;
-      } else if (project.githubUrl.includes("itch.io")) {
-        // Itch.io icon
-        iconSvg = `
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M3 5v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2zm12 10l-4-4-4 4V5h8v10z"></path>
-          </svg>
-        `;
-      } else {
-        // Generic code icon for other repositories
-        iconSvg = `
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="16 18 22 12 16 6"></polyline>
-            <polyline points="8 6 2 12 8 18"></polyline>
-          </svg>
-        `;
+    projectModels.forEach((model, modelName) => {
+      if (modelName !== currentModelName) {
+        model.userData.wasVisible = model.visible;
+        model.visible = false;
       }
+    });
 
-      sourceButton.innerHTML = `${iconSvg}<span>Source Code</span>`;
-      fragment.appendChild(sourceButton);
+    if (currentModelName && projectModels.has(currentModelName)) {
+      const currentModel = projectModels.get(currentModelName);
+      currentModel.visible = true;
+      currentModel.userData.preExpandPosition = currentModel.position.clone();
+
+      const viewWindow = card.querySelector(".model-view-window");
+
+      setTimeout(() => {
+        cacheViewWindowPositions();
+        const viewPos = viewWindowPositions.get(currentModelName);
+
+        if (viewPos) {
+          const targetPosition = calculateModelPositionForExpandedCard(
+            currentModelName,
+            viewWindow
+          );
+          const enhancedScale = currentModel.userData.initialScale * 1.2;
+
+          animateModelTransition(
+            currentModel,
+            currentModel.position.clone(),
+            targetPosition,
+            currentModel.scale.x,
+            enhancedScale,
+            500
+          );
+        }
+      }, 50);
     }
 
-    // Add close button for mobile
-    const closeBtn = createElement("button", "btn btn-close-expanded", {
-      textContent: "Close",
+    allCards.forEach((otherCard) => {
+      if (otherCard.id !== id) {
+        otherCard.classList.add("hidden-card");
+      }
     });
-    closeBtn.onclick = (e) => toggleExpand(e, projectId);
-    fragment.appendChild(closeBtn);
+
+    card.classList.add("expanded", "centered-card");
+    card.scrollIntoView({ behavior: "smooth", block: "center" });
+  } else {
+    if (currentModelName && projectModels.has(currentModelName)) {
+      const currentModel = projectModels.get(currentModelName);
+      const originalScale = currentModel.userData.initialScale || 1;
+      const originalPosition =
+        currentModel.userData.preExpandPosition ||
+        currentModel.userData.originalPosition ||
+        new Vector3(0, 0, 10);
+
+      animateModelTransition(
+        currentModel,
+        currentModel.position.clone(),
+        originalPosition,
+        currentModel.scale.x,
+        originalScale,
+        350
+      );
+    }
+
+    card.classList.remove("expanded", "centered-card");
+
+    setTimeout(() => {
+      allCards.forEach((otherCard) => {
+        otherCard.classList.remove("hidden-card");
+      });
+
+      projectModels.forEach((model, modelName) => {
+        if (model.userData.wasVisible !== undefined) {
+          model.visible = model.userData.wasVisible;
+          delete model.userData.wasVisible;
+        } else {
+          model.visible = true;
+        }
+      });
+
+      setTimeout(updateModelPositions, 150);
+    }, 300);
   }
 
-  return fragment;
-}
-const grid = getElement(".project-card-grid", "portfolioGrid");
-/**
- * Initialize project cards and 3D scene
- */
-export function initProjectCards() {
-  renderProjectsGrid(PROJECT_CARD_DATA);
-  getBackdrop(); // Initialize backdrop
+  document.body.classList.toggle("overflow-hidden", expanding);
 }
 
-function renderProjectsGrid(projects) {
-  if (!Array.isArray(projects)) return;
+function cubicBezier(x1, y1, x2, y2, t) {
+  const cx = 3 * x1;
+  const bx = 3 * (x2 - x1) - cx;
+  const ax = 1 - cx - bx;
 
-  const fragment = document.createDocumentFragment();
-  projects.forEach((project) => {
-    const card = createProjectCard(project);
-    if (card) fragment.appendChild(card);
+  const cy = 3 * y1;
+  const by = 3 * (y2 - y1) - cy;
+  const ay = 1 - cy - by;
+
+  function sampleCurveX(t) {
+    return ((ax * t + bx) * t + cx) * t;
+  }
+
+  function sampleCurveY(t) {
+    return ((ay * t + by) * t + cy) * t;
+  }
+
+  function solveCurveX(x) {
+    let t2 = x;
+    const epsilon = 1e-6;
+    let d2, i;
+
+    for (i = 0; i < 8; i++) {
+      d2 = sampleCurveX(t2) - x;
+      if (Math.abs(d2) < epsilon) return t2;
+      let d1 = (3 * ax * t2 + 2 * bx) * t2 + cx;
+      if (Math.abs(d1) < 1e-6) break;
+      t2 = t2 - d2 / d1;
+    }
+
+    let t0 = 0;
+    let t1 = 1;
+    t2 = x;
+
+    if (t2 < t0) return t0;
+    if (t2 > t1) return t1;
+
+    while (t0 < t1) {
+      d2 = sampleCurveX(t2);
+      if (Math.abs(d2 - x) < epsilon) break;
+      if (x > d2) t0 = t2;
+      else t1 = t2;
+      t2 = (t1 - t0) * 0.5 + t0;
+    }
+
+    return t2;
+  }
+
+  return sampleCurveY(solveCurveX(t));
+}
+
+function animateModelTransition(
+  model,
+  fromPosition,
+  toPosition,
+  fromScale,
+  toScale,
+  duration = 500
+) {
+  if (!model) return;
+
+  // Cancel any ongoing animation
+  if (model.userData.transitionAnimationId) {
+    cancelAnimationFrame(model.userData.transitionAnimationId);
+  }
+
+  const startTime = performance.now();
+  const wasAnimating = model.userData.animate;
+  model.userData.animate = false;
+
+  // Pre-compute values that don't change during animation
+  const scaleDiff = toScale - fromScale;
+
+  // Use a shared function for animation to reduce memory allocation
+  function animate(currentTime) {
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+
+    // Use pre-computed lookup table for cubic-bezier
+    const easedProgress = cubicBezierLookup(progress);
+
+    // Use vector operations directly instead of lerpVectors to avoid object creation
+    model.position.x =
+      fromPosition.x + (toPosition.x - fromPosition.x) * easedProgress;
+    model.position.y =
+      fromPosition.y + (toPosition.y - fromPosition.y) * easedProgress;
+    model.position.z =
+      fromPosition.z + (toPosition.z - fromPosition.z) * easedProgress;
+
+    // Calculate scale only once and reuse
+    const currentScale = fromScale + scaleDiff * easedProgress;
+    model.scale.set(currentScale, currentScale, currentScale);
+
+    // Only update matrix when needed
+    model.matrixWorldNeedsUpdate = true;
+
+    if (progress < 1) {
+      model.userData.transitionAnimationId = requestAnimationFrame(animate);
+    } else {
+      delete model.userData.transitionAnimationId;
+      model.userData.animate = wasAnimating;
+      model.updateMatrix();
+      model.updateMatrixWorld(true);
+    }
+  }
+
+  model.userData.transitionAnimationId = requestAnimationFrame(animate);
+}
+
+const BEZIER_TABLE_SIZE = 100;
+const cubicBezierTable = new Float32Array(BEZIER_TABLE_SIZE + 1);
+
+// Initialize the lookup table only once
+(function initBezierTable() {
+  for (let i = 0; i <= BEZIER_TABLE_SIZE; i++) {
+    const t = i / BEZIER_TABLE_SIZE;
+    cubicBezierTable[i] = cubicBezier(0.33, 1, 0.68, 1, t);
+  }
+})();
+
+function cubicBezierLookup(t) {
+  // Fast path for common cases
+  if (t <= 0) return 0;
+  if (t >= 1) return 1;
+
+  // Use lookup table with linear interpolation between points
+  const index = t * BEZIER_TABLE_SIZE;
+  const lowerIndex = Math.floor(index);
+  const upperIndex = Math.min(lowerIndex + 1, BEZIER_TABLE_SIZE);
+  const fraction = index - lowerIndex;
+
+  return (
+    cubicBezierTable[lowerIndex] +
+    (cubicBezierTable[upperIndex] - cubicBezierTable[lowerIndex]) * fraction
+  );
+}
+
+function calculateModelPositionForExpandedCard(modelName, viewWindow) {
+  if (!viewWindow) return new Vector3(0, 0, 10);
+
+  const card = viewWindow.closest(".project-card");
+  if (!card) return new Vector3(0, 0, 10);
+
+  const cardRect = viewWindow.getBoundingClientRect();
+  const canvas = domCache.mainCanvas;
+  const canvasRect = canvas?.getBoundingClientRect();
+
+  if (!canvasRect) return new Vector3(0, 0, 10);
+
+  const x =
+    ((cardRect.left + cardRect.width / 2 - canvasRect.left) /
+      canvasRect.width) *
+      2 -
+    1;
+  const y = -(
+    ((cardRect.top + cardRect.height / 2 - canvasRect.top) /
+      canvasRect.height) *
+      2 -
+    1
+  );
+
+  const vector = new Vector3(x, y, 0.5);
+  vector.unproject(projectCamera);
+  vector.sub(projectCamera.position).normalize();
+
+  const zDistance = 7;
+  vector.multiplyScalar(zDistance);
+  vector.add(projectCamera.position);
+
+  return vector;
+}
+
+function getModelSize(model) {
+  const box = model.userData.boundingBox;
+  if (box) {
+    return Math.max(
+      box.max.x - box.min.x,
+      box.max.y - box.min.y,
+      box.max.z - box.min.z
+    );
+  }
+  return 2;
+}
+
+function positionModelForItem(model, modelName) {
+  if (!model || !modelName) return;
+
+  const viewPos = viewWindowPositions.get(modelName);
+  if (!viewPos) return;
+
+  const modelSize = getModelSize(model);
+  const containerScale = Math.min(viewPos.width, viewPos.height) * 7;
+  const finalScale = Math.min(0.15, (containerScale / modelSize) * 0.15);
+
+  model.scale.set(finalScale, finalScale, finalScale);
+
+  if (!model.userData.initialScale) {
+    model.userData.initialScale = finalScale;
+    model.userData.currentScale = model.scale.clone();
+  }
+
+  const zDistance = Math.max(6, modelSize * 3);
+  const vector = new Vector3(viewPos.x, viewPos.y, 0.5);
+  vector.unproject(projectCamera);
+  vector.sub(projectCamera.position).normalize();
+  vector.multiplyScalar(zDistance);
+  vector.add(projectCamera.position);
+
+  model.position.copy(vector);
+
+  if (model.userData.originalRotation) {
+    model.rotation.copy(model.userData.originalRotation);
+  } else {
+    model.rotation.set(0, Math.PI, 0);
+    model.userData.originalRotation = model.rotation.clone();
+  }
+
+  if (!model.userData.originalPosition) {
+    model.userData.originalPosition = model.position.clone();
+  }
+
+  model.updateMatrix();
+  model.updateMatrixWorld(true);
+}
+
+function updateModelPositions() {
+  cacheViewWindowPositions();
+
+  projectModels.forEach((model, modelName) => {
+    if (model.userData.transitionAnimationId) return;
+
+    const card = document.querySelector(
+      `.project-card[data-model="${modelName}"]`
+    );
+    if (!card) return;
+
+    const isExpanded = card.classList.contains("expanded");
+    const viewPos = viewWindowPositions.get(modelName);
+    if (!viewPos) return;
+
+    if (isExpanded) {
+      const viewWindow = card.querySelector(".model-view-window");
+      if (viewWindow) {
+        const targetPosition = calculateModelPositionForExpandedCard(
+          modelName,
+          viewWindow
+        );
+        const enhancedScale = model.userData.initialScale * 1.2;
+
+        if (model.position.distanceTo(targetPosition) > 0.1) {
+          animateModelTransition(
+            model,
+            model.position.clone(),
+            targetPosition,
+            model.scale.x,
+            enhancedScale,
+            350
+          );
+        }
+      }
+    } else {
+      positionModelForItem(model, modelName);
+    }
+  });
+}
+
+function cacheViewWindowPositions() {
+  const windows = document.querySelectorAll(".model-view-window");
+  const canvas = domCache.mainCanvas;
+  const canvasRect = canvas?.getBoundingClientRect();
+
+  if (!canvasRect) return;
+
+  // Don't clear and recreate map - update existing entries
+  const newModelNames = new Set();
+
+  // Pre-calculate canvas dimensions for faster calculations
+  const canvasWidth = canvasRect.width;
+  const canvasHeight = canvasRect.height;
+  const canvasLeft = canvasRect.left;
+  const canvasTop = canvasRect.top;
+  const invCanvasWidth = 2 / canvasWidth;
+  const invCanvasHeight = 2 / canvasHeight;
+
+  windows.forEach((viewWindow) => {
+    const modelName = viewWindow.dataset.modelName;
+    if (!modelName) return;
+
+    newModelNames.add(modelName);
+    const windowRect = viewWindow.getBoundingClientRect();
+
+    // Calculate center points and dimensions only once
+    const centerX = windowRect.left + windowRect.width / 2 - canvasLeft;
+    const centerY = windowRect.top + windowRect.height / 2 - canvasTop;
+
+    // Faster coordinate calculations
+    const x = centerX * invCanvasWidth - 1;
+    const y = -(centerY * invCanvasHeight - 1);
+
+    // Reuse existing position object if available
+    let position = viewWindowPositions.get(modelName);
+    if (position) {
+      position.x = x;
+      position.y = y;
+      position.width = windowRect.width / canvasWidth;
+      position.height = windowRect.height / canvasHeight;
+      position.pixelWidth = windowRect.width;
+      position.pixelHeight = windowRect.height;
+      position.rect = windowRect;
+    } else {
+      viewWindowPositions.set(modelName, {
+        x,
+        y,
+        width: windowRect.width / canvasWidth,
+        height: windowRect.height / canvasHeight,
+        pixelWidth: windowRect.width,
+        pixelHeight: windowRect.height,
+        rect: windowRect,
+      });
+    }
   });
 
-  grid.appendChild(fragment);
-}
-
-/**
- * 3D scene functionality
- */
-export function initProjectCardScene() {
-  if (isLowPoweredDevice()) return;
-
-  scene = getScene();
-  raycaster = new Raycaster();
-
-  // Create main canvas
-  const canvas = createMainCanvas();
-  if (!canvas) return;
-  domCache.mainCanvas = canvas;
-
-  // Get model names from portfolio items
-  const modelNames = Array.from(document.querySelectorAll(".project-card"))
-    .map((item) => item.getAttribute("data-model"))
-    .filter(Boolean);
-
-  // Setup scene components
-  calculateModelPositions(modelNames);
-  setupMainCamera(canvas);
-  cacheViewWindowPositions();
-  setupProjects();
-  setupInteractions();
+  // Remove positions for models that no longer exist
+  for (const modelName of viewWindowPositions.keys()) {
+    if (!newModelNames.has(modelName)) {
+      viewWindowPositions.delete(modelName);
+    }
+  }
 }
 
 function createMainCanvas() {
@@ -413,30 +691,6 @@ function setupMainCamera(canvas) {
   cameraIndex = registerCamera(projectCamera, ctx);
 }
 
-async function setupProjects() {
-  const loadPromises = [];
-
-  document.querySelectorAll(".project-card").forEach((item) => {
-    const modelName = item.getAttribute("data-model");
-    if (!modelName) return;
-
-    loadPromises.push(
-      loadProjectModel(modelName)
-        .then((model) => {
-          if (model) {
-            projectModels.set(modelName, model);
-            positionModelForItem(model, modelName);
-          }
-        })
-        .catch((err) =>
-          console.error(`Failed to load model ${modelName}:`, err)
-        )
-    );
-  });
-
-  await Promise.all(loadPromises);
-}
-
 async function loadProjectModel(modelName) {
   if (!modelName) return null;
 
@@ -456,211 +710,7 @@ async function loadProjectModel(modelName) {
   }
 }
 
-function cacheViewWindowPositions() {
-  const windows = document.querySelectorAll(".model-view-window");
-  const canvas = domCache.mainCanvas;
-  const canvasRect = canvas?.getBoundingClientRect();
-
-  if (!canvasRect) return;
-  viewWindowPositions.clear();
-
-  windows.forEach((viewWindow) => {
-    const modelName = viewWindow.dataset.modelName;
-    if (!modelName) return;
-
-    const windowRect = viewWindow.getBoundingClientRect();
-
-    viewWindowPositions.set(modelName, {
-      x:
-        ((windowRect.left + windowRect.width / 2 - canvasRect.left) /
-          canvasRect.width) *
-          2 -
-        1,
-      y: -(
-        ((windowRect.top + windowRect.height / 2 - canvasRect.top) /
-          canvasRect.height) *
-          2 -
-        1
-      ),
-      width: windowRect.width / canvasRect.width,
-      height: windowRect.height / canvasRect.height,
-      pixelWidth: windowRect.width,
-      pixelHeight: windowRect.height,
-    });
-  });
-}
-
-function positionModelForItem(model, modelName) {
-  if (!model || !modelName) return;
-
-  const viewPos = viewWindowPositions.get(modelName);
-  if (!viewPos) return;
-
-  // Scale model to fit view window
-  const modelSize = getModelSize(model);
-  const containerScale = Math.min(viewPos.width, viewPos.height) * 10;
-  const finalScale = Math.min(0.15, (containerScale / modelSize) * 0.15);
-
-  model.scale.set(finalScale, finalScale, finalScale);
-
-  if (!model.userData.initialScale) {
-    model.userData.initialScale = finalScale;
-    model.userData.currentScale = model.scale.clone();
-  }
-
-  // Position model in 3D space
-  const zDistance = Math.max(6, modelSize * 3);
-  const vector = new Vector3(viewPos.x, viewPos.y, 0.5);
-  vector.unproject(projectCamera);
-  vector.sub(projectCamera.position).normalize();
-  vector.multiplyScalar(zDistance);
-  vector.add(projectCamera.position);
-
-  model.position.copy(vector);
-  model.rotation.set(0, Math.PI, 0);
-
-  if (!model.userData.originalPosition) {
-    model.userData.originalPosition = model.position.clone();
-  }
-  if (!model.userData.originalRotation) {
-    model.userData.originalRotation = model.rotation.clone();
-  }
-
-  model.updateMatrix();
-  model.updateMatrixWorld(true);
-}
-
-function getModelSize(model) {
-  const box = model.userData.boundingBox;
-  if (box) {
-    return Math.max(
-      box.max.x - box.min.x,
-      box.max.y - box.min.y,
-      box.max.z - box.min.z
-    );
-  }
-  return 2; // Default size
-}
-
-/**
- * Interactions and animations
- */
-function setupInteractions() {
-  const canvas = domCache.mainCanvas;
-  if (!canvas) return;
-
-  // Setup resize and interaction handlers
-  window.addEventListener("resize", debounce(handleResize, 100));
-  setupDragInteraction();
-  setupScrollInteraction();
-  setupResizeObserver();
-}
-
-function handleResize() {
-  const canvas = domCache.mainCanvas;
-  if (canvas && projectCamera) {
-    canvas.width = canvas.clientWidth;
-    canvas.height = canvas.clientHeight;
-    projectCamera.aspect = canvas.width / canvas.height;
-    projectCamera.updateProjectionMatrix();
-    cacheViewWindowPositions();
-    updateModelPositions();
-  }
-}
-
-// Drag interaction state and handlers
-function setupDragInteraction() {
-  const dragState = {
-    active: false,
-    model: null,
-    startX: 0,
-    startY: 0,
-    lastX: 0,
-    lastY: 0,
-    rotationSpeed: { x: 0, y: 0 },
-  };
-
-  // Add drag handlers to model view windows
-  document.querySelectorAll(".model-view-window").forEach((viewWindow) => {
-    const modelName = viewWindow.dataset.modelName;
-    if (!modelName) return;
-
-    // Mouse events
-    viewWindow.addEventListener(
-      "mousedown",
-      (e) => {
-        if (e.button !== 0) return;
-        startDrag(e, modelName, e.clientX, e.clientY, dragState, viewWindow);
-      },
-      { passive: true }
-    );
-
-    // Touch events
-    viewWindow.addEventListener(
-      "touchstart",
-      (e) => {
-        if (e.touches.length !== 1) return;
-        const touch = e.touches[0];
-        startDrag(
-          e,
-          modelName,
-          touch.clientX,
-          touch.clientY,
-          dragState,
-          viewWindow
-        );
-      },
-      { passive: true }
-    );
-
-    viewWindow.addEventListener(
-      "touchmove",
-      (e) => {
-        if (!dragState.active || e.touches.length !== 1) return;
-        const touch = e.touches[0];
-        moveDrag(touch.clientX, touch.clientY, dragState);
-      },
-      { passive: true }
-    );
-
-    viewWindow.addEventListener(
-      "touchend",
-      () => endDrag(dragState, viewWindow),
-      { passive: true }
-    );
-    viewWindow.addEventListener(
-      "touchcancel",
-      () => endDrag(dragState, viewWindow),
-      { passive: true }
-    );
-  });
-
-  // Global event handlers
-  window.addEventListener(
-    "mousemove",
-    (e) => {
-      if (dragState.active) moveDrag(e.clientX, e.clientY, dragState);
-    },
-    { passive: true }
-  );
-
-  window.addEventListener(
-    "mouseup",
-    () => {
-      if (dragState.active) endDrag(dragState);
-    },
-    { passive: true }
-  );
-}
-
-function startDrag(
-  event,
-  modelName,
-  clientX,
-  clientY,
-  state,
-  viewWindow = null
-) {
+function handleDragStart(e, modelName, clientX, clientY, state, viewWindow) {
   const model = projectModels.get(modelName);
   if (!model) return false;
 
@@ -677,26 +727,41 @@ function startDrag(
   return true;
 }
 
-function moveDrag(clientX, clientY, state) {
+function handleDragMove(clientX, clientY, state) {
   if (!state.active || !state.model) return;
 
   const model = state.model;
   const deltaX = clientX - state.lastX;
 
-  // Apply Y-axis rotation only
+  // Apply rotation directly without unnecessary calculations
   model.rotation.y += deltaX * 0.01;
-  model.rotation.x = 0;
-  model.rotation.z = 0;
 
-  model.updateMatrix();
-  model.updateMatrixWorld(true);
+  // Keep other rotations fixed to avoid unnecessary calculations
+  if (model.rotation.x !== 0) model.rotation.x = 0;
+  if (model.rotation.z !== 0) model.rotation.z = 0;
 
+  // Mark matrix for update rather than updating immediately
+  model.matrixWorldNeedsUpdate = true;
+
+  // Store rotation speed for inertia calculations
   state.rotationSpeed.y = deltaX * 0.01;
   state.lastX = clientX;
   state.lastY = clientY;
+
+  // Throttle actual matrix updates to once per frame
+  if (!state.pendingMatrixUpdate) {
+    state.pendingMatrixUpdate = true;
+    requestAnimationFrame(() => {
+      if (state.model) {
+        state.model.updateMatrix();
+        state.model.updateMatrixWorld(true);
+      }
+      state.pendingMatrixUpdate = false;
+    });
+  }
 }
 
-function endDrag(state, viewWindow = null) {
+function handleDragEnd(state, viewWindow) {
   if (state.active && state.model) {
     applyRotationInertia(state.model, state.rotationSpeed);
   }
@@ -743,6 +808,93 @@ function applyRotationInertia(model, speed) {
   model.userData.inertiaAnimationId = requestAnimationFrame(animateInertia);
 }
 
+function setupDragInteraction() {
+  const dragState = {
+    active: false,
+    model: null,
+    startX: 0,
+    startY: 0,
+    lastX: 0,
+    lastY: 0,
+    rotationSpeed: { x: 0, y: 0 },
+  };
+
+  document.querySelectorAll(".model-view-window").forEach((viewWindow) => {
+    const modelName = viewWindow.dataset.modelName;
+    if (!modelName) return;
+
+    viewWindow.addEventListener(
+      "mousedown",
+      (e) => {
+        if (e.button !== 0) return;
+        handleDragStart(
+          e,
+          modelName,
+          e.clientX,
+          e.clientY,
+          dragState,
+          viewWindow
+        );
+      },
+      { passive: true }
+    );
+
+    viewWindow.addEventListener(
+      "touchstart",
+      (e) => {
+        if (e.touches.length !== 1) return;
+        const touch = e.touches[0];
+        handleDragStart(
+          e,
+          modelName,
+          touch.clientX,
+          touch.clientY,
+          dragState,
+          viewWindow
+        );
+      },
+      { passive: true }
+    );
+
+    viewWindow.addEventListener(
+      "touchmove",
+      (e) => {
+        if (!dragState.active || e.touches.length !== 1) return;
+        const touch = e.touches[0];
+        handleDragMove(touch.clientX, touch.clientY, dragState);
+      },
+      { passive: true }
+    );
+
+    viewWindow.addEventListener(
+      "touchend",
+      () => handleDragEnd(dragState, viewWindow),
+      { passive: true }
+    );
+    viewWindow.addEventListener(
+      "touchcancel",
+      () => handleDragEnd(dragState, viewWindow),
+      { passive: true }
+    );
+  });
+
+  window.addEventListener(
+    "mousemove",
+    (e) => {
+      if (dragState.active) handleDragMove(e.clientX, e.clientY, dragState);
+    },
+    { passive: true }
+  );
+
+  window.addEventListener(
+    "mouseup",
+    () => {
+      if (dragState.active) handleDragEnd(dragState);
+    },
+    { passive: true }
+  );
+}
+
 function setupScrollInteraction() {
   document.querySelectorAll(".model-view-window").forEach((viewWindow) => {
     const modelName = viewWindow.dataset.modelName;
@@ -753,6 +905,12 @@ function setupScrollInteraction() {
     viewWindow.addEventListener(
       "wheel",
       (event) => {
+        const projectCard = viewWindow.closest(".project-card");
+        if (!projectCard?.classList.contains("expanded")) return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
         const model = projectModels.get(modelName);
         if (!model) return;
 
@@ -775,7 +933,7 @@ function setupScrollInteraction() {
           model.updateMatrixWorld(true);
         }
       },
-      { passive: true }
+      { passive: false }
     );
   });
 }
@@ -797,58 +955,127 @@ function setupResizeObserver() {
   if (portfolioSection) observer.observe(portfolioSection);
 }
 
-function updateModelPositions() {
-  projectModels.forEach((model, modelName) => {
-    const viewPos = viewWindowPositions.get(modelName);
-    if (!viewPos) return;
+let resizeRAFPending = false;
+function handleResize() {
+  if (resizeRAFPending) return;
 
-    positionModelForItem(model, modelName);
+  resizeRAFPending = true;
+  requestAnimationFrame(() => {
+    const canvas = domCache.mainCanvas;
+    if (!canvas || !projectCamera) return;
 
-    if (model.userData.currentScale && model.userData.initialScale) {
-      const ratio = model.userData.currentScale.x / model.userData.initialScale;
-      const newScale = model.scale.x * ratio;
-      model.scale.set(newScale, newScale, newScale);
+    // Only resize if dimensions actually changed
+    if (
+      canvas.width !== canvas.clientWidth ||
+      canvas.height !== canvas.clientHeight
+    ) {
+      canvas.width = canvas.clientWidth;
+      canvas.height = canvas.clientHeight;
+      projectCamera.aspect = canvas.width / canvas.height;
+      projectCamera.updateProjectionMatrix();
+    }
+
+    cacheViewWindowPositions();
+    updateModelPositions();
+    resizeRAFPending = false;
+  });
+}
+
+function setupKeyboardSupport() {
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      const expandedCard = document.querySelector(".game-preview.expanded");
+      if (expandedCard) toggleExpand(null, expandedCard.id);
     }
   });
 }
 
-/**
- * Setup model rotation animations
- */
-export function setupModelRotationAnimations() {
-  projectModels.forEach((model) => {
-    if (!model) return;
+function enhanceProjectCards() {
+  setupKeyboardSupport();
 
-    if (!model.userData.originalRotation) {
-      model.rotation.set(0, Math.PI, 0);
-      model.userData.originalRotation = model.rotation.clone();
-    }
+  const observer = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      if (
+        mutation.attributeName === "class" &&
+        mutation.target.classList.contains("project-card")
+      ) {
+        setTimeout(updateModelPositions, 100);
+      }
+    });
+  });
 
-    model.userData.animate = true;
-    model.userData.rotationSpeed = 0.003 + random() * 0.004;
-    model.userData.isInteractive = true;
+  document.querySelectorAll(".project-card").forEach((card) => {
+    observer.observe(card, { attributes: true });
   });
 }
 
-/**
- * Utility function for prefetching
- */
-export function getVisibleProjectModels() {
-  const visibleModels = new Set();
+async function setupProjects() {
+  const loadPromises = [];
 
   document.querySelectorAll(".project-card").forEach((item) => {
-    const rect = item.getBoundingClientRect();
-    const isVisible =
-      rect.top < window.innerHeight &&
-      rect.bottom > 0 &&
-      rect.left < window.innerWidth &&
-      rect.right > 0;
+    const modelName = item.getAttribute("data-model");
+    if (!modelName) return;
 
-    if (isVisible) {
-      const modelName = item.getAttribute("data-model");
-      if (modelName) visibleModels.add(modelName);
-    }
+    loadPromises.push(
+      loadProjectModel(modelName)
+        .then((model) => {
+          if (model) {
+            projectModels.set(modelName, model);
+            positionModelForItem(model, modelName);
+          }
+        })
+        .catch((err) =>
+          console.error(`Failed to load model ${modelName}:`, err)
+        )
+    );
   });
 
-  return Array.from(visibleModels);
+  await Promise.all(loadPromises);
+  enhanceProjectCards();
+}
+
+function setupInteractions() {
+  const canvas = domCache.mainCanvas;
+  if (!canvas) return;
+
+  window.addEventListener("resize", debounce(handleResize, 100));
+  setupDragInteraction();
+  setupScrollInteraction();
+  setupResizeObserver();
+}
+
+export function initProjectCards() {
+  const grid = getElement(".project-card-grid", "portfolioGrid");
+  if (!Array.isArray(PROJECT_CARD_DATA)) return;
+
+  const fragment = document.createDocumentFragment();
+  PROJECT_CARD_DATA.forEach((project) => {
+    const card = createProjectCard(project);
+    if (card) fragment.appendChild(card);
+  });
+
+  grid.appendChild(fragment);
+}
+
+export function initProjectCardScene() {
+  if (isLowPoweredDevice()) return;
+
+  scene = getScene();
+  raycaster = new Raycaster();
+
+  const canvas = createMainCanvas();
+  if (!canvas) return;
+  domCache.mainCanvas = canvas;
+
+  // Get model names from portfolio items
+  const modelNames = Array.from(document.querySelectorAll(".project-card"))
+    .map((item) => item.getAttribute("data-model"))
+    .filter(Boolean);
+
+  // Setup scene components
+  calculateModelPositions(modelNames);
+  setupMainCamera(canvas);
+  cacheViewWindowPositions();
+  setupProjects();
+  setupInteractions();
 }

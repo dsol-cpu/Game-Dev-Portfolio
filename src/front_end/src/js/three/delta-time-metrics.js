@@ -1,5 +1,6 @@
 import { getDeltaTime } from "./time-manager.js";
-import { isIdle } from "../user-interaction.js";
+
+const ONE_SECOND = 1000;
 
 /**
  * Creates a minimal performance metrics display with FPS graph at the top right
@@ -181,7 +182,7 @@ export function createDeltaTimeMetricsOverlay() {
 
     const delta = getDeltaTime();
     // Calculate fps from deltaTime
-    const fps = delta > 0 ? 1000 / (delta * 1000) : 0;
+    const fps = delta > 0 ? ONE_SECOND / (delta * ONE_SECOND) : 0;
 
     // Update circular buffer
     fpsHistory[historyIndex] = fps;
@@ -194,7 +195,7 @@ export function createDeltaTimeMetricsOverlay() {
 
     // Update display
     elements.fpsValue.textContent = avgFps.toFixed(1);
-    elements.deltaValue.textContent = (delta * 1000).toFixed(1) + " ms";
+    elements.deltaValue.textContent = (delta * ONE_SECOND).toFixed(1) + " ms";
 
     // Set color based on FPS threshold
     elements.fpsValue.style.color =

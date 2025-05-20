@@ -12,7 +12,7 @@ class AudioController {
 
     // Audio settings
     this.audioEnabled = true;
-    this.lastVolume = 0.5; // Store the last volume level
+    this.lastVolume = 0.125; // Store the last volume level
   }
 
   /**

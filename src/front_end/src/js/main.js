@@ -15,15 +15,14 @@ import {
 } from "./three/game.js";
 import { preloadModels } from "./three/model-manager.js";
 import {
-  initProjectCards,
   initProjectCardScene,
+  initProjectCards,
 } from "./three/project-card-system.js";
 import {
   hasActiveCamera,
   initThreeJSManager,
   renderFrame,
 } from "./three/threejs-manager.js";
-// Import the new frame capping functions
 import { PerspectiveCamera } from "./extern/three/three.core.min.js";
 import {
   getDeltaTime,
@@ -54,8 +53,8 @@ async function initializeApp() {
     preloadModels(["babyTurtle", "portfolioShip", "globe"]);
     initThreeJSManager();
     initAboutCanvas();
-
     initProjectCardScene();
+
     initGame();
     if (import.meta.env.DEV) {
       createDeltaTimeMetricsOverlay();

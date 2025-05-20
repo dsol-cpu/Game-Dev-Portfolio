@@ -117,18 +117,20 @@ MATERIALS.GLOW = new MeshPhongMaterial({
   opacity: 0.8,
 });
 
-// Pre-calculated direction lookup (single array)
-const DIRECTIONS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
-const DIRECTION_LOOKUP = new Array(360);
-for (let i = 0; i < 360; i++) {
-  DIRECTION_LOOKUP[i] = DIRECTIONS[Math.floor(((i + 22.5) % 360) / 45)];
-}
-
 // Cache Math functions for speed
 const abs = Math.abs;
 const min = Math.min;
 const max = Math.max;
 const floor = Math.floor;
+
+// 8 cardinal directions
+const DIRECTIONS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+
+// Precomputed direction lookup for every degree [0–359]
+const DIRECTION_LOOKUP = Array.from({ length: 360 }, (_, i) => {
+  const index = ((i + 22.5) / 45) | 0; // fast floor
+  return DIRECTIONS[index === 8 ? 0 : index]; // avoid % 8
+});
 
 // Player state structure optimized for memory layout
 const player = {
@@ -157,10 +159,9 @@ export function getPlayerModel() {
 // Fast direction lookup using pre-calculated array
 export function getDirection(rotation) {
   // ~~ is faster than Math.floor for integers
-  const degrees = ~~(((((rotation * 180) / Math.PI) % 360) + 360) % 360);
+  const degrees = ~~(((((-rotation * 180) / Math.PI) % 360) + 360) % 360);
   return DIRECTION_LOOKUP[degrees];
 }
-
 export async function createPlayerModel() {
   if (player.model) return player.model;
 

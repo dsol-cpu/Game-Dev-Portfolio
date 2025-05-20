@@ -357,14 +357,6 @@ function resetModelPosition(model) {
  * Reset view for all models
  */
 function resetView() {
-  currentFocusedProject = null;
-
-  // Cancel any ongoing animations
-  if (animationFrameId) {
-    cancelAnimationFrame(animationFrameId);
-    animationFrameId = null;
-  }
-
   // Reset all models' positions and scales
   projectModels.forEach((model) => {
     resetModelPosition(model);
@@ -373,7 +365,6 @@ function resetView() {
   // Reposition models to their view windows
   cacheViewWindowPositions();
   updateModelPositions();
-  setupModelRotationAnimations();
 
   // Remove highlighting
   document.querySelectorAll(".project-card").forEach((el) => {
@@ -398,35 +389,4 @@ function updateModelPositions() {
     model.updateMatrix();
     model.updateMatrixWorld(true);
   });
-}
-
-/**
- * Setup automatic rotation animations for models
- */
-function setupModelRotationAnimations() {
-  projectModels.forEach((model) => {
-    // Enable auto rotation by default
-    if (!model.userData) model.userData = {};
-    model.userData.animate = true;
-    model.userData.autoRotate = true;
-    model.userData.rotationSpeed = 0.005;
-  });
-
-  // Animation loop
-  function animateModels() {
-    projectModels.forEach((model) => {
-      if (model.userData?.animate) {
-        // Apply gentle rotation around Y axis
-        model.rotation.y += model.userData.rotationSpeed || 0.005;
-      }
-    });
-
-    animationFrameId = requestAnimationFrame(animateModels);
-  }
-
-  // Start animation
-  if (animationFrameId) {
-    cancelAnimationFrame(animationFrameId);
-  }
-  animationFrameId = requestAnimationFrame(animateModels);
 }
