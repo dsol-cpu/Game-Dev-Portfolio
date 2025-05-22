@@ -1,4 +1,4 @@
-import { getDeltaTime } from "./time-manager.js";
+import { getDeltaTime } from "./time.js";
 
 const ONE_SECOND = 1000;
 
@@ -28,6 +28,7 @@ export function createDeltaTimeMetricsOverlay() {
   container.style.gap = "5px";
   container.style.opacity = "0.9";
   container.style.transition = "opacity 0.2s ease";
+  container.style.zIndex = "50";
 
   // Create text content with placeholder values
   const statsContainer = document.createElement("div");

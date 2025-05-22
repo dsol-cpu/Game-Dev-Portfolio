@@ -13,7 +13,7 @@ import {
   updateGameLoop,
   updateIslandBobbing,
 } from "./three/game.js";
-import { preloadModels } from "./three/model-manager.js";
+import { preloadModels } from "./three/model.js";
 import {
   initProjectCardScene,
   initProjectCards,
@@ -28,7 +28,7 @@ import {
   getDeltaTime,
   startFrameCappedLoop,
   stopFrameCappedLoop,
-} from "./three/time-manager.js";
+} from "./three/time.js";
 import { initUserInteraction, isIdle } from "./user-interaction.js";
 import { isLowPoweredDevice } from "./utils/device.js";
 

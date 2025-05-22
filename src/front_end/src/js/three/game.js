@@ -9,7 +9,6 @@ import {
 } from "../extern/three/three.module.min.js";
 import { handleUserInteraction } from "../user-interaction.js";
 import { debounce } from "../utils/helper.js";
-import { audioController } from "./audio-controller.js";
 import { initCamController, updateCamera } from "./camera-follow.js";
 import { disposeGameUI, initGameUI, updateGameUI } from "./game-ui.js";
 import {
@@ -18,8 +17,18 @@ import {
   updatePlayer,
 } from "./player.js";
 import { getScene, registerCamera } from "./threejs-manager.js";
-import { runFixedUpdates } from "./time-manager.js";
+import { runFixedUpdates } from "./time.js";
 import { random } from "../utils/random.js";
+import {
+  initAudio,
+  pauseMusic,
+  isAudioEnabled,
+  isMusicPlaying,
+  restoreAudioState,
+  handleVisibilityChange,
+  dispose as disposeAudio,
+} from "./audio.js";
+
 const COLORS = {
   clouds: 0xffffff,
   islandSide: 0x8b4513,
@@ -57,7 +66,6 @@ const gameState = {
   viewMode: VIEW_MODES.SCROLL,
   totalTime: 0,
   isInitialized: false,
-  audioEnabled: true,
   isTransitioning: false,
 };
 
@@ -329,13 +337,8 @@ export function toggleGameView(elements) {
       initGameUI(elements);
 
       // Properly restore audio state when entering game view
-      if (gameState.audioEnabled) {
-        if (!audioController.initialized) {
-          audioController.init(MUSIC_URL);
-        } else {
-          // Restore audio state using the new method
-          audioController.restoreAudioState();
-        }
+      if (isAudioEnabled()) {
+        restoreAudioState(true);
       }
 
       // Complete transition after animation finishes
@@ -350,8 +353,8 @@ export function toggleGameView(elements) {
     gameViewContainer.style.opacity = "0";
 
     // Pause audio when leaving game view, but don't change enabled state
-    if (audioController.initialized && audioController.playing) {
-      audioController.pause();
+    if (isMusicPlaying()) {
+      pauseMusic(true);
     }
 
     // Complete transition after fade out
@@ -372,19 +375,7 @@ export function toggleGameView(elements) {
 
 // Update page visibility handling for improved audio behavior
 document.addEventListener("visibilitychange", () => {
-  if (!audioController.initialized) return;
-
-  if (document.visibilityState === "hidden") {
-    // Just pause when hidden if playing, but don't change enabled state
-    if (audioController.playing && isGameView()) {
-      audioController.pause(true);
-    }
-  } else if (document.visibilityState === "visible") {
-    // Restore audio state when becoming visible
-    if (isGameView()) {
-      audioController.restoreAudioState();
-    }
-  }
+  handleVisibilityChange(document.visibilityState === "visible", isGameView());
 });
 
 export function updateGameViewSize(elements, width, height) {
@@ -457,25 +448,11 @@ function initGameControlsPanel() {
   });
 }
 
-// Page visibility handling for audio optimization
-document.addEventListener("visibilitychange", () => {
-  if (!audioController.initialized) return;
-
-  if (document.visibilityState === "hidden") {
-    if (audioController.playing && isGameView()) {
-      audioController.pause(true);
-    }
-  } else if (document.visibilityState === "visible") {
-    if (isGameView() && gameState.audioEnabled && !audioController.playing) {
-      audioController.play(audioController.pausedAt);
-    }
-  }
-});
-
 export async function initGame() {
   if (gameState.isInitialized) return;
 
-  gameState.audioEnabled = audioController.audioEnabled;
+  // Initialize audio module with game music
+  await initAudio(MUSIC_URL);
 
   initGameControlsPanel();
 
@@ -536,7 +513,7 @@ export async function initGame() {
 
   // Clean up resources on page unload
   window.addEventListener("beforeunload", () => {
-    audioController.dispose();
+    disposeAudio();
   });
 
   gameState.isInitialized = true;

@@ -4,7 +4,7 @@ import {
   Vector3,
 } from "../extern/three/three.module.min.js";
 import { isLowPoweredDevice } from "../utils/device";
-import { calculateModelPositions, getModel } from "./model-manager.js";
+import { calculateGridPositions, loadModel } from "./model.js";
 import { getScene, registerCamera } from "./threejs-manager.js";
 import { debounce } from "../utils/helper.js";
 import { PROJECT_CARD_DATA } from "../data/projects.js";
@@ -491,7 +491,7 @@ function calculateModelPositionForExpandedCard(modelName, viewWindow) {
   return vector;
 }
 
-function getModelSize(model) {
+function loadModelSize(model) {
   const box = model.userData.boundingBox;
   if (box) {
     return Math.max(
@@ -506,49 +506,136 @@ function getModelSize(model) {
 function positionModelForItem(model, modelName) {
   if (!model || !modelName) return;
 
+  // Skip positioning if model is currently being animated
+  if (model.userData.transitionAnimationId) return;
+
   const viewPos = viewWindowPositions.get(modelName);
   if (!viewPos) return;
 
-  const modelSize = getModelSize(model);
+  const modelSize = loadModelSize(model);
   const containerScale = Math.min(viewPos.width, viewPos.height) * 7;
   const finalScale = Math.min(0.15, (containerScale / modelSize) * 0.15);
 
-  model.scale.set(finalScale, finalScale, finalScale);
+  // Calculate target position
+  const zDistance = Math.max(6, modelSize * 3);
+  const targetVector = new Vector3(viewPos.x, viewPos.y, 0.5);
+  targetVector.unproject(projectCamera);
+  targetVector.sub(projectCamera.position).normalize();
+  targetVector.multiplyScalar(zDistance);
+  targetVector.add(projectCamera.position);
 
+  // Initialize model data if needed
   if (!model.userData.initialScale) {
     model.userData.initialScale = finalScale;
     model.userData.currentScale = model.scale.clone();
   }
 
-  const zDistance = Math.max(6, modelSize * 3);
-  const vector = new Vector3(viewPos.x, viewPos.y, 0.5);
-  vector.unproject(projectCamera);
-  vector.sub(projectCamera.position).normalize();
-  vector.multiplyScalar(zDistance);
-  vector.add(projectCamera.position);
+  if (!model.userData.originalPosition) {
+    model.userData.originalPosition = targetVector.clone();
+  }
 
-  model.position.copy(vector);
-
-  if (model.userData.originalRotation) {
-    model.rotation.copy(model.userData.originalRotation);
-  } else {
+  if (!model.userData.originalRotation) {
     model.rotation.set(0, Math.PI, 0);
     model.userData.originalRotation = model.rotation.clone();
   }
 
-  if (!model.userData.originalPosition) {
-    model.userData.originalPosition = model.position.clone();
-  }
+  // Check if significant changes are needed
+  const currentScale = model.scale.x;
+  const scaleThreshold = 0.001;
+  const positionThreshold = 0.01;
+  const currentPos = model.position;
 
-  model.updateMatrix();
-  model.updateMatrixWorld(true);
+  const needsScaleUpdate = Math.abs(currentScale - finalScale) > scaleThreshold;
+  const needsPositionUpdate =
+    currentPos.distanceTo(targetVector) > positionThreshold;
+
+  // If no significant updates needed, return early
+  if (!needsScaleUpdate && !needsPositionUpdate) return;
+
+  // Use smooth bezier transition for positioning updates
+  if (needsPositionUpdate || needsScaleUpdate) {
+    // Cancel any existing positioning animation
+    if (model.userData.positionAnimationId) {
+      cancelAnimationFrame(model.userData.positionAnimationId);
+    }
+
+    const startPosition = model.position.clone();
+    const startScale = model.scale.x;
+    const startTime = performance.now();
+    const duration = 300; // Smooth 300ms transition
+
+    function animatePosition(currentTime) {
+      const elapsed = currentTime - startTime;
+      const progress = Math.min(elapsed / duration, 1);
+
+      // Use the existing cubic bezier lookup for smooth easing
+      const easedProgress = cubicBezierLookup(progress);
+
+      // Smooth position interpolation
+      if (needsPositionUpdate) {
+        model.position.x =
+          startPosition.x + (targetVector.x - startPosition.x) * easedProgress;
+        model.position.y =
+          startPosition.y + (targetVector.y - startPosition.y) * easedProgress;
+        model.position.z =
+          startPosition.z + (targetVector.z - startPosition.z) * easedProgress;
+      }
+
+      // Smooth scale interpolation
+      if (needsScaleUpdate) {
+        const currentScale =
+          startScale + (finalScale - startScale) * easedProgress;
+        model.scale.set(currentScale, currentScale, currentScale);
+        model.userData.currentScale.set(
+          currentScale,
+          currentScale,
+          currentScale
+        );
+      }
+
+      // Ensure rotation stays consistent
+      if (!model.userData.rotationSet) {
+        model.rotation.copy(model.userData.originalRotation);
+        model.userData.rotationSet = true;
+      }
+
+      model.matrixWorldNeedsUpdate = true;
+
+      if (progress < 1) {
+        model.userData.positionAnimationId =
+          requestAnimationFrame(animatePosition);
+      } else {
+        // Animation complete
+        delete model.userData.positionAnimationId;
+
+        // Ensure final values are exact
+        if (needsPositionUpdate) {
+          model.position.copy(targetVector);
+        }
+        if (needsScaleUpdate) {
+          model.scale.set(finalScale, finalScale, finalScale);
+          model.userData.currentScale.set(finalScale, finalScale, finalScale);
+        }
+
+        model.updateMatrix();
+        model.updateMatrixWorld(true);
+      }
+    }
+
+    model.userData.positionAnimationId = requestAnimationFrame(animatePosition);
+  }
 }
 
 function updateModelPositions() {
   cacheViewWindowPositions();
 
   projectModels.forEach((model, modelName) => {
-    if (model.userData.transitionAnimationId) return;
+    // Skip if already being transitioned or positioned
+    if (
+      model.userData.transitionAnimationId ||
+      model.userData.positionAnimationId
+    )
+      return;
 
     const card = document.querySelector(
       `.project-card[data-model="${modelName}"]`
@@ -568,6 +655,7 @@ function updateModelPositions() {
         );
         const enhancedScale = model.userData.initialScale * 1.2;
 
+        // Use existing transition animation for expanded state
         if (model.position.distanceTo(targetPosition) > 0.1) {
           animateModelTransition(
             model,
@@ -580,6 +668,7 @@ function updateModelPositions() {
         }
       }
     } else {
+      // Use the improved smooth positioning for normal state
       positionModelForItem(model, modelName);
     }
   });
@@ -695,7 +784,7 @@ async function loadProjectModel(modelName) {
   if (!modelName) return null;
 
   try {
-    const model = await getModel(modelName);
+    const model = await loadModel(modelName);
     if (!model.parent) scene.add(model);
 
     model.visible = true;
@@ -1073,7 +1162,7 @@ export function initProjectCardScene() {
     .filter(Boolean);
 
   // Setup scene components
-  calculateModelPositions(modelNames);
+  calculateGridPositions(modelNames);
   setupMainCamera(canvas);
   cacheViewWindowPositions();
   setupProjects();

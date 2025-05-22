@@ -1,6 +1,6 @@
 import { getCurrentHeight, getHeightLimits, getDirection } from "./player.js";
 import { debounce } from "../utils/helper.js";
-import { audioController, toggleBackgroundMusic } from "./audio-controller.js";
+import { toggleAudio, setVolume, getVolume, isAudioEnabled } from "./audio.js";
 
 const ALTITUDE_WIDTH = 35;
 const ALTITUDE_HEIGHT = 180;
@@ -117,22 +117,27 @@ function createVolumeControl() {
     volumeControlContainer.id = "volume-control-container";
     volumeControlContainer.classList.add("game-ui-element");
 
-    // Create speaker button
+    // Create speaker button - get initial state from audio system
     speakerButton = document.createElement("button");
     speakerButton.id = "speaker-button";
-    speakerButton.innerHTML = audioController.audioEnabled ? "🔊" : "🔇";
+    const initialAudioState = isAudioEnabled();
+    speakerButton.innerHTML = initialAudioState ? "🔊" : "🔇";
     speakerButton.classList.add("volume-control-btn");
     speakerButton.title = "Mute/Unmute";
 
-    // Use event delegation to reduce listeners
+    // Add click handler for speaker button
     speakerButton.addEventListener(
       "click",
       () => {
-        const isEnabled = toggleBackgroundMusic(true);
-        if (speakerButton) speakerButton.innerHTML = isEnabled ? "🔊" : "🔇";
+        // Toggle audio and get the new state
+        const newAudioState = toggleAudio();
+        updateSpeakerIcon(newAudioState);
+
+        // Also update volume slider state
+        updateVolumeSliderState(newAudioState);
       },
       { passive: true }
-    ); // Mark as passive for better performance
+    );
 
     // Create volume slider
     volumeSlider = document.createElement("input");
@@ -140,20 +145,29 @@ function createVolumeControl() {
     volumeSlider.min = "0";
     volumeSlider.max = "1";
     volumeSlider.step = "0.1";
-    volumeSlider.value = audioController.getVolume
-      ? audioController.getVolume().toString()
-      : "0.5";
+    volumeSlider.value = getVolume().toString();
     volumeSlider.id = "volume-slider";
     volumeSlider.classList.add("volume-control-slider");
 
-    // Use throttled input handler
+    // Set initial slider enabled/disabled state based on audio state
+    volumeSlider.disabled = !initialAudioState;
+
+    // Use throttled input handler for volume slider
     volumeSlider.addEventListener(
       "input",
       debounce((e) => {
-        audioController.setVolume(parseFloat(e.target.value));
+        const newVolume = parseFloat(e.target.value);
+        setVolume(newVolume);
+
+        // If volume was set to 0, update speaker icon
+        if (newVolume === 0) {
+          updateSpeakerIcon(false);
+        } else if (newVolume > 0 && isAudioEnabled()) {
+          updateSpeakerIcon(true);
+        }
       }, 50),
       { passive: true }
-    ); // Mark as passive for better performance
+    );
 
     // Assemble volume control
     volumeControlContainer.appendChild(speakerButton);
@@ -161,6 +175,23 @@ function createVolumeControl() {
   }
 
   return volumeControlContainer;
+}
+
+// Helper function to update speaker icon
+function updateSpeakerIcon(isEnabled) {
+  if (speakerButton) {
+    speakerButton.innerHTML = isEnabled ? "🔊" : "🔇";
+  }
+}
+
+// Helper function to update volume slider state
+function updateVolumeSliderState(isEnabled) {
+  if (volumeSlider) {
+    volumeSlider.disabled = !isEnabled;
+    // Update visual appearance based on state
+    volumeSlider.style.opacity = isEnabled ? "1" : "0.5";
+    volumeSlider.style.cursor = isEnabled ? "pointer" : "not-allowed";
+  }
 }
 
 export function initGameUI(elements) {
@@ -220,7 +251,7 @@ export function initGameUI(elements) {
   // Set up reusable gradients for altitude meter
   initializeGradients();
 
-  // Initial UI sync
+  // Initial UI sync - make sure everything is in the correct state
   syncVolumeUI();
 }
 
@@ -302,6 +333,58 @@ function positionUIElements() {
       willChange: "transform",
     });
   }
+
+  // Position altitude text above altitude meter
+  let altitudeText = document.getElementById("altitude-text");
+  if (!altitudeText) {
+    altitudeText = document.createElement("div");
+    altitudeText.id = "altitude-text";
+    altitudeText.className = "ui-text-label";
+    gameContainer.appendChild(altitudeText);
+  }
+
+  Object.assign(altitudeText.style, {
+    position: "absolute",
+    top: `${(containerRect.height - ALTITUDE_HEIGHT) / 2 - 25}px`,
+    right: `${UI_PADDING + ALTITUDE_WIDTH / 2 - 15}px`,
+    width: "30px",
+    textAlign: "center",
+    fontSize: "14px",
+    fontWeight: "bold",
+    color: UI_THEME.altitude.text,
+    backgroundColor: UI_THEME.altitude.bg,
+    padding: "2px 4px",
+    borderRadius: "3px",
+    border: `1px solid ${UI_THEME.altitude.border}`,
+    zIndex: "5",
+    pointerEvents: "none",
+  });
+
+  // Position compass text above compass
+  let compassText = document.getElementById("compass-text");
+  if (!compassText) {
+    compassText = document.createElement("div");
+    compassText.id = "compass-text";
+    compassText.className = "ui-text-label";
+    gameContainer.appendChild(compassText);
+  }
+
+  Object.assign(compassText.style, {
+    position: "absolute",
+    top: `${(containerRect.height - COMPASS_SIZE) / 2 - 25}px`,
+    left: `${UI_PADDING + COMPASS_SIZE / 2 - 15}px`,
+    width: "30px",
+    textAlign: "center",
+    fontSize: "14px",
+    fontWeight: "bold",
+    color: UI_THEME.compass.text,
+    backgroundColor: UI_THEME.compass.bg,
+    padding: "2px 4px",
+    borderRadius: "3px",
+    border: `1px solid ${UI_THEME.compass.border}`,
+    zIndex: "5",
+    pointerEvents: "none",
+  });
 }
 
 function addGameUIStyles() {
@@ -343,6 +426,11 @@ function addGameUIStyles() {
       width: 80px;
       cursor: pointer;
       accent-color: ${UI_THEME.controls.accent};
+      transition: opacity 0.2s;
+    }
+    .volume-control-slider:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
   `;
   document.head.appendChild(style);
@@ -408,12 +496,6 @@ export function updateAltitudeMeter(altitude) {
   roundedRect(ctx, 5, 5, width - 10, height - 10, 3);
   ctx.stroke();
 
-  // Draw current altitude indicator
-  ctx.fillStyle = UI_THEME.altitude.text;
-  ctx.font = "bold 12px 'Arial', sans-serif";
-  ctx.textAlign = "center";
-  ctx.fillText(`${Math.round(altitude)}`, width / 2, 20);
-
   // Draw minimal altitude tick marks
   ctx.strokeStyle = UI_THEME.altitude.tickMark;
   ctx.lineWidth = 1;
@@ -435,6 +517,20 @@ export function updateAltitudeMeter(altitude) {
     ctx.lineTo(width - 10, y);
     ctx.stroke();
   }
+}
+
+function roundedRect(ctx, x, y, width, height, radius) {
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + width - radius, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+  ctx.lineTo(x + width, y + height - radius);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+  ctx.lineTo(x + radius, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
 }
 
 export function updateCompass(rotation) {
@@ -539,28 +635,6 @@ export function updateCompass(rotation) {
   ctx.stroke();
 
   ctx.restore();
-
-  // Draw current direction in center
-  ctx.fillStyle = UI_THEME.compass.text;
-  ctx.font = "bold 14px 'Arial', sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText(direction, COMPASS_CENTER, COMPASS_CENTER);
-}
-
-// Helper function to draw rounded rectangles
-function roundedRect(ctx, x, y, width, height, radius) {
-  ctx.beginPath();
-  ctx.moveTo(x + radius, y);
-  ctx.lineTo(x + width - radius, y);
-  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-  ctx.lineTo(x + width, y + height - radius);
-  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-  ctx.lineTo(x + radius, y + height);
-  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-  ctx.lineTo(x, y + radius);
-  ctx.quadraticCurveTo(x, y, x + radius, y);
-  ctx.closePath();
 }
 
 let animFrameId = null;
@@ -600,33 +674,37 @@ function processGameUIUpdate() {
   updateAltitudeMeter(altitude);
   updateCompass(rotation);
 
+  // Update text labels above the UI elements
+  const altitudeText = document.getElementById("altitude-text");
+  if (altitudeText) {
+    altitudeText.textContent = Math.round(altitude).toString();
+  }
+
+  const compassText = document.getElementById("compass-text");
+  if (compassText) {
+    const direction = getDirection(rotation);
+    compassText.textContent = direction;
+  }
+
   pendingPlayerState = null;
 }
 
-// Function to synchronize volume UI with AudioController state
+// Function to synchronize volume UI with audio state
 export function syncVolumeUI() {
-  if (!audioController.initialized) return;
+  const currentAudioState = isAudioEnabled();
+  const currentVolume = getVolume();
 
   // Update volume slider value
-  if (volumeSlider && audioController.getVolume) {
-    const currentVol = audioController.getVolume().toString();
-    if (volumeSlider.value !== currentVol) {
-      volumeSlider.value = currentVol;
-    }
-  } else if (volumeSlider && audioController.gainNode) {
-    const currentVol = audioController.gainNode.gain.value.toString();
+  if (volumeSlider) {
+    const currentVol = currentVolume.toString();
     if (volumeSlider.value !== currentVol) {
       volumeSlider.value = currentVol;
     }
   }
 
-  // Update speaker button icon
-  if (speakerButton) {
-    const buttonText = audioController.audioEnabled ? "🔊" : "🔇";
-    if (speakerButton.innerHTML !== buttonText) {
-      speakerButton.innerHTML = buttonText;
-    }
-  }
+  // Update speaker button icon and slider state
+  updateSpeakerIcon(currentAudioState);
+  updateVolumeSliderState(currentAudioState);
 }
 
 export function disposeGameUI() {

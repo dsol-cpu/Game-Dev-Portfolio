@@ -157,10 +157,6 @@ export function updateCamera() {
   _camera.lookAt(lookAt);
 }
 
-export function snapCameraToTarget() {
-  updateCamera();
-}
-
 export function disposeCameraController() {
   document.removeEventListener("wheel", _onWheel);
   _camera = _target = _scene = null;
