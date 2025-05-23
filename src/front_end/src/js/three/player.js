@@ -15,6 +15,13 @@ const _axisY = new Vector3(0, 1, 0);
 const _dir = new Vector3(0, 0, -1);
 const _cam = new Vector3();
 
+const SPEED = 12;
+const ACCELERATION = 1.2;
+const DECELERATION = 0.5;
+const TURN = 3;
+const VERTICAL_MAX = 9;
+const VERTICAL_ACCELERATION = 0.5;
+const VERTICAL_DECELERATION = 0.5;
 // Packed constants
 const C = new Float32Array([
   12,
@@ -36,14 +43,21 @@ const C = new Float32Array([
 ]);
 
 // Key mappings
-const KEY = { F: 1, B: 2, L: 4, R: 8, U: 16, D: 32 };
+const KEY = {
+  FORWARD: 1,
+  BACKWARD: 2,
+  LEFT: 4,
+  RIGHT: 8,
+  TILT_UP: 16,
+  TILT_DOWN: 32,
+};
 const KEYS = new Map([
-  ...["ArrowUp", "KeyW"].map((k) => [k, KEY.F]),
-  ...["ArrowDown", "KeyS"].map((k) => [k, KEY.B]),
-  ...["ArrowLeft", "KeyA"].map((k) => [k, KEY.L]),
-  ...["ArrowRight", "KeyD"].map((k) => [k, KEY.R]),
-  ...["Space"].map((k) => [k, KEY.U]),
-  ...["ShiftLeft", "ShiftRight"].map((k) => [k, KEY.D]),
+  ...["ArrowUp", "KeyW"].map((k) => [k, KEY.FORWARD]),
+  ...["ArrowDown", "KeyS"].map((k) => [k, KEY.BACKWARD]),
+  ...["ArrowLeft", "KeyA"].map((k) => [k, KEY.LEFT]),
+  ...["ArrowRight", "KeyD"].map((k) => [k, KEY.RIGHT]),
+  ...["Space"].map((k) => [k, KEY.TILT_UP]),
+  ...["ShiftLeft", "ShiftRight"].map((k) => [k, KEY.TILT_DOWN]),
 ]);
 
 // Direction lookup
@@ -79,8 +93,8 @@ const MAT = {
 // Player state
 const player = {
   model: null,
-  vel: 0,
-  verticalVel: 0,
+  velocity_x: 0,
+  velocity_y: 0,
   keys: 0,
   dir: "N",
   pos: new Vector3(),
@@ -174,59 +188,68 @@ export const initPlayerControls = () => {
 };
 
 // Physics update
-export const updatePlayer = (dt) => {
+export const updatePlayer = (deltaTime) => {
   const ship = player.model;
   if (!ship) return;
 
-  dt = Math.min(dt, 0.1);
+  deltaTime = Math.min(deltaTime, 0.1);
 
   if (player.reset) {
-    updateReset(dt, ship);
+    updateReset(deltaTime, ship);
     return;
   }
 
-  updateMovement(dt, ship);
+  updateMovement(deltaTime, ship);
   player.pos.copy(ship.position);
 };
 
 // Movement update
-const updateMovement = (dt, ship) => {
+const updateMovement = (deltaTime, ship) => {
   const { keys } = player;
   const y = ship.position.y;
 
   // Velocity updates
-  player.vel +=
-    keys & KEY.F
-      ? C[1] * dt
-      : keys & KEY.B
-      ? -C[1] * dt
-      : -Math.sign(player.vel) * Math.min(Math.abs(player.vel), C[2] * dt);
-  player.vel = Math.max(-C[0] * dt, Math.min(C[0] * dt, player.vel));
+  player.velocity_x +=
+    keys & KEY.FORWARD
+      ? C[1] * deltaTime
+      : keys & KEY.BACKWARD
+      ? -C[1] * deltaTime
+      : -Math.sign(player.velocity_x) *
+        Math.min(Math.abs(player.velocity_x), C[2] * deltaTime);
+  player.velocity_x = Math.max(
+    -C[0] * deltaTime,
+    Math.min(C[0] * deltaTime, player.velocity_x)
+  );
 
   // Vertical velocity with clamping
   const atMax = y >= C[11],
     atMin = y <= C[10];
-  player.verticalVel +=
-    keys & KEY.U && !atMax
-      ? C[5] * dt
-      : keys & KEY.D && !atMin
-      ? -C[5] * dt
-      : -Math.sign(player.verticalVel) *
-        Math.min(Math.abs(player.verticalVel), C[6] * dt);
-  player.verticalVel = Math.max(
-    -C[4] * dt,
-    Math.min(C[4] * dt, player.verticalVel)
+  player.velocity_y +=
+    keys & KEY.TILT_UP && !atMax
+      ? C[5] * deltaTime
+      : keys & KEY.TILT_DOWN && !atMin
+      ? -C[5] * deltaTime
+      : -Math.sign(player.velocity_y) *
+        Math.min(Math.abs(player.velocity_y), C[6] * deltaTime);
+  player.velocity_y = Math.max(
+    -C[4] * deltaTime,
+    Math.min(C[4] * deltaTime, player.velocity_y)
   );
 
-  if ((atMax && player.verticalVel > 0) || (atMin && player.verticalVel < 0)) {
-    player.verticalVel = 0;
+  if ((atMax && player.velocity_y > 0) || (atMin && player.velocity_y < 0)) {
+    player.velocity_y = 0;
     player.clamped = true;
   } else {
     player.clamped = false;
   }
 
   // Turning
-  const turn = keys & KEY.L ? C[3] * dt : keys & KEY.R ? -C[3] * dt : 0;
+  const turn =
+    keys & KEY.LEFT
+      ? C[3] * deltaTime
+      : keys & KEY.RIGHT
+      ? -C[3] * deltaTime
+      : 0;
   if (turn) {
     _quat.setFromAxisAngle(_axisY, turn);
     player.quat.premultiply(_quat);
@@ -235,22 +258,22 @@ const updateMovement = (dt, ship) => {
   }
 
   // Pitch calculation
-  const fwd = keys & KEY.F || player.vel > 0;
-  const back = keys & KEY.B || player.vel < 0;
-  const up = keys & KEY.U && !player.clamped;
-  const down = keys & KEY.D && !player.clamped;
+  const forward = keys & KEY.FORWARD || player.velocity_x > 0;
+  const back = keys & KEY.BACKWARD || player.velocity_x < 0;
+  const up = keys & KEY.TILT_UP && !player.clamped;
+  const down = keys & KEY.TILT_DOWN && !player.clamped;
 
-  player.tpitch = fwd
+  player.tpitch = forward
     ? down
-      ? C[15]
-      : up
       ? -C[15]
+      : up
+      ? C[15]
       : C[15] * 0.3
     : back
     ? down
-      ? -C[15]
-      : up
       ? C[15]
+      : up
+      ? -C[15]
       : -C[15] * 0.3
     : down
     ? C[15] * 0.5
@@ -258,19 +281,20 @@ const updateMovement = (dt, ship) => {
     ? -C[15] * 0.5
     : 0;
 
-  player.pitch += (player.tpitch - player.pitch) * Math.min(1, C[8] * dt);
+  player.pitch +=
+    (player.tpitch - player.pitch) * Math.min(1, C[8] * deltaTime);
 
   // Apply transforms
-  if (player.vel) {
+  if (player.velocity_x) {
     _dir
       .set(0, 0, -1)
       .applyQuaternion(player.quat)
       .normalize()
-      .multiplyScalar(player.vel);
+      .multiplyScalar(player.velocity_x);
     ship.position.add(_dir);
   }
 
-  if (player.verticalVel) ship.position.y += player.verticalVel;
+  if (player.velocity_y) ship.position.y += player.velocity_y;
   ship.position.y = Math.max(C[10], Math.min(C[11], ship.position.y));
 
   _euler.setFromQuaternion(player.quat, "YXZ");
@@ -278,8 +302,8 @@ const updateMovement = (dt, ship) => {
 };
 
 // Reset update
-const updateReset = (dt, ship) => {
-  const speed = C[9] * dt;
+const updateReset = (deltaTime, ship) => {
+  const speed = C[9] * deltaTime;
 
   _euler.setFromQuaternion(player.quat, "YXZ");
   _quat.setFromEuler(_euler.set(0, _euler.y, 0, "YXZ"));

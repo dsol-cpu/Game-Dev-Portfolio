@@ -41,7 +41,6 @@
   width: 20px;
   height: 20px;
   margin-right: 8px;
-  fill: #6ee7b7;
 }
 
 /* Controls List */
@@ -72,6 +71,7 @@
 
 /* Individual Key Styling */
 .key {
+  color: white;
   background-color: rgba(255, 255, 255, 0.15);
   border-radius: 6px;
   padding: 4px 8px;

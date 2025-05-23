@@ -1,636 +1,566 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="icon" href="/icons/favicon.ico" type="image/x-icon" />
-    <title>David Solinsky</title>
 
-    <!-- Preconnect to CDN for faster loading -->
-    <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" href="/icons/favicon.ico" type="image/x-icon" />
+  <title>David Solinsky</title>
 
-    <!-- CSS files -->
-    <link rel="stylesheet" href="src/styles/main.css" />
-    <link rel="stylesheet" href="src/styles/game.css" />
-    <link rel="stylesheet" href="src/styles/project-card.css" />
-    <link rel="stylesheet" href="src/styles/sidebar.css" />
-    <link rel="stylesheet" href="src/styles/about-section.css" />
-    <link rel="stylesheet" href="src/styles/blog.css" />
-    <link rel="stylesheet" href="src/styles/responsive.css" />
+  <!-- Preconnect to CDN for faster loading -->
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
 
-    <script>
-      // Compressed SVG Sprite System
-      const createSvgSprite = (svgData = {}) => {
-        const NS = "http://www.w3.org/2000/svg";
-        const SHAPES = new Set([
-          "path",
-          "circle",
-          "rect",
-          "polygon",
-          "line",
-          "polyline",
-        ]);
+  <!-- CSS files -->
+  <link rel="stylesheet" href="src/styles/main.css" />
+  <link rel="stylesheet" href="src/styles/game.css" />
+  <link rel="stylesheet" href="src/styles/project-card.css" />
+  <link rel="stylesheet" href="src/styles/sidebar.css" />
+  <link rel="stylesheet" href="src/styles/about-section.css" />
+  <link rel="stylesheet" href="src/styles/blog.css" />
+  <link rel="stylesheet" href="src/styles/responsive.css" />
 
-        let isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-        let container =
-          document.getElementById("svg-sprite-container") ||
-          (() => {
-            const div = document.createElement("div");
-            div.id = "svg-sprite-container";
-            document.body.appendChild(div);
-            return div;
-          })();
+  <script>
+    // Compressed SVG Sprite System
+    const createSvgSprite = (svgData = {}) => {
+      const NS = "http://www.w3.org/2000/svg";
+      const SHAPES = new Set([
+        "path",
+        "circle",
+        "rect",
+        "polygon",
+        "line",
+        "polyline",
+      ]);
 
-        const el = (tag, attrs = {}) => {
-          const e = document.createElementNS(NS, tag);
-          Object.entries(attrs).forEach(([k, v]) => e.setAttribute(k, v));
-          return e;
-        };
+      let isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      let container =
+        document.getElementById("svg-sprite-container") ||
+        (() => {
+          const div = document.createElement("div");
+          div.id = "svg-sprite-container";
+          document.body.appendChild(div);
+          return div;
+        })();
 
-        const processNode = (node, parent) => {
-          [...node.childNodes].forEach((child) => {
-            if (child.nodeType !== 1)
-              return parent.appendChild(child.cloneNode(true));
-
-            const isShape = SHAPES.has(child.tagName);
-            const attrs = [...child.attributes].reduce((acc, attr) => {
-              if (attr.name === "stroke")
-                acc.stroke = attr.value === "none" ? "none" : "currentColor";
-              else if (attr.name === "fill")
-                acc.fill = attr.value === "none" ? "none" : "currentColor";
-              else acc[attr.name] = attr.value;
-              return acc;
-            }, {});
-
-            if (isShape && !attrs.stroke) attrs.stroke = "none";
-            if (!attrs.fill) attrs.fill = "none";
-
-            const clone = el(child.tagName, attrs);
-            if (child.hasChildNodes()) processNode(child, clone);
-            parent.appendChild(clone);
-          });
-        };
-
-        const createSymbols = (data) => {
-          const symbols = { light: new Map(), dark: new Map() };
-          const fileRegex = /([^\\/]{1,255})\.svg$/;
-          const themeRegex = /-(light|dark)$/;
-          const keys = Object.keys(data);
-
-          Object.entries(data).forEach(([path, content]) => {
-            const match = fileRegex.exec(path);
-            if (!match) return;
-
-            const fileName = match[1];
-            const themeMatch = themeRegex.exec(fileName);
-            const base = themeMatch
-              ? fileName.replace(themeRegex, "")
-              : fileName;
-            const isLight = themeMatch?.[1] === "light";
-            const isDarkTheme = themeMatch?.[1] === "dark";
-
-            const hasLight = keys.some((p) => p.includes(`${base}-light.svg`));
-            const hasDark = keys.some((p) => p.includes(`${base}-dark.svg`));
-
-            const processForTheme = (theme) => {
-              try {
-                const doc = new DOMParser().parseFromString(
-                  content,
-                  "image/svg+xml"
-                );
-                const svg = doc.querySelector("svg");
-                if (!svg) return;
-
-                const viewBox = svg.getAttribute("viewBox");
-                const [w, h] = [
-                  svg.getAttribute("width") || "24",
-                  svg.getAttribute("height") || "24",
-                ];
-
-                const symbol = el("symbol", {
-                  id: `icon-${base}`,
-                  viewBox: viewBox || `0 0 ${w} ${h}`,
-                  "data-icon-name": base,
-                  "data-theme": theme,
-                  class: `themed-icon${
-                    base === "sun" || base === "moon"
-                      ? ` theme-icon-${base}`
-                      : ""
-                  }`,
-                });
-
-                processNode(svg, symbol);
-                symbols[theme].set(symbol.id, symbol);
-              } catch (e) {
-                console.error(`Error processing ${path}:`, e);
-              }
-            };
-
-            if (isLight || (!isLight && !isDarkTheme && !hasDark))
-              processForTheme("light");
-            if (isDarkTheme || (!isLight && !isDarkTheme && !hasLight))
-              processForTheme("dark");
-          });
-
-          return symbols;
-        };
-
-        const buildSprites = (symbols) => {
-          const sprites = {};
-          ["light", "dark"].forEach((theme) => {
-            const svg = el("svg", {
-              id: `svg-sprite-${theme}`,
-              "aria-hidden": "true",
-              "data-theme": theme,
-            });
-            svg.style.cssText =
-              "position:absolute;width:0;height:0;overflow:hidden;display:none;";
-
-            symbols[theme].forEach((symbol) =>
-              svg.appendChild(symbol.cloneNode(true))
-            );
-            container.appendChild(svg);
-            sprites[theme] = svg;
-          });
-          return sprites;
-        };
-
-        const applyTheme = (sprites, dark) => {
-          sprites.light &&
-            (sprites.light.style.display = dark ? "none" : "block");
-          sprites.dark &&
-            (sprites.dark.style.display = dark ? "block" : "none");
-        };
-
-        // Initialize
-        let symbols = createSymbols(svgData);
-        let sprites = buildSprites(symbols);
-        applyTheme(sprites, isDark);
-
-        const handleThemeChange = (dark) => {
-          if (isDark === dark) return;
-          isDark = dark;
-          applyTheme(sprites, dark);
-          document.dispatchEvent(
-            new CustomEvent("themeChange", {
-              detail: { isDark: dark, source: "svgSpriteManager" },
-            })
-          );
-        };
-
-        // Event listeners
-        window
-          .matchMedia("(prefers-color-scheme: dark)")
-          .addEventListener("change", (e) => handleThemeChange(e.matches), {
-            passive: true,
-          });
-
-        document.addEventListener(
-          "themeChange",
-          (e) => {
-            if (
-              typeof e.detail?.isDark === "boolean" &&
-              e.detail.source !== "svgSpriteManager"
-            ) {
-              handleThemeChange(e.detail.isDark);
-            }
-          },
-          { passive: true }
-        );
-
-        // Public API
-        return {
-          addSvgs: (newSvgs) => {
-            if (!newSvgs || !Object.keys(newSvgs).length) return;
-
-            const newSymbols = createSymbols({ ...svgData, ...newSvgs });
-            symbols = newSymbols;
-
-            // Remove old sprites
-            sprites.light?.remove();
-            sprites.dark?.remove();
-
-            sprites = buildSprites(symbols);
-            applyTheme(sprites, isDark);
-
-            Object.assign(svgData, newSvgs);
-          },
-          toggleTheme: () => handleThemeChange(!isDark),
-          isDark: () => isDark,
-          setTheme: (dark) =>
-            typeof dark === "boolean" && handleThemeChange(dark),
-        };
+      const el = (tag, attrs = {}) => {
+        const e = document.createElementNS(NS, tag);
+        Object.entries(attrs).forEach(([k, v]) => e.setAttribute(k, v));
+        return e;
       };
 
-      // Optimized initialization
-      (async () => {
-        // Apply theme immediately to prevent flash
-        const getTheme = () =>
-          localStorage.getItem("theme") ||
-          (window.matchMedia("(prefers-color-scheme: dark)").matches
-            ? "dark"
-            : "light");
+      const processNode = (node, parent) => {
+        [...node.childNodes].forEach((child) => {
+          if (child.nodeType !== 1)
+            return parent.appendChild(child.cloneNode(true));
 
-        const currentTheme = getTheme();
-        document.documentElement.setAttribute("data-theme", currentTheme);
+          const isShape = SHAPES.has(child.tagName);
+          const attrs = [...child.attributes].reduce((acc, attr) => {
+            if (attr.name === "stroke")
+              acc.stroke = attr.value === "none" ? "none" : "currentColor";
+            else if (attr.name === "fill")
+              acc.fill = attr.value === "none" ? "none" : "currentColor";
+            else acc[attr.name] = attr.value;
+            return acc;
+          }, {});
 
-        // Wait for DOM
-        await new Promise((resolve) => {
-          if (document.readyState === "loading") {
-            document.addEventListener("DOMContentLoaded", resolve);
-          } else resolve();
+          if (isShape && !attrs.stroke) attrs.stroke = "none";
+          if (!attrs.fill) attrs.fill = "none";
+
+          const clone = el(child.tagName, attrs);
+          if (child.hasChildNodes()) processNode(child, clone);
+          parent.appendChild(clone);
+        });
+      };
+
+      const createSymbols = (data) => {
+        const symbols = { light: new Map(), dark: new Map() };
+        const fileRegex = /([^\\/]{1,255})\.svg$/;
+        const themeRegex = /-(light|dark)$/;
+        const keys = Object.keys(data);
+
+        Object.entries(data).forEach(([path, content]) => {
+          const match = fileRegex.exec(path);
+          if (!match) return;
+
+          const fileName = match[1];
+          const themeMatch = themeRegex.exec(fileName);
+          const base = themeMatch
+            ? fileName.replace(themeRegex, "")
+            : fileName;
+          const isLight = themeMatch?.[1] === "light";
+          const isDarkTheme = themeMatch?.[1] === "dark";
+
+          const hasLight = keys.some((p) => p.includes(`${base}-light.svg`));
+          const hasDark = keys.some((p) => p.includes(`${base}-dark.svg`));
+
+          const processForTheme = (theme) => {
+            try {
+              const doc = new DOMParser().parseFromString(
+                content,
+                "image/svg+xml"
+              );
+              const svg = doc.querySelector("svg");
+              if (!svg) return;
+
+              const viewBox = svg.getAttribute("viewBox");
+              const [w, h] = [
+                svg.getAttribute("width") || "24",
+                svg.getAttribute("height") || "24",
+              ];
+
+              const symbol = el("symbol", {
+                id: `icon-${base}`,
+                viewBox: viewBox || `0 0 ${w} ${h}`,
+                "data-icon-name": base,
+                "data-theme": theme,
+                class: `themed-icon${base === "sun" || base === "moon"
+                  ? ` theme-icon-${base}`
+                  : ""
+                  }`,
+              });
+
+              processNode(svg, symbol);
+              symbols[theme].set(symbol.id, symbol);
+            } catch (e) {
+              console.error(`Error processing ${path}:`, e);
+            }
+          };
+
+          if (isLight || (!isLight && !isDarkTheme && !hasDark))
+            processForTheme("light");
+          if (isDarkTheme || (!isLight && !isDarkTheme && !hasLight))
+            processForTheme("dark");
         });
 
-        // Load SVGs and initialize sprite system
-        const icons = [
-          "about.svg",
-          "portfolio.svg",
-          "github.svg",
-          "linkedin.svg",
-          "itch.svg",
-          "sun.svg",
-          "moon.svg",
-          "resume.svg",
-          "space.svg",
-          "shift.svg",
-          "wasd.svg",
-          "person.svg",
-          "play-btn.svg",
-          "gitlab.svg",
-        ];
+        return symbols;
+      };
 
-        const svgData = {};
-        await Promise.all(
-          icons.map(async (icon) => {
-            try {
-              const response = await fetch(`/icons/${icon}`);
-              svgData[`/icons/${icon}`] = response.ok
-                ? await response.text()
-                : `<svg viewBox="0 0 24 24"><rect width="24" height="24" fill="red" opacity="0.3"/></svg>`;
-            } catch (err) {
-              console.error(`Error loading ${icon}:`, err);
-              svgData[
-                `/icons/${icon}`
-              ] = `<svg viewBox="0 0 24 24"><rect width="24" height="24" fill="red" opacity="0.3"/></svg>`;
-            }
+      const buildSprites = (symbols) => {
+        const sprites = {};
+        ["light", "dark"].forEach((theme) => {
+          const svg = el("svg", {
+            id: `svg-sprite-${theme}`,
+            "aria-hidden": "true",
+            "data-theme": theme,
+          });
+          svg.style.cssText =
+            "position:absolute;width:0;height:0;overflow:hidden;display:none;";
+
+          symbols[theme].forEach((symbol) =>
+            svg.appendChild(symbol.cloneNode(true))
+          );
+          container.appendChild(svg);
+          sprites[theme] = svg;
+        });
+        return sprites;
+      };
+
+      const applyTheme = (sprites, dark) => {
+        sprites.light &&
+          (sprites.light.style.display = dark ? "none" : "block");
+        sprites.dark &&
+          (sprites.dark.style.display = dark ? "block" : "none");
+      };
+
+      // Initialize
+      let symbols = createSymbols(svgData);
+      let sprites = buildSprites(symbols);
+      applyTheme(sprites, isDark);
+
+      const handleThemeChange = (dark) => {
+        if (isDark === dark) return;
+        isDark = dark;
+        applyTheme(sprites, dark);
+        document.dispatchEvent(
+          new CustomEvent("themeChange", {
+            detail: { isDark: dark, source: "svgSpriteManager" },
           })
         );
+      };
 
-        // Initialize sprite system
-        window.sprite = createSvgSprite(svgData);
-        window.sprite.setTheme(currentTheme === "dark");
-
-        // Setup theme toggle
-        const themeToggle = document.getElementById("theme-toggle");
-        themeToggle.checked = currentTheme === "dark";
-
-        themeToggle.addEventListener("change", function () {
-          const isDark = this.checked;
-          const theme = isDark ? "dark" : "light";
-          document.documentElement.setAttribute("data-theme", theme);
-          localStorage.setItem("theme", theme);
-          window.sprite.setTheme(isDark);
+      // Event listeners
+      window
+        .matchMedia("(prefers-color-scheme: dark)")
+        .addEventListener("change", (e) => handleThemeChange(e.matches), {
+          passive: true,
         });
 
-        // Setup game view toggle
-        const viewToggleBtn = document.getElementById("view-toggle-btn");
-        const initGameCanvas = () => {
-          const canvas = document.getElementById("main-game-canvas");
-          canvas.width = canvas.clientWidth;
-          canvas.height = canvas.clientHeight;
-          const ctx = canvas.getContext("2d");
-          ctx && ctx.clearRect(0, 0, canvas.width, canvas.height);
-        };
+      document.addEventListener(
+        "themeChange",
+        (e) => {
+          if (
+            typeof e.detail?.isDark === "boolean" &&
+            e.detail.source !== "svgSpriteManager"
+          ) {
+            handleThemeChange(e.detail.isDark);
+          }
+        },
+        { passive: true }
+      );
 
-        viewToggleBtn.addEventListener("click", function () {
-          document.body.classList.toggle("game-mode");
-          const isGameMode = document.body.classList.contains("game-mode");
-          this.querySelector(".view-label").textContent = isGameMode
-            ? "Website View"
-            : "Game View";
-          isGameMode && initGameCanvas();
-        });
+      // Public API
+      return {
+        addSvgs: (newSvgs) => {
+          if (!newSvgs || !Object.keys(newSvgs).length) return;
 
-        window.addEventListener("resize", () => {
-          document.body.classList.contains("game-mode") && initGameCanvas();
-        });
-      })();
-    </script>
-  </head>
+          const newSymbols = createSymbols({ ...svgData, ...newSvgs });
+          symbols = newSymbols;
 
-  <body>
-    <!-- Sidebar -->
-    <div class="sidebar">
-      <div class="profile">
-        <img
-          src="/images/me.png"
-          alt="Profile"
-          class="profile-image"
-          width="574"
-          height="608"
-          loading="lazy"
-        />
-        <h2 class="profile-name">David Solinsky</h2>
-        <p class="profile-title">Gameplay & Systems Programmer</p>
-      </div>
-      <div class="social-links">
-        <a
-          target="_blank"
-          href="https://www.github.com/dsol-cpu"
-          title="GitHub"
-        >
-          <svg aria-hidden="true"><use href="#icon-github" /></svg>
-        </a>
-        <a
-          target="_blank"
-          href="https://linkedin.com/in/david-solinsky"
-          title="LinkedIn"
-        >
-          <svg aria-hidden="true"><use href="#icon-linkedin" /></svg>
-        </a>
-        <a target="_blank" href="https://smeppu.itch.io/" title="Itch.io">
-          <svg aria-hidden="true"><use href="#icon-itch" /></svg>
-        </a>
-      </div>
+          // Remove old sprites
+          sprites.light?.remove();
+          sprites.dark?.remove();
 
-      <ul class="nav-links">
-        <li>
-          <a href="" class="nav-link active" data-target="about">
-            <svg aria-hidden="true" class="nav-icon">
-              <use href="#icon-person" />
-            </svg>
-            About Me
-          </a>
-        </li>
-        <li>
-          <a href="" class="nav-link" data-target="portfolio">
-            <svg aria-hidden="true" class="nav-icon">
-              <use href="#icon-portfolio" />
-            </svg>
-            Portfolio
-          </a>
-        </li>
-        <li>
-          <a href="" class="nav-link" data-target="blog">
-            <svg aria-hidden="true" class="nav-icon">
-              <use href="#icon-resume" />
-            </svg>
-            Blog
-          </a>
-        </li>
-      </ul>
+          sprites = buildSprites(symbols);
+          applyTheme(sprites, isDark);
 
-      <div class="theme-toggle">
-        <div class="theme-toggle-wrapper">
-          <svg class="light-icon" aria-hidden="true">
-            <use href="#icon-sun" />
+          Object.assign(svgData, newSvgs);
+        },
+        toggleTheme: () => handleThemeChange(!isDark),
+        isDark: () => isDark,
+        setTheme: (dark) =>
+          typeof dark === "boolean" && handleThemeChange(dark),
+      };
+    };
+
+    // Optimized initialization
+    (async () => {
+      // Apply theme immediately to prevent flash
+      const getTheme = () =>
+        localStorage.getItem("theme") ||
+        (window.matchMedia("(prefers-color-scheme: dark)").matches
+          ? "dark"
+          : "light");
+
+      const currentTheme = getTheme();
+      document.documentElement.setAttribute("data-theme", currentTheme);
+
+      // Wait for DOM
+      await new Promise((resolve) => {
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", resolve);
+        } else resolve();
+      });
+
+      // Load SVGs and initialize sprite system
+      const icons = [
+        "about.svg",
+        "portfolio.svg",
+        "github.svg",
+        "linkedin.svg",
+        "itch.svg",
+        "sun.svg",
+        "moon.svg",
+        "resume.svg",
+        "space.svg",
+        "shift.svg",
+        "wasd.svg",
+        "person.svg",
+        "play-btn.svg",
+        "gitlab.svg",
+      ];
+
+      const svgData = {};
+      await Promise.all(
+        icons.map(async (icon) => {
+          try {
+            const response = await fetch(`/icons/${icon}`);
+            svgData[`/icons/${icon}`] = response.ok
+              ? await response.text()
+              : `<svg viewBox="0 0 24 24"><rect width="24" height="24" fill="red" opacity="0.3"/></svg>`;
+          } catch (err) {
+            console.error(`Error loading ${icon}:`, err);
+            svgData[
+              `/icons/${icon}`
+            ] = `<svg viewBox="0 0 24 24"><rect width="24" height="24" fill="red" opacity="0.3"/></svg>`;
+          }
+        })
+      );
+
+      // Initialize sprite system
+      window.sprite = createSvgSprite(svgData);
+      window.sprite.setTheme(currentTheme === "dark");
+
+      // Setup theme toggle
+      const themeToggle = document.getElementById("theme-toggle");
+      themeToggle.checked = currentTheme === "dark";
+
+      themeToggle.addEventListener("change", function () {
+        const isDark = this.checked;
+        const theme = isDark ? "dark" : "light";
+        document.documentElement.setAttribute("data-theme", theme);
+        localStorage.setItem("theme", theme);
+        window.sprite.setTheme(isDark);
+      });
+
+      // Setup game view toggle
+      const viewToggleBtn = document.getElementById("view-toggle-btn");
+      const initGameCanvas = () => {
+        const canvas = document.getElementById("main-game-canvas");
+        canvas.width = canvas.clientWidth;
+        canvas.height = canvas.clientHeight;
+        const ctx = canvas.getContext("2d");
+        ctx && ctx.clearRect(0, 0, canvas.width, canvas.height);
+      };
+
+      viewToggleBtn.addEventListener("click", function () {
+        document.body.classList.toggle("game-mode");
+        const isGameMode = document.body.classList.contains("game-mode");
+        this.querySelector(".view-label").textContent = isGameMode
+          ? "Website View"
+          : "Game View";
+        isGameMode && initGameCanvas();
+      });
+
+      window.addEventListener("resize", () => {
+        document.body.classList.contains("game-mode") && initGameCanvas();
+      });
+    })();
+  </script>
+</head>
+
+<body>
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="profile">
+      <img src="/images/me.png" alt="Profile" class="profile-image" width="574" height="608" loading="lazy" />
+      <h2 class="profile-name">David Solinsky</h2>
+      <p class="profile-title">Gameplay & Systems Programmer</p>
+    </div>
+    <div class="social-links">
+      <a target="_blank" href="https://www.github.com/dsol-cpu" title="GitHub">
+        <svg aria-hidden="true">
+          <use href="#icon-github" />
+        </svg>
+      </a>
+      <a target="_blank" href="https://linkedin.com/in/david-solinsky" title="LinkedIn">
+        <svg aria-hidden="true">
+          <use href="#icon-linkedin" />
+        </svg>
+      </a>
+      <a target="_blank" href="https://smeppu.itch.io/" title="Itch.io">
+        <svg aria-hidden="true">
+          <use href="#icon-itch" />
+        </svg>
+      </a>
+    </div>
+
+    <ul class="nav-links">
+      <li>
+        <a href="" class="nav-link active" data-target="about">
+          <svg aria-hidden="true" class="nav-icon">
+            <use href="#icon-person" />
           </svg>
-          <label class="theme-switch">
-            <input type="checkbox" id="theme-toggle" />
-            <span class="slider"></span>
-          </label>
-          <svg class="dark-icon" aria-hidden="true">
-            <use href="#icon-moon" />
+          About Me
+        </a>
+      </li>
+      <li>
+        <a href="" class="nav-link" data-target="portfolio">
+          <svg aria-hidden="true" class="nav-icon">
+            <use href="#icon-portfolio" />
           </svg>
+          Portfolio
+        </a>
+      </li>
+      <li>
+        <a href="" class="nav-link" data-target="blog">
+          <svg aria-hidden="true" class="nav-icon">
+            <use href="#icon-resume" />
+          </svg>
+          Blog
+        </a>
+      </li>
+    </ul>
+
+    <div class="theme-toggle">
+      <div class="theme-toggle-wrapper">
+        <svg class="light-icon" aria-hidden="true">
+          <use href="#icon-sun" />
+        </svg>
+        <label class="theme-switch">
+          <input type="checkbox" id="theme-toggle" />
+          <span class="slider"></span>
+        </label>
+        <svg class="dark-icon" aria-hidden="true">
+          <use href="#icon-moon" />
+        </svg>
+      </div>
+    </div>
+
+    <div class="view-toggle">
+      <button id="view-toggle-btn" class="view-toggle-btn">
+        <span class="view-label">Game View</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <!-- About Section -->
+    <section id="about">
+      <div class="container about-container">
+        <div class="about-canvas-container">
+          <canvas id="about-threejs-canvas" class="threejs-canvas"></canvas>
+        </div>
+
+        <div class="about-text">
+          <p>I'm a game developer.</p>
+          <br />
+          <p>
+            I have worked in Unity and Godot with a strong focus on gameplay
+            programming, procedural generation, and shader development. My
+            experience includes working as a software engineer in the
+            government and fintech space for the past 3–4 years.
+          </p>
+          <br />
+          <p>
+            When I'm not coding, I enjoy experimenting with 3D modeling,
+            learning about game design principles, and playing
+            <i>Fields of Mistria</i> or <i>Enshrouded</i> with my friends.
+          </p>
+          <br />
+          <p>I'm currently playing: <i>Oblivion Remastered</i>.</p>
+        </div>
+
+        <div class="about-images">
+          <div class="image-card">
+            <img src="/images/you_can_do_it.jpeg" alt="Unity project screenshot" loading="lazy" />
+          </div>
+          <div class="image-card">
+            <img src="/images/you_can_do_it.jpeg" alt="3D modeling artwork" loading="lazy" />
+          </div>
+          <div class="image-card">
+            <img src="/images/you_can_do_it.jpeg" alt="Gaming with friends" loading="lazy" />
+          </div>
         </div>
       </div>
+    </section>
 
-      <div class="view-toggle">
-        <button id="view-toggle-btn" class="view-toggle-btn">
-          <span class="view-label">Game View</span>
+    <!-- Portfolio Section -->
+    <section id="portfolio">
+      <div class="container">
+        <div class="filter-buttons">
+          <button class="filter-button active" data-filter="all">All</button>
+          <button class="filter-button" data-filter="unity">Unity</button>
+          <button class="filter-button" data-filter="unreal">
+            Unreal Engine
+          </button>
+          <button class="filter-button" data-filter="godot">Godot</button>
+          <button class="filter-button" data-filter="web">Web Games</button>
+          <button class="filter-button" data-filter="3d">3D Modeling</button>
+        </div>
+        <div class="project-card-grid"></div>
+      </div>
+    </section>
+
+    <section id="blog">
+      <div class="container">
+        <div class="blog-list"></div>
+      </div>
+    </section>
+  </div>
+
+  <div id="game-view-container" class="game-view-container">
+    <canvas id="main-game-canvas">
+      Your browser does not support the HTML5 canvas element.
+    </canvas>
+    <div id="mobile-controls" class="mobile-controls hidden">
+      <div id="joystick-container" class="joystick-container">
+        <svg viewBox="0 0 128 128" width="100%" height="100%" style="overflow: visible">
+          <circle cx="64" cy="64" r="64" fill="rgba(0, 0, 0, 0.3)"></circle>
+          <g id="joystick-knob" transform="translate(64, 64)" style="transition: transform 0.2s ease-out">
+            <circle cx="0" cy="0" r="32" fill="rgba(255, 255, 255, 0.8)" stroke="#555" stroke-width="1"></circle>
+          </g>
+        </svg>
+      </div>
+
+      <div class="altitude-controls">
+        <button id="altitude-up" class="altitude-button" aria-label="Up">
+          <svg class="icon-up" viewBox="0 0 64 64" width="100%" height="100%">
+            <circle cx="32" cy="32" r="30" fill="rgba(0,0,0,0.3)" stroke="#555" stroke-width="1"></circle>
+            <path d="M20 36 L32 20 L44 36" stroke="#FFFFFF" stroke-width="4" fill="none" stroke-linecap="round"
+              stroke-linejoin="round"></path>
+          </svg>
+        </button>
+        <button id="altitude-down" class="altitude-button" aria-label="Down">
+          <svg class="icon-down" viewBox="0 0 64 64" width="100%" height="100%">
+            <circle cx="32" cy="32" r="30" fill="rgba(0,0,0,0.3)" stroke="#555" stroke-width="1"></circle>
+            <path d="M20 28 L32 44 L44 28" stroke="#FFFFFF" stroke-width="4" fill="none" stroke-linecap="round"
+              stroke-linejoin="round"></path>
+          </svg>
         </button>
       </div>
     </div>
 
-    <!-- Main Content -->
-    <div class="main-content">
-      <!-- About Section -->
-      <section id="about">
-        <div class="container about-container">
-          <div class="about-canvas-container">
-            <canvas id="about-threejs-canvas" class="threejs-canvas"></canvas>
-          </div>
-
-          <div class="about-text">
-            <p>I'm a game developer.</p>
-            <br />
-            <p>
-              I have worked in Unity and Godot with a strong focus on gameplay
-              programming, procedural generation, and shader development. My
-              experience includes working as a software engineer in the
-              government and fintech space for the past 3–4 years.
-            </p>
-            <br />
-            <p>
-              When I'm not coding, I enjoy experimenting with 3D modeling,
-              learning about game design principles, and playing
-              <i>Fields of Mistria</i> or <i>Enshrouded</i> with my friends.
-            </p>
-            <br />
-            <p>I'm currently playing: <i>Oblivion Remastered</i>.</p>
-          </div>
-
-          <div class="about-images">
-            <div class="image-card">
-              <img
-                src="/api/placeholder/200/150"
-                alt="Unity project screenshot"
-                loading="lazy"
-              />
-              <p>Gameplay programming & procedural generation</p>
-            </div>
-            <div class="image-card">
-              <img
-                src="/api/placeholder/200/150"
-                alt="3D modeling artwork"
-                loading="lazy"
-              />
-              <p>Exploring 3D modeling & game art</p>
-            </div>
-            <div class="image-card">
-              <img
-                src="/api/placeholder/200/150"
-                alt="Gaming with friends"
-                loading="lazy"
-              />
-              <p>Gaming with friends in my downtime</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Portfolio Section -->
-      <section id="portfolio">
-        <div class="container">
-          <div class="filter-buttons">
-            <button class="filter-button active" data-filter="all">All</button>
-            <button class="filter-button" data-filter="unity">Unity</button>
-            <button class="filter-button" data-filter="unreal">
-              Unreal Engine
-            </button>
-            <button class="filter-button" data-filter="godot">Godot</button>
-            <button class="filter-button" data-filter="web">Web Games</button>
-            <button class="filter-button" data-filter="3d">3D Modeling</button>
-          </div>
-          <div class="project-card-grid"></div>
-        </div>
-      </section>
-
-      <section id="blog">
-        <div class="container">
-          <div class="blog-list"></div>
-        </div>
-      </section>
-    </div>
-
-    <div id="game-view-container" class="game-view-container">
-      <canvas id="main-game-canvas">
-        Your browser does not support the HTML5 canvas element.
-      </canvas>
-      <div id="mobile-controls" class="mobile-controls hidden">
-        <div id="joystick-container" class="joystick-container">
-          <svg
-            viewBox="0 0 128 128"
-            width="100%"
-            height="100%"
-            style="overflow: visible"
-          >
-            <circle cx="64" cy="64" r="64" fill="rgba(0, 0, 0, 0.3)"></circle>
-            <g
-              id="joystick-knob"
-              transform="translate(64, 64)"
-              style="transition: transform 0.2s ease-out"
-            >
-              <circle
-                cx="0"
-                cy="0"
-                r="32"
-                fill="rgba(255, 255, 255, 0.8)"
-                stroke="#555"
-                stroke-width="1"
-              ></circle>
-            </g>
-          </svg>
-        </div>
-
-        <div class="altitude-controls">
-          <button id="altitude-up" class="altitude-button" aria-label="Up">
-            <svg class="icon-up" viewBox="0 0 64 64" width="100%" height="100%">
-              <circle
-                cx="32"
-                cy="32"
-                r="30"
-                fill="rgba(0,0,0,0.3)"
-                stroke="#555"
-                stroke-width="1"
-              ></circle>
-              <path
-                d="M20 36 L32 20 L44 36"
-                stroke="#FFFFFF"
-                stroke-width="4"
-                fill="none"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              ></path>
-            </svg>
-          </button>
-          <button id="altitude-down" class="altitude-button" aria-label="Down">
-            <svg
-              class="icon-down"
-              viewBox="0 0 64 64"
-              width="100%"
-              height="100%"
-            >
-              <circle
-                cx="32"
-                cy="32"
-                r="30"
-                fill="rgba(0,0,0,0.3)"
-                stroke="#555"
-                stroke-width="1"
-              ></circle>
-              <path
-                d="M20 28 L32 44 L44 28"
-                stroke="#FFFFFF"
-                stroke-width="4"
-                fill="none"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              ></path>
-            </svg>
-          </button>
-        </div>
+    <div class="game-controls-info">
+      <div class="controls-header">
+        <svg class="controller-icon">
+          <use href="#icon-linkedin"></use>
+        </svg>
+        <h3>Game Controls</h3>
       </div>
 
-      <div class="game-controls-info">
-        <div class="controls-header">
-          <svg class="controller-icon"><use href="#icon-controller"></use></svg>
-          <h3>Game Controls</h3>
-        </div>
-
-        <div class="controls-content">
-          <ul class="controls-list">
-            <li class="control-item">
-              <div class="key-icons">
-                <div class="key-grid" id="wasd-keys">
-                  <div class="key" data-key="KeyW">W</div>
-                  <div class="key" data-key="KeyA">A</div>
-                  <div class="key" data-key="KeyS">S</div>
-                  <div class="key" data-key="KeyD">D</div>
-                </div>
-                <span class="key-separator">/</span>
-                <div class="key-grid" id="arrow-keys">
-                  <div class="key arrow" data-key="ArrowUp">↑</div>
-                  <div class="key arrow" data-key="ArrowLeft">←</div>
-                  <div class="key arrow" data-key="ArrowDown">↓</div>
-                  <div class="key arrow" data-key="ArrowRight">→</div>
-                </div>
+      <div class="controls-content">
+        <ul class="controls-list">
+          <li class="control-item">
+            <div class="key-icons">
+              <div class="key-grid" id="wasd-keys">
+                <div class="key" data-key="KeyW">W</div>
+                <div class="key" data-key="KeyA">A</div>
+                <div class="key" data-key="KeyS">S</div>
+                <div class="key" data-key="KeyD">D</div>
               </div>
-              <div class="command-desc">Move</div>
-            </li>
-            <li class="control-item">
-              <div class="key-icons">
-                <div class="key space" data-key="Space">Space</div>
-                <span class="key-separator">/</span>
-                <div class="key" data-key="ShiftLeft">Shift</div>
+              <span class="key-separator">/</span>
+              <div class="key-grid" id="arrow-keys">
+                <div class="key arrow" data-key="ArrowUp">↑</div>
+                <div class="key arrow" data-key="ArrowLeft">←</div>
+                <div class="key arrow" data-key="ArrowDown">↓</div>
+                <div class="key arrow" data-key="ArrowRight">→</div>
               </div>
-              <div class="command-desc">Ascend/Descend</div>
-            </li>
-            <li class="control-item">
-              <div class="key-icons">
-                <div class="key" data-key="ScrollUp">Scroll Up</div>
-                <span class="key-separator">/</span>
-                <div class="key" data-key="ScrollDown">Scroll Down</div>
-              </div>
-              <div class="command-desc">Zoom In/Zoom Out</div>
-            </li>
-          </ul>
-        </div>
+            </div>
+            <div class="command-desc">Move</div>
+          </li>
+          <li class="control-item">
+            <div class="key-icons">
+              <div class="key space" data-key="Space">Space</div>
+              <span class="key-separator">/</span>
+              <div class="key" data-key="ShiftLeft">Shift</div>
+            </div>
+            <div class="command-desc">Ascend/Descend</div>
+          </li>
+          <li class="control-item">
+            <div class="key-icons">
+              <div class="key" data-key="ScrollUp">Scroll Up</div>
+              <span class="key-separator">/</span>
+              <div class="key" data-key="ScrollDown">Scroll Down</div>
+            </div>
+            <div class="command-desc">Zoom In/Zoom Out</div>
+          </li>
+        </ul>
       </div>
     </div>
+  </div>
 
-    <!-- SVG Icons for reference -->
-    <svg class="game-icons" xmlns="http://www.w3.org/2000/svg">
-      <symbol id="icon-wasd" viewBox="0 0 24 24">
-        <path
-          d="M4,2H20A2,2 0 0,1 22,4V20A2,2 0 0,1 20,22H4A2,2 0 0,1 2,20V4A2,2 0 0,1 4,2M11,7H13V17H11V7M15,7H17V17H15V7M7,7H9V17H7V7Z"
-        ></path>
-      </symbol>
-      <symbol id="icon-space" viewBox="0 0 24 24">
-        <path
-          d="M18,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V4A2,2 0 0,0 18,2M18,20H6V4H18V20Z"
-        ></path>
-      </symbol>
-      <symbol id="icon-shift" viewBox="0 0 24 24">
-        <path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z"></path>
-      </symbol>
-      <symbol id="icon-controller" viewBox="0 0 24 24">
-        <path
-          d="M7.97,16L5,19C4.67,19.3 4.23,19.5 3.75,19.5A2.25,2.25 0 0,1 1.5,17.25C1.5,16.77 1.7,16.33 2,16L5,13H7.97L7.97,16M16.03,13H19L22,16C22.3,16.33 22.5,16.77 22.5,17.25A2.25,2.25 0 0,1 20.25,19.5C19.77,19.5 19.33,19.3 19,19L16.03,16V13M12,7A5,5 0 0,1 17,12H7A5,5 0 0,1 12,7M12,3A9,9 0 0,1 21,12A9,9 0 0,1 12,21A9,9 0 0,1 3,12A9,9 0 0,1 12,3Z"
-        ></path>
-      </symbol>
-    </svg>
+  <!-- SVG Icons for reference -->
+  <svg class="game-icons" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="icon-wasd" viewBox="0 0 24 24">
+      <path
+        d="M4,2H20A2,2 0 0,1 22,4V20A2,2 0 0,1 20,22H4A2,2 0 0,1 2,20V4A2,2 0 0,1 4,2M11,7H13V17H11V7M15,7H17V17H15V7M7,7H9V17H7V7Z">
+      </path>
+    </symbol>
+    <symbol id="icon-space" viewBox="0 0 24 24">
+      <path d="M18,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V4A2,2 0 0,0 18,2M18,20H6V4H18V20Z"></path>
+    </symbol>
+    <symbol id="icon-shift" viewBox="0 0 24 24">
+      <path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z"></path>
+    </symbol>
+    <symbol id="icon-controller" viewBox="0 0 24 24">
+      <path
+        d="M7.97,16L5,19C4.67,19.3 4.23,19.5 3.75,19.5A2.25,2.25 0 0,1 1.5,17.25C1.5,16.77 1.7,16.33 2,16L5,13H7.97L7.97,16M16.03,13H19L22,16C22.3,16.33 22.5,16.77 22.5,17.25A2.25,2.25 0 0,1 20.25,19.5C19.77,19.5 19.33,19.3 19,19L16.03,16V13M12,7A5,5 0 0,1 17,12H7A5,5 0 0,1 12,7M12,3A9,9 0 0,1 21,12A9,9 0 0,1 12,21A9,9 0 0,1 3,12A9,9 0 0,1 12,3Z">
+      </path>
+    </symbol>
+  </svg>
 
-    <script type="module" src="/src/js/main.js"></script>
-  </body>
+  <script type="module" src="/src/js/main.js"></script>
+</body>
+
 </html>
