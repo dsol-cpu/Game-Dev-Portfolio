@@ -50,12 +50,12 @@ async function initializeApp() {
   if (isLowPoweredDevice()) {
     document.getElementById("view-toggle-btn").style.display = "none";
   } else {
-    preloadModels(["babyTurtle", "portfolioShip", "globe"]);
-    initThreeJSManager();
+    await preloadModels(["babyTurtle", "portfolioShip", "globe"]);
+    await initThreeJSManager();
     initAboutCanvas();
     initProjectCardScene();
 
-    initGame();
+    await initGame();
     if (import.meta.env.DEV) {
       createDeltaTimeMetricsOverlay();
     }
@@ -104,7 +104,7 @@ function frameUpdateCallback(timestamp) {
     updateGameLoop(deltaTime);
   }
   // General engine operations for all registered physics bodies and cameras
-  renderFrame(deltaTime);
+  renderFrame();
 }
 
 function cleanup() {

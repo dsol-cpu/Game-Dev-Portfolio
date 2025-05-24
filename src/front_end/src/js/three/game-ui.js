@@ -1,41 +1,15 @@
 import { getCurrentHeight, getHeightLimits, getDirection } from "./player.js";
 import { debounce } from "../utils/helper.js";
-import { toggleAudio, setVolume, getVolume, isAudioEnabled } from "./audio.js";
+import { initMusicPlayer, syncMusicPlayer } from "./music-player-ui.js";
 
-const ALTITUDE_WIDTH = 35;
-const ALTITUDE_HEIGHT = 180;
-const COMPASS_SIZE = 100;
-const UI_PADDING = 20;
-const UI_BG_ALPHA = 0.65;
-const UI_FG_ALPHA = 0.95;
-
-// Cached UI elements and states for performance
-let altitudeCanvas, altitudeCtx;
-let compassCanvas, compassCtx;
-let volumeSlider, speakerButton;
-let gameContainer;
-let heightLimits = { min: -50, max: 50 };
-
-// Pre-calculated values
-const COMPASS_CENTER = COMPASS_SIZE / 2;
-const COMPASS_RADIUS = COMPASS_CENTER - 10;
-
-// Reusable objects for animations and rendering
-const altitudeFillGradients = {
-  normal: null,
-  max: null,
-  min: null,
+// Constants
+const UI_CONFIG = {
+  altitude: { width: 35, height: 180 },
+  compass: { size: 100 },
+  padding: 20,
+  alpha: { bg: 0.65, fg: 0.95 },
 };
 
-// State tracking to prevent unnecessary redraws
-let lastAltitude = null;
-let lastDirection = null;
-let lastRotation = null;
-let isStylesAdded = false;
-let resizeTimeout = null;
-let uiInitialized = false;
-
-// UI theme colors in Skies of Arcadia style
 const UI_THEME = {
   compass: {
     bg: "rgba(34, 51, 68, 0.75)",
@@ -47,18 +21,9 @@ const UI_THEME = {
   altitude: {
     bg: "rgba(34, 51, 68, 0.75)",
     border: "rgba(155, 179, 205, 0.9)",
-    fill: {
-      start: "#5b98bd",
-      end: "#2c5a8c",
-    },
-    fillHigh: {
-      start: "#e5b668",
-      end: "#c5853c",
-    },
-    fillLow: {
-      start: "#8cadca",
-      end: "#496d8c",
-    },
+    fill: { start: "#5b98bd", end: "#2c5a8c" },
+    fillHigh: { start: "#e5b668", end: "#c5853c" },
+    fillLow: { start: "#8cadca", end: "#496d8c" },
     text: "rgba(225, 235, 245, 0.95)",
     tickMark: "rgba(155, 179, 205, 0.8)",
   },
@@ -69,457 +34,95 @@ const UI_THEME = {
   },
 };
 
-export function getUI() {
-  // Get height limits once upfront
-  try {
-    heightLimits = getHeightLimits();
-  } catch {}
+// Store cleanup functions
+let cleanupFunctions = [];
 
-  // Create altitude meter (only if not already created)
-  if (!altitudeCanvas) {
-    altitudeCanvas = document.createElement("canvas");
-    altitudeCanvas.width = ALTITUDE_WIDTH;
-    altitudeCanvas.height = ALTITUDE_HEIGHT;
-    altitudeCanvas.id = "altitude-meter";
-    altitudeCanvas.classList.add("game-ui-element");
-    altitudeCtx = altitudeCanvas.getContext("2d"); // Use default context with alpha
-  }
+// Pure functions for canvas creation
+const createCanvas = (id, width, height, className = "game-ui-element") => {
+  const canvas = document.createElement("canvas");
+  Object.assign(canvas, { id, width, height, className });
+  return canvas;
+};
 
-  // Create compass (only if not already created)
-  if (!compassCanvas) {
-    compassCanvas = document.createElement("canvas");
-    compassCanvas.width = compassCanvas.height = COMPASS_SIZE;
-    compassCanvas.id = "compass-rose";
-    compassCanvas.classList.add("game-ui-element");
-    compassCtx = compassCanvas.getContext("2d"); // Use default context with alpha
-  }
+const createAltitudeCanvas = () =>
+  createCanvas(
+    "altitude-meter",
+    UI_CONFIG.altitude.width,
+    UI_CONFIG.altitude.height
+  );
 
-  // Create volume control elements
-  const volumeControlContainer = createVolumeControl();
+const createCompassCanvas = () =>
+  createCanvas("compass-rose", UI_CONFIG.compass.size, UI_CONFIG.compass.size);
 
-  return {
-    altitudeCanvas,
-    compassCanvas,
-    volumeControlContainer,
+// Pure functions for DOM element creation
+const createElement = (tag, props = {}, children = []) => {
+  const el = document.createElement(tag);
+  Object.assign(el, props);
+  Object.assign(el.style, props.style || {});
+  children.forEach((child) => el.appendChild(child));
+  return el;
+};
+
+// Pure positioning functions
+const calculatePosition = (
+  containerRect,
+  elementSize,
+  side,
+  offset = UI_CONFIG.padding
+) => ({
+  position: "absolute",
+  top: `${(containerRect.height - elementSize.height) / 2}px`,
+  [side]: `${offset}px`,
+  width: `${elementSize.width}px`,
+  height: `${elementSize.height}px`,
+  zIndex: "4",
+  willChange: "transform",
+});
+
+const positionElements = (container, elements) => {
+  const rect = container.getBoundingClientRect();
+
+  const positions = {
+    altitude: calculatePosition(rect, UI_CONFIG.altitude, "right"),
+    compass: calculatePosition(
+      rect,
+      { width: UI_CONFIG.compass.size, height: UI_CONFIG.compass.size },
+      "left"
+    ),
   };
-}
 
-// Avoid recreating DOM elements on every call
-function createVolumeControl() {
-  // Reuse existing container if available
-  let volumeControlContainer = document.getElementById(
-    "volume-control-container"
-  );
-
-  // Only create elements if they don't exist
-  if (!volumeControlContainer) {
-    volumeControlContainer = document.createElement("div");
-    volumeControlContainer.id = "volume-control-container";
-    volumeControlContainer.classList.add("game-ui-element");
-
-    // Create speaker button - get initial state from audio system
-    speakerButton = document.createElement("button");
-    speakerButton.id = "speaker-button";
-    const initialAudioState = isAudioEnabled();
-    speakerButton.innerHTML = initialAudioState ? "🔊" : "🔇";
-    speakerButton.classList.add("volume-control-btn");
-    speakerButton.title = "Mute/Unmute";
-
-    // Add click handler for speaker button
-    speakerButton.addEventListener(
-      "click",
-      () => {
-        // Toggle audio and get the new state
-        const newAudioState = toggleAudio();
-        updateSpeakerIcon(newAudioState);
-
-        // Also update volume slider state
-        updateVolumeSliderState(newAudioState);
-      },
-      { passive: true }
-    );
-
-    // Create volume slider
-    volumeSlider = document.createElement("input");
-    volumeSlider.type = "range";
-    volumeSlider.min = "0";
-    volumeSlider.max = "1";
-    volumeSlider.step = "0.1";
-    volumeSlider.value = getVolume().toString();
-    volumeSlider.id = "volume-slider";
-    volumeSlider.classList.add("volume-control-slider");
-
-    // Set initial slider enabled/disabled state based on audio state
-    volumeSlider.disabled = !initialAudioState;
-
-    // Use throttled input handler for volume slider
-    volumeSlider.addEventListener(
-      "input",
-      debounce((e) => {
-        const newVolume = parseFloat(e.target.value);
-        setVolume(newVolume);
-
-        // If volume was set to 0, update speaker icon
-        if (newVolume === 0) {
-          updateSpeakerIcon(false);
-        } else if (newVolume > 0 && isAudioEnabled()) {
-          updateSpeakerIcon(true);
-        }
-      }, 50),
-      { passive: true }
-    );
-
-    // Assemble volume control
-    volumeControlContainer.appendChild(speakerButton);
-    volumeControlContainer.appendChild(volumeSlider);
-  }
-
-  return volumeControlContainer;
-}
-
-// Helper function to update speaker icon
-function updateSpeakerIcon(isEnabled) {
-  if (speakerButton) {
-    speakerButton.innerHTML = isEnabled ? "🔊" : "🔇";
-  }
-}
-
-// Helper function to update volume slider state
-function updateVolumeSliderState(isEnabled) {
-  if (volumeSlider) {
-    volumeSlider.disabled = !isEnabled;
-    // Update visual appearance based on state
-    volumeSlider.style.opacity = isEnabled ? "1" : "0.5";
-    volumeSlider.style.cursor = isEnabled ? "pointer" : "not-allowed";
-  }
-}
-
-export function initGameUI(elements) {
-  if (!elements?.gameViewContainer) {
-    console.error("Game UI init failed: no container");
-    return;
-  }
-
-  // Prevent duplicate initialization
-  if (uiInitialized) return;
-  uiInitialized = true;
-
-  gameContainer = elements.gameViewContainer;
-
-  // Get UI elements - only create them once
-  const {
-    altitudeCanvas: altitude,
-    compassCanvas: compass,
-    volumeControlContainer,
-  } = getUI();
-
-  // References to canvas elements
-  altitudeCanvas = altitude;
-  compassCanvas = compass;
-
-  // Use fragment for better performance when adding multiple elements
-  const fragment = document.createDocumentFragment();
-  fragment.appendChild(altitudeCanvas);
-  fragment.appendChild(compassCanvas);
-  if (volumeControlContainer) {
-    fragment.appendChild(volumeControlContainer);
-  }
-  gameContainer.appendChild(fragment);
-
-  // Position elements once
-  positionUIElements();
-
-  // Add styles only once
-  if (!isStylesAdded) {
-    addGameUIStyles();
-    isStylesAdded = true;
-  }
-
-  // Use passive event listener with debounce for resize
-  window.addEventListener(
-    "resize",
-    () => {
-      if (resizeTimeout) return; // Skip if already waiting
-      resizeTimeout = setTimeout(() => {
-        positionUIElements();
-        resizeTimeout = null;
-      }, 200);
-    },
-    { passive: true }
-  );
-
-  // Set up reusable gradients for altitude meter
-  initializeGradients();
-
-  // Initial UI sync - make sure everything is in the correct state
-  syncVolumeUI();
-}
-
-// Pre-create gradients to avoid recreating them on every frame
-function initializeGradients() {
-  if (!altitudeCtx) return;
-
-  // Maximum height gradient (high altitude)
-  altitudeFillGradients.max = altitudeCtx.createLinearGradient(
-    0,
-    0,
-    0,
-    ALTITUDE_HEIGHT
-  );
-  altitudeFillGradients.max.addColorStop(0, UI_THEME.altitude.fillHigh.start);
-  altitudeFillGradients.max.addColorStop(1, UI_THEME.altitude.fillHigh.end);
-
-  // Minimum height gradient (low altitude)
-  altitudeFillGradients.min = altitudeCtx.createLinearGradient(
-    0,
-    0,
-    0,
-    ALTITUDE_HEIGHT
-  );
-  altitudeFillGradients.min.addColorStop(0, UI_THEME.altitude.fillLow.start);
-  altitudeFillGradients.min.addColorStop(1, UI_THEME.altitude.fillLow.end);
-
-  // Normal gradient - will be adjusted during render
-  altitudeFillGradients.normal = altitudeCtx.createLinearGradient(
-    0,
-    0,
-    0,
-    ALTITUDE_HEIGHT
-  );
-  altitudeFillGradients.normal.addColorStop(0, UI_THEME.altitude.fill.start);
-  altitudeFillGradients.normal.addColorStop(1, UI_THEME.altitude.fill.end);
-}
-
-function positionUIElements() {
-  if (!gameContainer || !altitudeCanvas || !compassCanvas) return;
-
-  const containerRect = gameContainer.getBoundingClientRect();
-
-  // Revert to using top/right/left for positioning to maintain correct overlay
-  Object.assign(altitudeCanvas.style, {
-    position: "absolute",
-    top: `${(containerRect.height - ALTITUDE_HEIGHT) / 2}px`,
-    right: `${UI_PADDING}px`,
-    width: `${ALTITUDE_WIDTH}px`,
-    height: `${ALTITUDE_HEIGHT}px`,
-    zIndex: "4",
-    willChange: "transform", // Still add performance hint
+  Object.entries(positions).forEach(([key, style]) => {
+    if (elements[key]) Object.assign(elements[key].style, style);
   });
 
-  Object.assign(compassCanvas.style, {
-    position: "absolute",
-    top: `${(containerRect.height - COMPASS_SIZE) / 2}px`,
-    left: `${UI_PADDING}px`,
-    width: `${COMPASS_SIZE}px`,
-    height: `${COMPASS_SIZE}px`,
-    zIndex: "4",
-    willChange: "transform", // Still add performance hint
+  // Position text labels
+  ["altitude", "compass"].forEach((type) => {
+    const textEl = document.getElementById(`${type}-text`);
+    if (textEl) {
+      const isAltitude = type === "altitude";
+      const size = isAltitude
+        ? UI_CONFIG.altitude
+        : { width: UI_CONFIG.compass.size };
+      const side = isAltitude ? "right" : "left";
+
+      Object.assign(textEl.style, {
+        position: "absolute",
+        top: `${
+          (rect.height -
+            (isAltitude ? UI_CONFIG.altitude.height : UI_CONFIG.compass.size)) /
+            2 -
+          25
+        }px`,
+        [side]: `${UI_CONFIG.padding + size.width / 2 - 15}px`,
+        width: "30px",
+        textAlign: "center",
+      });
+    }
   });
+};
 
-  // Position volume control
-  const volumeContainer = document.getElementById("volume-control-container");
-  if (volumeContainer) {
-    Object.assign(volumeContainer.style, {
-      position: "absolute",
-      top: `${UI_PADDING}px`,
-      left: `${UI_PADDING}px`,
-      zIndex: "10",
-      display: "flex",
-      alignItems: "center",
-      backgroundColor: UI_THEME.controls.bg,
-      padding: "8px",
-      borderRadius: "5px",
-      border: `1px solid ${UI_THEME.controls.accent}`,
-      willChange: "transform",
-    });
-  }
-
-  // Position altitude text above altitude meter
-  let altitudeText = document.getElementById("altitude-text");
-  if (!altitudeText) {
-    altitudeText = document.createElement("div");
-    altitudeText.id = "altitude-text";
-    altitudeText.className = "ui-text-label";
-    gameContainer.appendChild(altitudeText);
-  }
-
-  Object.assign(altitudeText.style, {
-    position: "absolute",
-    top: `${(containerRect.height - ALTITUDE_HEIGHT) / 2 - 25}px`,
-    right: `${UI_PADDING + ALTITUDE_WIDTH / 2 - 15}px`,
-    width: "30px",
-    textAlign: "center",
-    fontSize: "14px",
-    fontWeight: "bold",
-    color: UI_THEME.altitude.text,
-    backgroundColor: UI_THEME.altitude.bg,
-    padding: "2px 4px",
-    borderRadius: "3px",
-    border: `1px solid ${UI_THEME.altitude.border}`,
-    zIndex: "5",
-    pointerEvents: "none",
-  });
-
-  // Position compass text above compass
-  let compassText = document.getElementById("compass-text");
-  if (!compassText) {
-    compassText = document.createElement("div");
-    compassText.id = "compass-text";
-    compassText.className = "ui-text-label";
-    gameContainer.appendChild(compassText);
-  }
-
-  Object.assign(compassText.style, {
-    position: "absolute",
-    top: `${(containerRect.height - COMPASS_SIZE) / 2 - 25}px`,
-    left: `${UI_PADDING + COMPASS_SIZE / 2 - 15}px`,
-    width: "30px",
-    textAlign: "center",
-    fontSize: "14px",
-    fontWeight: "bold",
-    color: UI_THEME.compass.text,
-    backgroundColor: UI_THEME.compass.bg,
-    padding: "2px 4px",
-    borderRadius: "3px",
-    border: `1px solid ${UI_THEME.compass.border}`,
-    zIndex: "5",
-    pointerEvents: "none",
-  });
-}
-
-function addGameUIStyles() {
-  if (document.getElementById("game-ui-styles")) return;
-
-  const style = document.createElement("style");
-  style.id = "game-ui-styles";
-  style.textContent = `
-    .game-ui-element {
-      pointer-events: none;
-      border-radius: 5px;
-      will-change: transform; /* Hint for browser optimization */
-    }
-    #altitude-meter {
-      transition: box-shadow 0.2s ease;
-      border: 1px solid ${UI_THEME.altitude.border};
-    }
-    #altitude-meter.at-limit {
-      box-shadow: 0 0 10px rgba(255, 180, 40, 0.6);
-    }
-    #volume-control-container {
-      pointer-events: auto;
-    }
-    .volume-control-btn {
-      background: none;
-      border: none;
-      font-size: 20px;
-      cursor: pointer;
-      margin-right: 10px;
-      opacity: 0.9;
-      color: ${UI_THEME.controls.text};
-      transition: opacity 0.2s;
-    }
-    .volume-control-btn:hover {
-      opacity: 1;
-      color: ${UI_THEME.controls.accent};
-    }
-    .volume-control-slider {
-      width: 80px;
-      cursor: pointer;
-      accent-color: ${UI_THEME.controls.accent};
-      transition: opacity 0.2s;
-    }
-    .volume-control-slider:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-  `;
-  document.head.appendChild(style);
-}
-
-export function updateAltitudeMeter(altitude) {
-  if (!altitudeCtx) return;
-
-  // Skip update if value hasn't changed significantly
-  if (lastAltitude !== null && Math.abs(altitude - lastAltitude) < 0.5) return;
-  lastAltitude = altitude;
-
-  const ctx = altitudeCtx;
-  const width = ALTITUDE_WIDTH;
-  const height = ALTITUDE_HEIGHT;
-  const { min, max } = heightLimits;
-
-  // Use clearRect to maintain transparency
-  ctx.clearRect(0, 0, width, height);
-
-  // Draw background with rounded corners
-  ctx.fillStyle = UI_THEME.altitude.bg;
-  roundedRect(ctx, 0, 0, width, height, 5);
-  ctx.fill();
-
-  const normalizedAltitude = (altitude - min) / (max - min);
-  const fillHeight = normalizedAltitude * (height - 10);
-  const fillY = height - 5 - fillHeight;
-
-  const atMaxHeight = Math.abs(altitude - max) < 0.1;
-  const atMinHeight = Math.abs(altitude - min) < 0.1;
-
-  // Update gradient start point - don't recreate the gradient
-  if (atMaxHeight) {
-    ctx.fillStyle = altitudeFillGradients.max;
-  } else if (atMinHeight) {
-    ctx.fillStyle = altitudeFillGradients.min;
-  } else {
-    // Update normal gradient positions
-    const normalGradient = ctx.createLinearGradient(0, fillY, 0, height - 5);
-    normalGradient.addColorStop(0, UI_THEME.altitude.fill.start);
-    normalGradient.addColorStop(1, UI_THEME.altitude.fill.end);
-    ctx.fillStyle = normalGradient;
-  }
-
-  // Add/remove class for limit indication
-  if (altitudeCanvas) {
-    const hasClass = altitudeCanvas.classList.contains("at-limit");
-    if ((atMaxHeight || atMinHeight) && !hasClass) {
-      altitudeCanvas.classList.add("at-limit");
-    } else if (!(atMaxHeight || atMinHeight) && hasClass) {
-      altitudeCanvas.classList.remove("at-limit");
-    }
-  }
-
-  // Draw altitude bar with rounded corners
-  roundedRect(ctx, 5, fillY, width - 10, fillHeight, 3);
-  ctx.fill();
-
-  // Draw border
-  ctx.strokeStyle = UI_THEME.altitude.border;
-  ctx.lineWidth = 2;
-  roundedRect(ctx, 5, 5, width - 10, height - 10, 3);
-  ctx.stroke();
-
-  // Draw minimal altitude tick marks
-  ctx.strokeStyle = UI_THEME.altitude.tickMark;
-  ctx.lineWidth = 1;
-
-  // Only draw 3 tick marks for a cleaner look
-  const tickPositions = [0.1, 0.5, 0.9]; // Bottom, middle, top
-
-  for (const pos of tickPositions) {
-    const y = height - 5 - pos * (height - 10);
-    // Draw tick on left side
-    ctx.beginPath();
-    ctx.moveTo(5, y);
-    ctx.lineTo(10, y);
-    ctx.stroke();
-
-    // Draw tick on right side
-    ctx.beginPath();
-    ctx.moveTo(width - 5, y);
-    ctx.lineTo(width - 10, y);
-    ctx.stroke();
-  }
-}
-
-function roundedRect(ctx, x, y, width, height, radius) {
+// Pure canvas drawing functions
+const roundedRect = (ctx, x, y, width, height, radius) => {
   ctx.beginPath();
   ctx.moveTo(x + radius, y);
   ctx.lineTo(x + width - radius, y);
@@ -531,82 +134,146 @@ function roundedRect(ctx, x, y, width, height, radius) {
   ctx.lineTo(x, y + radius);
   ctx.quadraticCurveTo(x, y, x + radius, y);
   ctx.closePath();
-}
+};
 
-export function updateCompass(rotation) {
-  if (!compassCtx) return;
+const createGradient = (ctx, height, colors) => {
+  const gradient = ctx.createLinearGradient(0, 0, 0, height);
+  gradient.addColorStop(0, colors.start);
+  gradient.addColorStop(1, colors.end);
+  return gradient;
+};
 
-  // For compass, we need smooth updates regardless of small changes
-  lastRotation = rotation;
-  const direction = getDirection(rotation);
-  lastDirection = direction;
+const drawAltitudeMeter = (canvas, altitude) => {
+  const ctx = canvas.getContext("2d");
+  const { width, height } = UI_CONFIG.altitude;
+  const limits = getHeightLimits();
 
-  const ctx = compassCtx;
-  const size = COMPASS_SIZE;
+  ctx.clearRect(0, 0, width, height);
 
-  // Use clearRect for transparency
-  ctx.clearRect(0, 0, size, size);
-
-  // Draw semi-transparent compass background with rounded corners
-  ctx.fillStyle = UI_THEME.compass.bg;
-  ctx.beginPath();
-  ctx.arc(COMPASS_CENTER, COMPASS_CENTER, COMPASS_RADIUS + 5, 0, Math.PI * 2);
+  // Background
+  ctx.fillStyle = UI_THEME.altitude.bg;
+  roundedRect(ctx, 0, 0, width, height, 5);
   ctx.fill();
 
-  ctx.save();
-  ctx.translate(COMPASS_CENTER, COMPASS_CENTER);
-  ctx.rotate(-rotation);
+  // Calculate fill
+  const normalizedAltitude =
+    (altitude - limits.min) / (limits.max - limits.min);
+  const fillHeight = normalizedAltitude * (height - 10);
+  const fillY = height - 5 - fillHeight;
 
-  // Draw compass outline
+  // Determine fill color based on altitude
+  const atMax = Math.abs(altitude - limits.max) < 0.1;
+  const atMin = Math.abs(altitude - limits.min) < 0.1;
+
+  const fillColors = atMax
+    ? UI_THEME.altitude.fillHigh
+    : atMin
+    ? UI_THEME.altitude.fillLow
+    : UI_THEME.altitude.fill;
+
+  ctx.fillStyle = createGradient(ctx, height, fillColors);
+  roundedRect(ctx, 5, fillY, width - 10, fillHeight, 3);
+  ctx.fill();
+
+  // Border
+  ctx.strokeStyle = UI_THEME.altitude.border;
+  ctx.lineWidth = 2;
+  roundedRect(ctx, 5, 5, width - 10, height - 10, 3);
+  ctx.stroke();
+
+  // Tick marks
+  ctx.strokeStyle = UI_THEME.altitude.tickMark;
+  ctx.lineWidth = 1;
+
+  [0.1, 0.5, 0.9].forEach((pos) => {
+    const y = height - 5 - pos * (height - 10);
+    [
+      [5, 10],
+      [width - 5, width - 10],
+    ].forEach(([start, end]) => {
+      ctx.beginPath();
+      ctx.moveTo(start, y);
+      ctx.lineTo(end, y);
+      ctx.stroke();
+    });
+  });
+
+  // Update canvas class for limit indication
+  const hasLimitClass = canvas.classList.contains("at-limit");
+  if ((atMax || atMin) && !hasLimitClass) {
+    canvas.classList.add("at-limit");
+  } else if (!(atMax || atMin) && hasLimitClass) {
+    canvas.classList.remove("at-limit");
+  }
+};
+
+const drawCompass = (canvas, rotation) => {
+  const ctx = canvas.getContext("2d");
+  const size = UI_CONFIG.compass.size;
+  const center = size / 2;
+  const radius = center - 10;
+
+  ctx.clearRect(0, 0, size, size);
+
+  // Background
+  ctx.fillStyle = UI_THEME.compass.bg;
+  ctx.beginPath();
+  ctx.arc(center, center, radius + 5, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Compass ring (static)
   ctx.strokeStyle = UI_THEME.compass.border;
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.arc(0, 0, COMPASS_RADIUS, 0, Math.PI * 2);
+  ctx.arc(center, center, radius, 0, Math.PI * 2);
   ctx.stroke();
 
-  // Draw North marker only for a cleaner look
-  const northAngle = 0; // North is at 0 radians
-  const northX = Math.sin(northAngle) * (COMPASS_RADIUS - 15);
-  const northY = -Math.cos(northAngle) * (COMPASS_RADIUS - 15);
+  ctx.save();
+  ctx.translate(center, center);
 
-  ctx.font = "bold 16px 'Arial', sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillStyle = UI_THEME.compass.northPointer;
-  ctx.fillText("N", northX, northY);
+  // Draw static tick marks and labels (these don't rotate)
+  const cardinalAngles = [0, Math.PI / 2, Math.PI, (Math.PI * 3) / 2];
+  const cardinalLabels = ["N", "E", "S", "W"];
 
-  // Draw tick marks only
-  const cardinalPoints = [0, Math.PI / 2, Math.PI, (Math.PI * 3) / 2]; // N, E, S, W
-
-  for (const angle of cardinalPoints) {
-    const innerRadius = COMPASS_RADIUS - 10;
-    const outerRadius = COMPASS_RADIUS;
+  cardinalAngles.forEach((angle, i) => {
+    const innerRadius = radius - 10;
+    const outerRadius = radius;
+    const isNorth = i === 0;
 
     const innerX = Math.sin(angle) * innerRadius;
     const innerY = -Math.cos(angle) * innerRadius;
     const outerX = Math.sin(angle) * outerRadius;
     const outerY = -Math.cos(angle) * outerRadius;
 
-    ctx.strokeStyle =
-      angle === 0 ? UI_THEME.compass.northPointer : UI_THEME.compass.border;
-    ctx.lineWidth = angle === 0 ? 2 : 1.5;
+    // Tick mark
+    ctx.strokeStyle = isNorth
+      ? UI_THEME.compass.northPointer
+      : UI_THEME.compass.border;
+    ctx.lineWidth = isNorth ? 2 : 1.5;
     ctx.beginPath();
     ctx.moveTo(innerX, innerY);
     ctx.lineTo(outerX, outerY);
     ctx.stroke();
-  }
 
-  // Draw intermediate tick marks (NE, SE, SW, NW)
-  const intermediateAngles = [
+    // Label
+    if (isNorth) {
+      ctx.font = "bold 16px Arial, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = UI_THEME.compass.northPointer;
+      ctx.fillText(cardinalLabels[i], innerX * 0.8, innerY * 0.8);
+    }
+  });
+
+  // Intermediate tick marks
+  [
     Math.PI / 4,
     (Math.PI * 3) / 4,
     (Math.PI * 5) / 4,
     (Math.PI * 7) / 4,
-  ];
-
-  for (const angle of intermediateAngles) {
-    const innerRadius = COMPASS_RADIUS - 5;
-    const outerRadius = COMPASS_RADIUS;
+  ].forEach((angle) => {
+    const innerRadius = radius - 5;
+    const outerRadius = radius;
 
     const innerX = Math.sin(angle) * innerRadius;
     const innerY = -Math.cos(angle) * innerRadius;
@@ -619,129 +286,186 @@ export function updateCompass(rotation) {
     ctx.moveTo(innerX, innerY);
     ctx.lineTo(outerX, outerY);
     ctx.stroke();
-  }
+  });
 
-  // Draw compass pointer
+  // Rotate for the compass needle (only the needle rotates)
+  ctx.rotate(-rotation);
+
+  // Draw compass needle (this rotates with the player)
   ctx.fillStyle = UI_THEME.compass.accent;
   ctx.beginPath();
-  ctx.moveTo(0, -COMPASS_RADIUS + 20);
+  ctx.moveTo(0, -radius + 20);
   ctx.lineTo(6, -5);
   ctx.lineTo(0, 5);
   ctx.lineTo(-6, -5);
   ctx.closePath();
   ctx.fill();
+
   ctx.strokeStyle = UI_THEME.compass.border;
   ctx.lineWidth = 1;
   ctx.stroke();
 
   ctx.restore();
-}
+};
 
-let animFrameId = null;
-let pendingPlayerState = null;
+// Pure text label creation
+const createTextLabel = (id, className = "ui-text-label") =>
+  createElement("div", {
+    id,
+    className,
+    style: {
+      fontSize: "14px",
+      fontWeight: "bold",
+      backgroundColor: UI_THEME.altitude.bg,
+      padding: "2px 4px",
+      borderRadius: "3px",
+      border: `1px solid ${UI_THEME.altitude.border}`,
+      zIndex: "5",
+      pointerEvents: "none",
+      color: UI_THEME.altitude.text,
+    },
+  });
 
-export function updateGameUI(playerState) {
+// Pure styles creation
+const createStyles = () => {
+  if (document.getElementById("game-ui-styles")) return;
+
+  const style = createElement("style", {
+    id: "game-ui-styles",
+    textContent: `
+      .game-ui-element {
+        pointer-events: none;
+        border-radius: 5px;
+        will-change: transform;
+      }
+      #altitude-meter {
+        transition: box-shadow 0.2s ease;
+        border: 1px solid ${UI_THEME.altitude.border};
+      }
+      #altitude-meter.at-limit {
+        box-shadow: 0 0 10px rgba(255, 180, 40, 0.6);
+      }
+
+    `,
+  });
+
+  document.head.appendChild(style);
+};
+
+// Main API functions
+export const getUI = () => ({
+  altitudeCanvas: createAltitudeCanvas(),
+  compassCanvas: createCompassCanvas(),
+});
+
+export const initGameUI = (elements) => {
+  if (!elements?.gameViewContainer) {
+    console.error("Game UI init failed: no container");
+    return;
+  }
+
+  const container = elements.gameViewContainer;
+  const ui = getUI();
+
+  // Add elements to container
+  const fragment = document.createDocumentFragment();
+  Object.values(ui).forEach((el) => fragment.appendChild(el));
+  container.appendChild(fragment);
+
+  // Create text labels
+  const altitudeText = createTextLabel("altitude-text");
+  const compassText = createTextLabel("compass-text");
+  container.appendChild(altitudeText);
+  container.appendChild(compassText);
+
+  // Position elements
+  const elements_map = {
+    altitude: ui.altitudeCanvas,
+    compass: ui.compassCanvas,
+  };
+
+  positionElements(container, elements_map);
+
+  // Add styles
+  createStyles();
+
+  // Initialize media player
+  const mediaPlayerCleanup = initMusicPlayer(container, [
+    "/audio/Little Jack (Nasrad, Ixa'taka, Valua).mp3",
+  ]);
+  if (mediaPlayerCleanup) {
+    cleanupFunctions.push(mediaPlayerCleanup);
+  }
+
+  // Handle resize
+  const debouncedResize = debounce(
+    () => positionElements(container, elements_map),
+    200
+  );
+  window.addEventListener("resize", debouncedResize, { passive: true });
+
+  // Return cleanup function
+  return () => {
+    window.removeEventListener("resize", debouncedResize);
+    Object.values(ui).forEach((el) => el.remove());
+    altitudeText.remove();
+    compassText.remove();
+
+    // Clean up media player
+    cleanupFunctions.forEach((cleanup) => cleanup());
+    cleanupFunctions = [];
+  };
+};
+
+export const updateGameUI = (playerState) => {
   if (!playerState) return;
 
-  // Store the latest state and schedule an update if not already pending
-  pendingPlayerState = playerState;
-
-  if (!animFrameId) {
-    animFrameId = requestAnimationFrame(processGameUIUpdate);
-  }
-}
-
-function processGameUIUpdate() {
-  animFrameId = null;
-
-  if (!pendingPlayerState) return;
-
-  let altitude;
-  try {
-    altitude = getCurrentHeight();
-  } catch {
-    altitude = pendingPlayerState.position?.y || heightLimits.min;
-  }
-
-  let rotation;
-  if (pendingPlayerState.model?.quaternion) {
-    const { w, y } = pendingPlayerState.model.quaternion;
-    rotation = 2 * Math.atan2(y, w);
-  } else {
-    rotation = 0;
-  }
-
-  updateAltitudeMeter(altitude);
-  updateCompass(rotation);
-
-  // Update text labels above the UI elements
-  const altitudeText = document.getElementById("altitude-text");
-  if (altitudeText) {
-    altitudeText.textContent = Math.round(altitude).toString();
-  }
-
-  const compassText = document.getElementById("compass-text");
-  if (compassText) {
-    const direction = getDirection(rotation);
-    compassText.textContent = direction;
-  }
-
-  pendingPlayerState = null;
-}
-
-// Function to synchronize volume UI with audio state
-export function syncVolumeUI() {
-  const currentAudioState = isAudioEnabled();
-  const currentVolume = getVolume();
-
-  // Update volume slider value
-  if (volumeSlider) {
-    const currentVol = currentVolume.toString();
-    if (volumeSlider.value !== currentVol) {
-      volumeSlider.value = currentVol;
+  const altitude = (() => {
+    try {
+      return getCurrentHeight();
+    } catch {
+      return playerState.position?.y || getHeightLimits().min;
     }
-  }
+  })();
 
-  // Update speaker button icon and slider state
-  updateSpeakerIcon(currentAudioState);
-  updateVolumeSliderState(currentAudioState);
-}
+  const rotation = (() => {
+    if (playerState.model?.quaternion) {
+      const { w, y } = playerState.model.quaternion;
+      return 2 * Math.atan2(y, w);
+    }
+    return 0;
+  })();
 
-export function disposeGameUI() {
-  // Cancel any pending animations
-  if (animFrameId) {
-    cancelAnimationFrame(animFrameId);
-    animFrameId = null;
-  }
+  // Update canvases
+  const altitudeCanvas = document.getElementById("altitude-meter");
+  const compassCanvas = document.getElementById("compass-rose");
 
-  // Clear any pending timeouts
-  if (resizeTimeout) {
-    clearTimeout(resizeTimeout);
-    resizeTimeout = null;
-  }
+  if (altitudeCanvas) drawAltitudeMeter(altitudeCanvas, altitude);
+  if (compassCanvas) drawCompass(compassCanvas, rotation);
 
-  // Remove DOM elements
-  if (altitudeCanvas?.parentNode) {
-    altitudeCanvas.parentNode.removeChild(altitudeCanvas);
-  }
+  // Update text labels
+  const altitudeText = document.getElementById("altitude-text");
+  const compassText = document.getElementById("compass-text");
 
-  if (compassCanvas?.parentNode) {
-    compassCanvas.parentNode.removeChild(compassCanvas);
-  }
+  if (altitudeText) altitudeText.textContent = Math.round(altitude).toString();
+  if (compassText) compassText.textContent = getDirection(rotation);
 
-  // Remove volume control
-  const volumeContainer = document.getElementById("volume-control-container");
-  if (volumeContainer?.parentNode) {
-    volumeContainer.parentNode.removeChild(volumeContainer);
-  }
+  // Sync media player state
+  syncMusicPlayer();
+};
 
-  // Remove event listeners
-  window.removeEventListener("resize", positionUIElements);
+export const disposeGameUI = () => {
+  ["altitude-meter", "compass-rose", "altitude-text", "compass-text"].forEach(
+    (id) => {
+      const el = document.getElementById(id);
+      if (el) el.remove();
+    }
+  );
 
-  // Reset all state
-  altitudeCanvas = compassCanvas = volumeSlider = speakerButton = null;
-  altitudeCtx = compassCtx = gameContainer = null;
-  lastAltitude = lastDirection = lastRotation = null;
-  pendingPlayerState = null;
-  uiInitialized = false;
-}
+  const styles = document.getElementById("game-ui-styles");
+  if (styles) styles.remove();
+
+  // Clean up media player
+  cleanupFunctions.forEach((cleanup) => cleanup());
+  cleanupFunctions = [];
+};

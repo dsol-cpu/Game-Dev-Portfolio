@@ -1,12 +1,14 @@
+import { random } from "../utils/random";
+
 const MAX_PLAYLIST_LENGTH = 25;
 
 let audioState = {
   // Core audio system
   context: null,
   enabled: true,
-  volume: 0.125,
+  volume: 0.7,
   initialized: false,
-  userInteracted: false, // Track if user has interacted with the page
+  userInteracted: false,
 
   // Music properties
   musicGainNode: null,
@@ -16,10 +18,15 @@ let audioState = {
   musicSource: null,
   musicBuffer: null,
   musicPlayList: [],
+  currentTrackIndex: 0,
 
   // SFX properties
   sfxGainNode: null,
   sfxMap: new Map(),
+
+  // Visibility state
+  isVisible: true,
+  wasPlayingBeforeHidden: false,
 };
 
 /**
@@ -86,15 +93,51 @@ export async function initAudio(initialMusicUrl = null) {
 
     audioState.initialized = true;
 
+    // Set up visibility change handling
+    document.addEventListener(
+      "visibilitychange",
+      handleVisibilityChangeInternal
+    );
+
     // Load initial music if provided (but don't play yet)
     if (initialMusicUrl) {
-      await loadMusic(initialMusicUrl, false); // Don't auto-play
+      await loadMusic(initialMusicUrl, false);
     }
 
     return audioState;
   } catch (error) {
     console.error("Audio system initialization failed:", error);
     return audioState;
+  }
+}
+
+/**
+ * Internal visibility change handler
+ */
+function handleVisibilityChangeInternal() {
+  const wasVisible = audioState.isVisible;
+  audioState.isVisible = !document.hidden;
+
+  if (!wasVisible && audioState.isVisible) {
+    // Page became visible
+    if (
+      audioState.wasPlayingBeforeHidden &&
+      audioState.enabled &&
+      audioState.userInteracted
+    ) {
+      // Resume playback
+      resumeAudioContext().then(() => {
+        if (!audioState.musicPlaying) {
+          playMusic(audioState.musicPausedAt, true);
+        }
+      });
+    }
+  } else if (wasVisible && !audioState.isVisible) {
+    // Page became hidden
+    audioState.wasPlayingBeforeHidden = audioState.musicPlaying;
+    if (audioState.musicPlaying) {
+      pauseMusic(true); // Immediately pause when hidden
+    }
   }
 }
 
@@ -143,8 +186,16 @@ export async function loadMusic(musicUrl, autoPlay = false) {
     const buffer = await audioState.context.decodeAudioData(arrayBuffer);
     audioState.musicBuffer = buffer;
 
-    // Only auto-play if requested AND audio is enabled AND user has interacted
-    if (autoPlay && audioState.enabled && audioState.userInteracted) {
+    // Reset paused position when loading new track
+    audioState.musicPausedAt = 0;
+
+    // Only auto-play if requested AND audio is enabled AND user has interacted AND page is visible
+    if (
+      autoPlay &&
+      audioState.enabled &&
+      audioState.userInteracted &&
+      audioState.isVisible
+    ) {
       await resumeAudioContext();
       playMusic();
     }
@@ -174,7 +225,6 @@ export async function loadSFX(name) {
     }
     const arrayBuffer = await response.arrayBuffer();
     const buffer = await audioState.context.decodeAudioData(arrayBuffer);
-    // Store buffer instead of URL
     audioState.sfxMap.set(name, buffer);
     return true;
   } catch (error) {
@@ -193,12 +243,12 @@ export async function playSFX(name, volume = 1) {
   if (
     !audioState.context ||
     !audioState.enabled ||
-    !audioState.sfxMap.has(name)
+    !audioState.sfxMap.has(name) ||
+    !audioState.isVisible
   ) {
     return false;
   }
 
-  // Wait for user interaction if needed
   if (!audioState.userInteracted) {
     await waitForUserInteraction();
   }
@@ -207,25 +257,20 @@ export async function playSFX(name, volume = 1) {
 
   const buffer = audioState.sfxMap.get(name);
 
-  // Skip if we don't have the buffer yet (just URL)
   if (!(buffer instanceof AudioBuffer)) {
-    // Try to load it first
     await loadSFX(name);
     return false;
   }
 
-  // Create and connect source
   const source = audioState.context.createBufferSource();
   source.buffer = buffer;
 
-  // Create a gain node for this specific sound
   const gainNode = audioState.context.createGain();
   gainNode.gain.value = audioState.volume * volume;
 
   source.connect(gainNode);
   gainNode.connect(audioState.sfxGainNode);
 
-  // Play the sound
   source.start(0);
   return true;
 }
@@ -237,22 +282,37 @@ export async function playSFX(name, volume = 1) {
  * @returns {Promise<boolean>} Success status
  */
 export async function playMusic(resumeFromPosition = 0, immediate = false) {
+  // Don't play if page is hidden
+  if (!audioState.isVisible) {
+    return false;
+  }
+
   // Skip if not ready or already playing
   if (
     !audioState.context ||
     !audioState.musicBuffer ||
-    audioState.musicPlaying
+    audioState.musicPlaying ||
+    !audioState.enabled
   ) {
     return false;
   }
 
-  // Wait for user interaction if needed
   if (!audioState.userInteracted) {
     await waitForUserInteraction();
   }
 
-  // Resume suspended context if needed
   await resumeAudioContext();
+
+  // Stop any existing source
+  if (audioState.musicSource) {
+    try {
+      audioState.musicSource.stop();
+      audioState.musicSource.disconnect();
+    } catch (e) {
+      // Source might already be stopped
+    }
+    audioState.musicSource = null;
+  }
 
   // Create and connect source node
   const source = audioState.context.createBufferSource();
@@ -260,40 +320,47 @@ export async function playMusic(resumeFromPosition = 0, immediate = false) {
   source.loop = true;
   source.connect(audioState.musicGainNode);
 
-  const currentVolume = audioState.enabled ? audioState.volume : 0;
+  // Use the stored paused position if resumeFromPosition is 0
+  const startPosition = resumeFromPosition || audioState.musicPausedAt;
 
   if (immediate) {
-    // Set volume immediately
     audioState.musicGainNode.gain.setValueAtTime(
-      currentVolume,
+      audioState.volume,
       audioState.context.currentTime
     );
   } else {
-    // Fade in
     audioState.musicGainNode.gain.setValueAtTime(
       0,
       audioState.context.currentTime
     );
     audioState.musicGainNode.gain.linearRampToValueAtTime(
-      currentVolume,
+      audioState.volume,
       audioState.context.currentTime + 1
     );
   }
 
   // Start playback
-  source.start(0, resumeFromPosition);
+  source.start(0, startPosition);
+
+  // Handle track ending
+  source.addEventListener("ended", () => {
+    if (audioState.musicSource === source) {
+      audioState.musicPlaying = false;
+      audioState.musicSource = null;
+      playNextTrack();
+    }
+  });
 
   // Update state
   audioState.musicSource = source;
-  audioState.musicStartTime =
-    audioState.context.currentTime - resumeFromPosition;
+  audioState.musicStartTime = audioState.context.currentTime - startPosition;
   audioState.musicPlaying = true;
 
   return true;
 }
 
 /**
- * Pause background music
+ * Pause background music (true pause, can be resumed)
  * @param {boolean} [immediate=false] - Whether to pause immediately without fade-out
  * @returns {boolean} Success status
  */
@@ -303,17 +370,22 @@ export function pauseMusic(immediate = false) {
   }
 
   // Store current position
-  audioState.musicPausedAt =
-    (audioState.context.currentTime - audioState.musicStartTime) %
-    audioState.musicBuffer.duration;
+  if (audioState.context && audioState.musicBuffer) {
+    const elapsed = audioState.context.currentTime - audioState.musicStartTime;
+    audioState.musicPausedAt = elapsed % audioState.musicBuffer.duration;
+  }
 
-  // Stop playing
+  // Update state first
   audioState.musicPlaying = false;
 
   if (immediate) {
     // Stop immediately
-    audioState.musicSource.stop();
-    audioState.musicSource.disconnect();
+    try {
+      audioState.musicSource.stop();
+      audioState.musicSource.disconnect();
+    } catch (e) {
+      // Source might already be stopped
+    }
     audioState.musicSource = null;
   } else {
     // Fade out
@@ -326,16 +398,17 @@ export function pauseMusic(immediate = false) {
       audioState.context.currentTime + 0.5
     );
 
-    // Store reference then stop after fade
     const currentSource = audioState.musicSource;
-
-    // Stop after fade completes
     setTimeout(() => {
-      if (currentSource) {
-        currentSource.stop();
-        currentSource.disconnect();
+      if (currentSource === audioState.musicSource) {
+        try {
+          currentSource.stop();
+          currentSource.disconnect();
+        } catch (e) {
+          // Source might already be stopped
+        }
+        audioState.musicSource = null;
       }
-      audioState.musicSource = null;
     }, 500);
   }
 
@@ -357,12 +430,14 @@ export function stopMusic(immediate = false) {
   audioState.musicPlaying = false;
 
   if (immediate) {
-    // Stop immediately
-    audioState.musicSource.stop();
-    audioState.musicSource.disconnect();
+    try {
+      audioState.musicSource.stop();
+      audioState.musicSource.disconnect();
+    } catch (e) {
+      // Source might already be stopped
+    }
     audioState.musicSource = null;
   } else {
-    // Fade out
     audioState.musicGainNode.gain.setValueAtTime(
       audioState.musicGainNode.gain.value,
       audioState.context.currentTime
@@ -372,16 +447,17 @@ export function stopMusic(immediate = false) {
       audioState.context.currentTime + 0.5
     );
 
-    // Store reference then stop after fade
     const currentSource = audioState.musicSource;
-
-    // Stop after fade completes
     setTimeout(() => {
-      if (currentSource) {
-        currentSource.stop();
-        currentSource.disconnect();
+      if (currentSource === audioState.musicSource) {
+        try {
+          currentSource.stop();
+          currentSource.disconnect();
+        } catch (e) {
+          // Source might already be stopped
+        }
+        audioState.musicSource = null;
       }
-      audioState.musicSource = null;
     }, 500);
   }
 
@@ -396,61 +472,53 @@ export function stopMusic(immediate = false) {
 export async function toggleAudio(immediate = false) {
   audioState.enabled = !audioState.enabled;
 
-  // If audio is now enabled
   if (audioState.enabled) {
-    // Initialize if needed
     if (!audioState.initialized) {
-      initAudio();
+      await initAudio();
       return audioState.enabled;
     }
 
-    // Wait for user interaction if needed
     if (!audioState.userInteracted) {
       await waitForUserInteraction();
     }
 
     await resumeAudioContext();
 
-    // Set volume
+    // Update gain nodes
+    const targetVolume = audioState.volume;
     if (audioState.musicGainNode) {
       if (immediate) {
         audioState.musicGainNode.gain.setValueAtTime(
-          audioState.volume,
+          targetVolume,
           audioState.context.currentTime
         );
       } else {
         audioState.musicGainNode.gain.setTargetAtTime(
-          audioState.volume,
+          targetVolume,
           audioState.context.currentTime,
           0.1
         );
       }
     }
 
-    // Play if not already playing
-    if (!audioState.musicPlaying && audioState.musicBuffer) {
-      await playMusic(audioState.musicPausedAt, immediate);
-    }
-  } else {
-    // Audio is now disabled
-    if (audioState.musicGainNode) {
+    if (audioState.sfxGainNode) {
       if (immediate) {
-        // Mute immediately
-        audioState.musicGainNode.gain.setValueAtTime(
-          0,
+        audioState.sfxGainNode.gain.setValueAtTime(
+          targetVolume,
           audioState.context.currentTime
         );
-        // Pause audio
-        pauseMusic(true);
       } else {
-        // Fade out
-        audioState.musicGainNode.gain.setTargetAtTime(
-          0,
+        audioState.sfxGainNode.gain.setTargetAtTime(
+          targetVolume,
           audioState.context.currentTime,
           0.1
         );
-        // pauseMusic will be called by the fade timeout
       }
+    }
+  } else {
+    // Audio is now disabled - pause current playback
+    if (audioState.musicPlaying) {
+      pauseMusic(immediate);
     }
   }
 
@@ -464,39 +532,41 @@ export async function toggleAudio(immediate = false) {
  * @returns {number} New volume level
  */
 export function setVolume(volume, immediate = false) {
-  if (!audioState.initialized) {
-    audioState.volume = Math.max(0, Math.min(1, volume));
-    return audioState.volume;
-  }
-
   // Clamp volume between 0 and 1
   audioState.volume = Math.max(0, Math.min(1, volume));
 
-  // Only apply if audio is enabled
-  if (audioState.enabled) {
-    try {
-      const time = audioState.context.currentTime;
+  if (!audioState.initialized || !audioState.enabled) {
+    return audioState.volume;
+  }
 
-      if (immediate) {
-        // Set volume immediately
+  try {
+    const time = audioState.context.currentTime;
+
+    if (immediate) {
+      if (audioState.musicGainNode) {
         audioState.musicGainNode.gain.setValueAtTime(audioState.volume, time);
+      }
+      if (audioState.sfxGainNode) {
         audioState.sfxGainNode.gain.setValueAtTime(audioState.volume, time);
-      } else {
-        // Smooth transition
+      }
+    } else {
+      if (audioState.musicGainNode) {
         audioState.musicGainNode.gain.setTargetAtTime(
           audioState.volume,
           time,
           0.1
         );
+      }
+      if (audioState.sfxGainNode) {
         audioState.sfxGainNode.gain.setTargetAtTime(
           audioState.volume,
           time,
           0.1
         );
       }
-    } catch (error) {
-      console.error("Error updating audio volume:", error);
     }
+  } catch (error) {
+    console.error("Error updating audio volume:", error);
   }
 
   return audioState.volume;
@@ -535,11 +605,234 @@ export function hasUserInteracted() {
 }
 
 /**
- * Manually set user interaction state (useful for testing or special cases)
+ * Manually set user interaction state
  * @param {boolean} interacted - Whether user has interacted
  */
 export function setUserInteracted(interacted) {
   audioState.userInteracted = interacted;
+}
+
+/**
+ * Handle visibility change events (deprecated - handled internally now)
+ * @param {boolean} isVisible - Whether the page is visible
+ * @param {boolean} isGameView - Whether game view is active
+ * @returns {Promise<boolean>} Success status
+ */
+export async function handleVisibilityChange(isVisible, isGameView) {
+  // This is now handled internally, but kept for compatibility
+  return true;
+}
+
+/**
+ * Get the current playlist
+ * @returns {Array<string>} Array of music URLs
+ */
+export function getPlaylist() {
+  return [...audioState.musicPlayList];
+}
+
+/**
+ * Get current track index
+ * @returns {number} Current track index
+ */
+export function getCurrentTrackIndex() {
+  return audioState.currentTrackIndex || 0;
+}
+
+/**
+ * Set current track index
+ * @param {number} index - Track index to set
+ * @returns {boolean} Success status
+ */
+export function setCurrentTrackIndex(index) {
+  if (index >= 0 && index < audioState.musicPlayList.length) {
+    audioState.currentTrackIndex = index;
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Get current playback position in seconds
+ * @returns {number} Current position in seconds
+ */
+export function getCurrentPosition() {
+  if (!audioState.context || !audioState.musicBuffer) {
+    return audioState.musicPausedAt || 0;
+  }
+
+  if (audioState.musicPlaying && audioState.musicSource) {
+    const elapsed = audioState.context.currentTime - audioState.musicStartTime;
+    return elapsed % audioState.musicBuffer.duration;
+  }
+
+  return audioState.musicPausedAt || 0;
+}
+
+/**
+ * Get track duration in seconds
+ * @returns {number} Duration in seconds
+ */
+export function getDuration() {
+  return audioState.musicBuffer ? audioState.musicBuffer.duration : 0;
+}
+
+/**
+ * Seek to specific position in current track
+ * @param {number} position - Position in seconds
+ * @returns {Promise<boolean>} Success status
+ */
+export async function seekTo(position) {
+  if (
+    !audioState.musicBuffer ||
+    position < 0 ||
+    position > audioState.musicBuffer.duration
+  ) {
+    return false;
+  }
+
+  const wasPlaying = audioState.musicPlaying;
+
+  // Always update the paused position
+  audioState.musicPausedAt = position;
+
+  // If currently playing, restart from new position
+  if (wasPlaying) {
+    pauseMusic(true);
+    await playMusic(position, true);
+  }
+
+  return true;
+}
+
+/**
+ * Load and play a specific track from the playlist
+ * @param {number} index - Index of track to play
+ * @returns {Promise<boolean>} Success status
+ */
+export async function loadAndPlayTrack(index) {
+  if (index < 0 || index >= audioState.musicPlayList.length) {
+    return false;
+  }
+
+  // Stop current music
+  if (audioState.musicPlaying) {
+    stopMusic(true);
+  }
+
+  // Set new track index
+  audioState.currentTrackIndex = index;
+  const trackUrl = audioState.musicPlayList[index];
+
+  // Load new track
+  const loaded = await loadMusic(trackUrl, false);
+  if (!loaded) {
+    return false;
+  }
+
+  // Play if audio is enabled and user has interacted and page is visible
+  if (audioState.enabled && audioState.userInteracted && audioState.isVisible) {
+    await resumeAudioContext();
+    return await playMusic(0, true);
+  }
+
+  return true;
+}
+
+/**
+ * Play next track in playlist
+ * @returns {Promise<boolean>} Success status
+ */
+export async function playNextTrack() {
+  const currentIndex = audioState.currentTrackIndex || 0;
+  const nextIndex =
+    currentIndex < audioState.musicPlayList.length - 1 ? currentIndex + 1 : 0;
+  return await loadAndPlayTrack(nextIndex);
+}
+
+/**
+ * Play previous track in playlist
+ * @returns {Promise<boolean>} Success status
+ */
+export async function playPreviousTrack() {
+  const currentIndex = audioState.currentTrackIndex || 0;
+  const prevIndex =
+    currentIndex > 0 ? currentIndex - 1 : audioState.musicPlayList.length - 1;
+  return await loadAndPlayTrack(prevIndex);
+}
+
+/**
+ * Clear the entire playlist
+ * @returns {boolean} Success status
+ */
+export function clearPlaylist() {
+  if (audioState.musicPlaying) {
+    stopMusic(true);
+  }
+
+  audioState.musicPlayList = [];
+  audioState.currentTrackIndex = 0;
+  audioState.musicBuffer = null;
+
+  return true;
+}
+
+/**
+ * Remove a track from the playlist
+ * @param {number} index - Index of track to remove
+ * @returns {boolean} Success status
+ */
+export function removeFromPlaylist(index) {
+  if (index < 0 || index >= audioState.musicPlayList.length) {
+    return false;
+  }
+
+  const currentIndex = audioState.currentTrackIndex || 0;
+
+  if (index === currentIndex) {
+    stopMusic(true);
+    audioState.musicBuffer = null;
+  }
+
+  audioState.musicPlayList.splice(index, 1);
+
+  if (index < currentIndex) {
+    audioState.currentTrackIndex = currentIndex - 1;
+  } else if (index === currentIndex && audioState.musicPlayList.length > 0) {
+    audioState.currentTrackIndex = Math.min(
+      currentIndex,
+      audioState.musicPlayList.length - 1
+    );
+  } else if (audioState.musicPlayList.length === 0) {
+    audioState.currentTrackIndex = 0;
+  }
+
+  return true;
+}
+
+/**
+ * Shuffle the playlist
+ * @returns {boolean} Success status
+ */
+export function shufflePlaylist() {
+  if (audioState.musicPlayList.length <= 1) {
+    return false;
+  }
+
+  const currentTrack =
+    audioState.musicPlayList[audioState.currentTrackIndex || 0];
+
+  for (let i = audioState.musicPlayList.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [audioState.musicPlayList[i], audioState.musicPlayList[j]] = [
+      audioState.musicPlayList[j],
+      audioState.musicPlayList[i],
+    ];
+  }
+
+  audioState.currentTrackIndex = audioState.musicPlayList.indexOf(currentTrack);
+
+  return true;
 }
 
 /**
@@ -548,90 +841,71 @@ export function setUserInteracted(interacted) {
  * @returns {Promise<boolean>} Success status
  */
 export async function restoreAudioState(immediate = true) {
-  if (!audioState.initialized) {
+  if (!audioState.initialized || !audioState.isVisible) {
     return false;
   }
 
   if (audioState.enabled) {
-    // Wait for user interaction if needed
     if (!audioState.userInteracted) {
       await waitForUserInteraction();
     }
 
     await resumeAudioContext();
 
-    // Resume if it should be playing
     if (!audioState.musicPlaying && audioState.musicBuffer) {
       await playMusic(audioState.musicPausedAt, immediate);
     }
 
-    // Reset volume
+    const targetVolume = audioState.volume;
     if (immediate) {
-      audioState.musicGainNode.gain.setValueAtTime(
-        audioState.volume,
-        audioState.context.currentTime
-      );
-      audioState.sfxGainNode.gain.setValueAtTime(
-        audioState.volume,
-        audioState.context.currentTime
-      );
+      if (audioState.musicGainNode) {
+        audioState.musicGainNode.gain.setValueAtTime(
+          targetVolume,
+          audioState.context.currentTime
+        );
+      }
+      if (audioState.sfxGainNode) {
+        audioState.sfxGainNode.gain.setValueAtTime(
+          targetVolume,
+          audioState.context.currentTime
+        );
+      }
     } else {
-      audioState.musicGainNode.gain.setTargetAtTime(
-        audioState.volume,
-        audioState.context.currentTime,
-        0.1
-      );
-      audioState.sfxGainNode.gain.setTargetAtTime(
-        audioState.volume,
-        audioState.context.currentTime,
-        0.1
-      );
+      if (audioState.musicGainNode) {
+        audioState.musicGainNode.gain.setTargetAtTime(
+          targetVolume,
+          audioState.context.currentTime,
+          0.1
+        );
+      }
+      if (audioState.sfxGainNode) {
+        audioState.sfxGainNode.gain.setTargetAtTime(
+          targetVolume,
+          audioState.context.currentTime,
+          0.1
+        );
+      }
     }
   }
 
   return true;
 }
 
-/**
- * Handle visibility change events
- * @param {boolean} isVisible - Whether the page is visible
- * @param {boolean} isGameView - Whether game view is active
- * @returns {Promise<boolean>} Success status
- */
-export async function handleVisibilityChange(isVisible, isGameView) {
-  if (!audioState.initialized) {
-    return false;
-  }
-
-  if (!isVisible && audioState.musicPlaying) {
-    // Pause when hidden
-    pauseMusic(true);
-    return true;
-  } else if (
-    isVisible &&
-    isGameView &&
-    audioState.enabled &&
-    !audioState.musicPlaying &&
-    audioState.userInteracted
-  ) {
-    // Resume when visible in game view (only if user has interacted)
-    await resumeAudioContext();
-    await playMusic(audioState.musicPausedAt, true);
-    return true;
-  }
-
-  return false;
-}
-
-/**
- * Clean up audio resources
- * @returns {boolean} Success status
- */
 export function dispose() {
+  // Remove visibility listener
+  document.removeEventListener(
+    "visibilitychange",
+    handleVisibilityChangeInternal
+  );
+
   // Stop audio
   if (audioState.musicSource && audioState.musicPlaying) {
-    audioState.musicSource.stop();
-    audioState.musicSource.disconnect();
+    try {
+      audioState.musicSource.stop();
+      audioState.musicSource.disconnect();
+    } catch (e) {
+      // Source might already be stopped
+    }
   }
 
   // Disconnect nodes
@@ -652,6 +926,8 @@ export function dispose() {
   const wasEnabled = audioState.enabled;
   const lastVolume = audioState.volume;
   const hadInteraction = audioState.userInteracted;
+  const currentIndex = audioState.currentTrackIndex || 0;
+  const savedPlaylist = [...audioState.musicPlayList];
 
   // Reset state
   audioState = {
@@ -659,7 +935,7 @@ export function dispose() {
     enabled: wasEnabled,
     volume: lastVolume,
     initialized: false,
-    userInteracted: hadInteraction, // Keep interaction state
+    userInteracted: hadInteraction,
 
     musicGainNode: null,
     musicPlaying: false,
@@ -667,10 +943,14 @@ export function dispose() {
     musicPausedAt: 0,
     musicSource: null,
     musicBuffer: null,
-    musicPlayList: [],
+    musicPlayList: savedPlaylist,
+    currentTrackIndex: currentIndex,
 
     sfxGainNode: null,
     sfxMap: new Map(),
+
+    isVisible: true,
+    wasPlayingBeforeHidden: false,
   };
 
   return true;

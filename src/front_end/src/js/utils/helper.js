@@ -6,14 +6,14 @@ const PERF =
   typeof performance !== "undefined" ? performance : { now: Date.now };
 const ONE_SECOND = 1000;
 
-function getViewportSize() {
+export function getViewportSize() {
   return {
     w: window.innerWidth || document.documentElement.clientWidth,
     h: window.innerHeight || document.documentElement.clientHeight,
   };
 }
 
-function debounce(fn, wait, immediate = false) {
+export function debounce(fn, wait, immediate = false) {
   let timeout;
   return function (...args) {
     const callNow = immediate && !timeout;
@@ -84,12 +84,4 @@ function safeCall(fn, args = [], defaultValue = null) {
 
 const getFPS = () => fps;
 
-export {
-  debounce,
-  throttle,
-  isElementInViewport,
-  updateFPS,
-  getFPS,
-  safeCall,
-  getViewportSize,
-};
+export { throttle, isElementInViewport, updateFPS, getFPS, safeCall };

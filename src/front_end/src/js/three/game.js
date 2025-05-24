@@ -20,7 +20,6 @@ import { getScene, registerCamera } from "./threejs-manager.js";
 import { runFixedUpdates } from "./time.js";
 import { random } from "../utils/random.js";
 import {
-  initAudio,
   pauseMusic,
   isAudioEnabled,
   isMusicPlaying,
@@ -58,7 +57,6 @@ export const ISLAND_DATA = [
 ];
 
 const VIEW_MODES = { SCROLL: "scroll", GAME: "game" };
-const MUSIC_URL = "/audio/Little Jack (Nasrad, Ixa'taka, Valua).mp3";
 const TRANSITION_DURATION = 500; // ms for view transition
 
 // Game state and references - All consolidated for faster access
@@ -254,9 +252,9 @@ export function updateGameLoop(deltaTime) {
   if (playerEntity) {
     playerEntity.visible = true;
 
-    runFixedUpdates((fixedDt) => {
-      updatePlayer(fixedDt);
-      updateIslandBobbing(fixedDt);
+    runFixedUpdates((fixedDeltaTime) => {
+      updatePlayer(fixedDeltaTime);
+      updateIslandBobbing(fixedDeltaTime);
     });
 
     // Get current player state for UI update
@@ -450,9 +448,6 @@ function initGameControlsPanel() {
 
 export async function initGame() {
   if (gameState.isInitialized) return;
-
-  // Initialize audio module with game music
-  await initAudio(MUSIC_URL);
 
   initGameControlsPanel();
 

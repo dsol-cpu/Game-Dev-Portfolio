@@ -29,14 +29,14 @@ const USE_REQUEST_IDLE_CALLBACK =
 const DEBUG_MODE = false;
 const MEASURE_PERFORMANCE = DEBUG_MODE && typeof performance !== "undefined";
 
-// Create initial state factory
-const createInitialState = () => ({
+// Global state - direct mutation for performance
+const state = {
   clock: new Clock(),
   accumulator: 0,
   deltaTime: FIXED_DELTA_TIME,
   smoothedDelta: FIXED_DELTA_TIME,
-  lastDeltaTimes: Array(5).fill(FIXED_DELTA_TIME),
-  frameTimeHistory: Array(FRAME_TIME_HISTORY_SIZE).fill(FRAME_DELAY),
+  lastDeltaTimes: new Float32Array(5).fill(FIXED_DELTA_TIME),
+  frameTimeHistory: new Float32Array(FRAME_TIME_HISTORY_SIZE).fill(FRAME_DELAY),
   rafHandle: null,
   frameCallback: null,
   updatesPaused: false,
@@ -50,125 +50,116 @@ const createInitialState = () => ({
   lastInteractionTime: Date.now(),
   smoothingStrength: DEFAULT_SMOOTHING_STRENGTH,
   isRunning: false,
-});
+  eventHandlers: null,
+  deltaIndex: 0,
+  frameTimeIndex: 0,
+};
 
-// Global state container (unavoidable for singleton pattern)
-let timeState = createInitialState();
-
-// Pure helper functions
+// Inline helper functions for better performance
 const clampDelta = (delta) =>
-  Math.max(MIN_DELTA_TIME, Math.min(delta, MAX_DELTA_TIME));
+  delta < MIN_DELTA_TIME
+    ? MIN_DELTA_TIME
+    : delta > MAX_DELTA_TIME
+    ? MAX_DELTA_TIME
+    : delta;
 
-const calculateSmoothedDelta = (
-  deltaTime,
-  lastDeltaTimes,
-  smoothingStrength
-) => {
+const calculateSmoothedDelta = (deltaTime) => {
   if (!DELTA_SMOOTHING) return deltaTime;
+  if (USE_CONSISTENT_DELTA) return FIXED_DELTA_TIME;
 
-  if (USE_CONSISTENT_DELTA) {
-    return FIXED_DELTA_TIME;
+  // Simple moving average without sorting/filtering for performance
+  let sum = 0;
+  for (let i = 0; i < 5; i++) {
+    sum += state.lastDeltaTimes[i];
   }
+  const avgDelta = sum * 0.2; // divide by 5
 
-  const sortedDeltas = [...lastDeltaTimes].sort((a, b) => a - b);
-  const filteredDeltas = sortedDeltas.slice(1, -1);
-
-  const avgDelta =
-    filteredDeltas.length > 0
-      ? filteredDeltas.reduce((sum, dt) => sum + dt, 0) / filteredDeltas.length
-      : lastDeltaTimes[lastDeltaTimes.length - 1];
-
-  return deltaTime * (1 - smoothingStrength) + avgDelta * smoothingStrength;
+  return (
+    deltaTime * (1 - state.smoothingStrength) +
+    avgDelta * state.smoothingStrength
+  );
 };
 
-const updateDeltaHistory = (lastDeltaTimes, newDelta) => {
-  const updated = [...lastDeltaTimes];
-  updated.push(newDelta);
-  updated.shift();
-  return updated;
+const updateDeltaHistory = (newDelta) => {
+  state.lastDeltaTimes[state.deltaIndex] = newDelta;
+  state.deltaIndex = (state.deltaIndex + 1) % 5;
 };
 
-const updateFrameTimeHistory = (frameTimeHistory, newFrameTime) => {
-  const updated = [...frameTimeHistory];
-  updated.push(newFrameTime);
-  updated.shift();
-  return updated;
+const updateFrameTimeHistory = (newFrameTime) => {
+  state.frameTimeHistory[state.frameTimeIndex] = newFrameTime;
+  state.frameTimeIndex = (state.frameTimeIndex + 1) % FRAME_TIME_HISTORY_SIZE;
 };
 
-const calculateAverageFrameTime = (frameTimeHistory) =>
-  frameTimeHistory.reduce((sum, time) => sum + time, 0) /
-  frameTimeHistory.length;
+const calculateAverageFrameTime = () => {
+  let sum = 0;
+  for (let i = 0; i < FRAME_TIME_HISTORY_SIZE; i++) {
+    sum += state.frameTimeHistory[i];
+  }
+  return sum / FRAME_TIME_HISTORY_SIZE;
+};
 
-const adjustPhysicsIterations = (
-  currentIterations,
-  avgFrameTime,
-  consecutiveSlowFrames
-) => {
+const adjustPhysicsIterations = (avgFrameTime) => {
   if (avgFrameTime > FRAME_BUDGET_MS * 1.2) {
-    const newConsecutiveSlowFrames = consecutiveSlowFrames + 1;
+    state.consecutiveSlowFrames++;
 
-    if (newConsecutiveSlowFrames > 3) {
-      const newIterations = Math.max(
+    if (state.consecutiveSlowFrames > 3) {
+      state.adaptivePhysicsIterations = Math.max(
         PHYSICS_ITERATIONS_MIN,
-        currentIterations - 1
+        state.adaptivePhysicsIterations - 1
       );
+      state.consecutiveSlowFrames = 0;
 
       if (DEBUG_MODE) {
         console.log(
-          `Reducing physics iterations to ${newIterations} due to slow frames`
+          `Reducing physics iterations to ${state.adaptivePhysicsIterations} due to slow frames`
         );
       }
-
-      return { iterations: newIterations, consecutiveSlowFrames: 0 };
     }
-
-    return {
-      iterations: currentIterations,
-      consecutiveSlowFrames: newConsecutiveSlowFrames,
-    };
+    return;
   }
 
   if (avgFrameTime < FRAME_BUDGET_MS * 0.7) {
-    return {
-      iterations: Math.min(PHYSICS_ITERATIONS_MAX, currentIterations + 1),
-      consecutiveSlowFrames: 0,
-    };
+    state.adaptivePhysicsIterations = Math.min(
+      PHYSICS_ITERATIONS_MAX,
+      state.adaptivePhysicsIterations + 1
+    );
   }
 
-  return { iterations: currentIterations, consecutiveSlowFrames: 0 };
+  state.consecutiveSlowFrames = 0;
 };
 
-const calculateCurrentFPS = (fpsHistory) =>
-  fpsHistory.length > 0
-    ? Math.round(
-        fpsHistory.reduce((sum, val) => sum + val, 0) / fpsHistory.length
-      )
-    : 0;
+const calculateCurrentFPS = () => {
+  if (state.fpsHistory.length === 0) return 0;
 
-const shouldUpdateFPS = (timestamp, lastFpsUpdate) =>
-  timestamp - lastFpsUpdate > 500;
+  let sum = 0;
+  for (let i = 0; i < state.fpsHistory.length; i++) {
+    sum += state.fpsHistory[i];
+  }
+  return Math.round(sum / state.fpsHistory.length);
+};
 
-const checkIdleState = (lastInteractionTime) =>
-  typeof isIdle === "function"
+const checkIdleState = () => {
+  return typeof isIdle === "function"
     ? isIdle()
-    : Date.now() - lastInteractionTime > IDLE_THRESHOLD_MS;
+    : Date.now() - state.lastInteractionTime > IDLE_THRESHOLD_MS;
+};
 
-// Pure physics update function
-const runPhysicsSteps = (accumulator, fixedDeltaTime, maxSteps, stepFn) => {
+// Simplified physics update
+const runPhysicsSteps = (stepFn) => {
+  let steps = 0;
+  const maxSteps = state.adaptivePhysicsIterations;
+
   if (MEASURE_PERFORMANCE) {
     const startTime = performance.now();
-    let steps = 0;
-    let currentAccumulator = accumulator;
 
-    while (currentAccumulator >= fixedDeltaTime && steps < maxSteps) {
-      stepFn(fixedDeltaTime);
-      currentAccumulator -= fixedDeltaTime;
+    while (state.accumulator >= FIXED_DELTA_TIME && steps < maxSteps) {
+      stepFn(FIXED_DELTA_TIME);
+      state.accumulator -= FIXED_DELTA_TIME;
       steps++;
     }
 
-    if (currentAccumulator > fixedDeltaTime && steps >= maxSteps) {
-      currentAccumulator = Math.min(currentAccumulator, fixedDeltaTime);
-
+    if (state.accumulator > FIXED_DELTA_TIME && steps >= maxSteps) {
+      state.accumulator = Math.min(state.accumulator, FIXED_DELTA_TIME);
       if (DEBUG_MODE) {
         console.warn(
           `Time manager: Max physics steps (${maxSteps}) exceeded, reducing accumulated time`
@@ -182,206 +173,158 @@ const runPhysicsSteps = (accumulator, fixedDeltaTime, maxSteps, stepFn) => {
         `Physics update took ${duration.toFixed(2)}ms for ${steps} steps`
       );
     }
-
-    return currentAccumulator;
+    return;
   }
 
-  let steps = 0;
-  let currentAccumulator = accumulator;
-
-  while (currentAccumulator >= fixedDeltaTime && steps < maxSteps) {
-    stepFn(fixedDeltaTime);
-    currentAccumulator -= fixedDeltaTime;
+  while (state.accumulator >= FIXED_DELTA_TIME && steps < maxSteps) {
+    stepFn(FIXED_DELTA_TIME);
+    state.accumulator -= FIXED_DELTA_TIME;
     steps++;
   }
 
-  if (currentAccumulator > fixedDeltaTime && steps >= maxSteps) {
-    currentAccumulator = Math.min(currentAccumulator, fixedDeltaTime);
-
+  if (state.accumulator > FIXED_DELTA_TIME && steps >= maxSteps) {
+    state.accumulator = Math.min(state.accumulator, FIXED_DELTA_TIME);
     if (DEBUG_MODE) {
       console.warn(
         `Time manager: Max physics steps (${maxSteps}) exceeded, reducing accumulated time`
       );
     }
   }
-
-  return currentAccumulator;
 };
 
-// State update functions
-const updateStateFromFrame = (state, timestamp) => {
+// Simplified frame update
+const updateStateFromFrame = (timestamp) => {
   const frameStartTime = performance.now();
 
   // First frame initialization
   if (state.lastTimestamp === 0) {
     state.clock.getDelta();
-    return {
-      ...state,
-      lastTimestamp: timestamp,
-      frameCount: state.frameCount + 1,
-    };
+    state.lastTimestamp = timestamp;
+    state.frameCount++;
+    return;
   }
 
-  // Calculate delta time
   const rawDelta = (timestamp - state.lastTimestamp) / 1000;
 
   // Handle tab becoming active after being inactive
   if (rawDelta > MAX_DELTA_TIME) {
     state.clock.getDelta();
-    return {
-      ...state,
-      lastTimestamp: timestamp,
-      deltaTime: FIXED_DELTA_TIME,
-      smoothedDelta: FIXED_DELTA_TIME,
-      accumulator: FIXED_DELTA_TIME,
-      frameCount: state.frameCount + 1,
-    };
+    state.lastTimestamp = timestamp;
+    state.deltaTime = FIXED_DELTA_TIME;
+    state.smoothedDelta = FIXED_DELTA_TIME;
+    state.accumulator = FIXED_DELTA_TIME;
+    state.frameCount++;
+    return;
   }
 
   // Get bounded delta time
-  const deltaTime = clampDelta(state.clock.getDelta());
+  state.deltaTime = clampDelta(state.clock.getDelta());
 
   // Update delta history and calculate smoothed delta
-  const updatedDeltaTimes = updateDeltaHistory(state.lastDeltaTimes, deltaTime);
-  const smoothedDelta = calculateSmoothedDelta(
-    deltaTime,
-    updatedDeltaTimes,
-    state.smoothingStrength
-  );
+  updateDeltaHistory(state.deltaTime);
+  state.smoothedDelta = calculateSmoothedDelta(state.deltaTime);
 
   // Update accumulator
-  const newAccumulator = state.accumulator + deltaTime;
+  state.accumulator += state.deltaTime;
 
   // Check idle state
-  const idle = checkIdleState(state.lastInteractionTime);
+  state.updatesPaused = checkIdleState();
 
   // Performance metrics
   const frameDuration = performance.now() - frameStartTime;
-  const updatedFrameTimeHistory = updateFrameTimeHistory(
-    state.frameTimeHistory,
-    frameDuration
-  );
+  updateFrameTimeHistory(frameDuration);
 
-  let updatedState = {
-    ...state,
-    lastTimestamp: timestamp,
-    deltaTime,
-    smoothedDelta,
-    lastDeltaTimes: updatedDeltaTimes,
-    accumulator: newAccumulator,
-    updatesPaused: idle,
-    frameTimeHistory: updatedFrameTimeHistory,
-    frameCount: state.frameCount + 1,
-  };
+  state.lastTimestamp = timestamp;
+  state.frameCount++;
 
   // Update FPS if needed
-  if (DEBUG_MODE && shouldUpdateFPS(timestamp, state.lastFpsUpdate)) {
-    const newFpsHistory =
-      deltaTime > 0 ? [...state.fpsHistory, 1 / deltaTime] : state.fpsHistory;
-    const currentFps = calculateCurrentFPS(newFpsHistory);
+  if (DEBUG_MODE && timestamp - state.lastFpsUpdate > 500) {
+    if (state.deltaTime > 0) {
+      state.fpsHistory.push(1 / state.deltaTime);
+    }
 
-    if (currentFps < TARGET_FRAME_RATE * 0.8) {
-      console.warn(`Low FPS: ${currentFps}`);
+    state.currentFps = calculateCurrentFPS();
+
+    if (state.currentFps < TARGET_FRAME_RATE * 0.8) {
+      console.warn(`Low FPS: ${state.currentFps}`);
     }
 
     // Analyze performance every 60 frames
     if (state.frameCount % 60 === 0) {
-      const avgFrameTime = calculateAverageFrameTime(updatedFrameTimeHistory);
-      const { iterations, consecutiveSlowFrames } = adjustPhysicsIterations(
-        state.adaptivePhysicsIterations,
-        avgFrameTime,
-        state.consecutiveSlowFrames
-      );
-
-      updatedState = {
-        ...updatedState,
-        adaptivePhysicsIterations: iterations,
-        consecutiveSlowFrames,
-      };
+      const avgFrameTime = calculateAverageFrameTime();
+      adjustPhysicsIterations(avgFrameTime);
     }
 
-    updatedState = {
-      ...updatedState,
-      currentFps,
-      fpsHistory: [],
-      lastFpsUpdate: timestamp,
-    };
-  } else if (deltaTime > 0) {
-    updatedState = {
-      ...updatedState,
-      fpsHistory: [...state.fpsHistory, 1 / deltaTime],
-    };
+    state.fpsHistory.length = 0; // Clear array efficiently
+    state.lastFpsUpdate = timestamp;
+  } else if (state.deltaTime > 0) {
+    state.fpsHistory.push(1 / state.deltaTime);
+  }
+};
+
+// Simplified frame loop
+const frameLoop = (timestamp) => {
+  updateStateFromFrame(timestamp);
+
+  // Run frame callback
+  if (state.frameCallback && !state.updatesPaused) {
+    try {
+      state.frameCallback(getDeltaTime(), timestamp);
+    } catch (err) {
+      console.error("Error in frame callback:", err);
+    }
   }
 
-  return updatedState;
-};
+  // Schedule next frame
+  const targetDelay = state.updatesPaused
+    ? 1000 / IDLE_FRAME_RATE
+    : FRAME_DELAY;
+  const frameDuration = performance.now() - performance.now(); // Would be calculated properly
 
-// Frame loop factory
-const createFrameLoop = () => {
-  const frameLoop = (timestamp) => {
-    const updatedState = updateStateFromFrame(timeState, timestamp);
-    timeState = updatedState;
+  if (USE_REQUEST_IDLE_CALLBACK && state.updatesPaused) {
+    window.requestIdleCallback(
+      () => {
+        state.rafHandle = requestAnimationFrame(frameLoop);
+      },
+      { timeout: targetDelay }
+    );
+    return;
+  }
 
-    // Run frame callback
-    if (timeState.frameCallback && !timeState.updatesPaused) {
-      try {
-        timeState.frameCallback(getDeltaTime(), timestamp);
-      } catch (err) {
-        console.error("Error in frame callback:", err);
-      }
-    }
+  const remainingFrameTime = Math.max(0, targetDelay - frameDuration);
 
-    // Schedule next frame
-    const idle = timeState.updatesPaused;
-    const targetDelay = idle ? 1000 / IDLE_FRAME_RATE : FRAME_DELAY;
-    const frameDuration = performance.now() - performance.now(); // This would be calculated in updateStateFromFrame
-
-    if (USE_REQUEST_IDLE_CALLBACK && idle) {
-      window.requestIdleCallback(
-        () => {
-          timeState.rafHandle = requestAnimationFrame(frameLoop);
-        },
-        { timeout: targetDelay }
-      );
-    } else {
-      const remainingFrameTime = Math.max(0, targetDelay - frameDuration);
-
-      if (remainingFrameTime > 1) {
-        setTimeout(() => {
-          timeState.rafHandle = requestAnimationFrame(frameLoop);
-        }, remainingFrameTime);
-      } else {
-        timeState.rafHandle = requestAnimationFrame(frameLoop);
-      }
-    }
-  };
-
-  return frameLoop;
-};
-
-// Event handler factories
-const createVisibilityChangeHandler = () => () => {
-  if (document.hidden) {
-    timeState = { ...timeState, updatesPaused: true };
-    if (timeState.rafHandle !== null) {
-      cancelAnimationFrame(timeState.rafHandle);
-      timeState = { ...timeState, rafHandle: null };
-    }
+  if (remainingFrameTime > 1) {
+    setTimeout(() => {
+      state.rafHandle = requestAnimationFrame(frameLoop);
+    }, remainingFrameTime);
   } else {
-    resetIdleTimer();
-    timeState.clock.getDelta();
-    timeState = { ...timeState, lastTimestamp: 0 };
-
-    if (timeState.rafHandle === null && timeState.frameCallback) {
-      const frameLoop = createFrameLoop();
-      timeState = { ...timeState, rafHandle: requestAnimationFrame(frameLoop) };
-    }
+    state.rafHandle = requestAnimationFrame(frameLoop);
   }
 };
 
-// Exported functions (maintaining original API)
+// Event handlers
+const handleVisibilityChange = () => {
+  if (document.hidden) {
+    state.updatesPaused = true;
+    if (state.rafHandle !== null) {
+      cancelAnimationFrame(state.rafHandle);
+      state.rafHandle = null;
+    }
+    return;
+  }
+
+  resetIdleTimer();
+  state.clock.getDelta();
+  state.lastTimestamp = 0;
+
+  if (state.rafHandle === null && state.frameCallback) {
+    state.rafHandle = requestAnimationFrame(frameLoop);
+  }
+};
+
+// Exported functions
 export function getDeltaTime() {
-  return DELTA_SMOOTHING ? timeState.smoothedDelta : timeState.deltaTime;
+  return DELTA_SMOOTHING ? state.smoothedDelta : state.deltaTime;
 }
 
 export function getFixedDeltaTime() {
@@ -389,110 +332,102 @@ export function getFixedDeltaTime() {
 }
 
 export function runFixedUpdates(stepFn) {
-  if (timeState.updatesPaused) return;
-
-  const newAccumulator = runPhysicsSteps(
-    timeState.accumulator,
-    FIXED_DELTA_TIME,
-    timeState.adaptivePhysicsIterations,
-    stepFn
-  );
-
-  timeState = { ...timeState, accumulator: newAccumulator };
+  if (state.updatesPaused) return;
+  runPhysicsSteps(stepFn);
 }
 
 export function resetIdleTimer() {
-  timeState = {
-    ...timeState,
-    lastInteractionTime: Date.now(),
-    updatesPaused: false,
-  };
+  state.lastInteractionTime = Date.now();
+  state.updatesPaused = false;
 }
 
 export function startFrameCappedLoop(callback) {
-  if (timeState.rafHandle !== null) {
+  if (state.rafHandle !== null) {
     console.warn("Frame loop already running");
     return;
   }
 
-  // Reset to initial state with new callback
-  timeState = {
-    ...createInitialState(),
-    frameCallback: callback,
-    isRunning: true,
-  };
+  // Reset state
+  state.clock = new Clock();
+  state.accumulator = 0;
+  state.deltaTime = FIXED_DELTA_TIME;
+  state.smoothedDelta = FIXED_DELTA_TIME;
+  state.lastDeltaTimes.fill(FIXED_DELTA_TIME);
+  state.frameTimeHistory.fill(FRAME_DELAY);
+  state.frameCallback = callback;
+  state.updatesPaused = false;
+  state.fpsHistory.length = 0;
+  state.lastFpsUpdate = 0;
+  state.currentFps = 0;
+  state.lastTimestamp = 0;
+  state.adaptivePhysicsIterations = PHYSICS_ITERATIONS_MAX;
+  state.frameCount = 0;
+  state.consecutiveSlowFrames = 0;
+  state.lastInteractionTime = Date.now();
+  state.smoothingStrength = DEFAULT_SMOOTHING_STRENGTH;
+  state.isRunning = true;
+  state.deltaIndex = 0;
+  state.frameTimeIndex = 0;
 
   // Start the loop
-  timeState.clock.start();
-  timeState.clock.getDelta();
-
-  const frameLoop = createFrameLoop();
-  timeState.rafHandle = requestAnimationFrame(frameLoop);
+  state.clock.start();
+  state.clock.getDelta();
+  state.rafHandle = requestAnimationFrame(frameLoop);
 
   // Set up event listeners
   if (document) {
-    const visibilityHandler = createVisibilityChangeHandler();
-
-    document.addEventListener("visibilitychange", visibilityHandler);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     document.addEventListener("mousedown", resetIdleTimer);
     document.addEventListener("keydown", resetIdleTimer);
     document.addEventListener("touchstart", resetIdleTimer);
     window.addEventListener("focus", resetIdleTimer);
-    window.addEventListener("blur", () => {});
 
-    // Store handlers for cleanup
-    timeState = {
-      ...timeState,
-      eventHandlers: {
-        visibilitychange: visibilityHandler,
-        mousedown: resetIdleTimer,
-        keydown: resetIdleTimer,
-        touchstart: resetIdleTimer,
-        focus: resetIdleTimer,
-        blur: () => {},
-      },
+    state.eventHandlers = {
+      visibilitychange: handleVisibilityChange,
+      mousedown: resetIdleTimer,
+      keydown: resetIdleTimer,
+      touchstart: resetIdleTimer,
+      focus: resetIdleTimer,
     };
   }
 }
 
 export function stopFrameCappedLoop() {
-  if (timeState.rafHandle !== null) {
-    cancelAnimationFrame(timeState.rafHandle);
+  if (state.rafHandle !== null) {
+    cancelAnimationFrame(state.rafHandle);
+    state.rafHandle = null;
   }
 
   // Remove event listeners
-  if (document && timeState.eventHandlers) {
-    const handlers = timeState.eventHandlers;
-    document.removeEventListener("visibilitychange", handlers.visibilitychange);
-    document.removeEventListener("mousedown", handlers.mousedown);
-    document.removeEventListener("keydown", handlers.keydown);
-    document.removeEventListener("touchstart", handlers.touchstart);
-    window.removeEventListener("focus", handlers.focus);
-    window.removeEventListener("blur", handlers.blur);
+  if (document && state.eventHandlers) {
+    document.removeEventListener(
+      "visibilitychange",
+      state.eventHandlers.visibilitychange
+    );
+    document.removeEventListener("mousedown", state.eventHandlers.mousedown);
+    document.removeEventListener("keydown", state.eventHandlers.keydown);
+    document.removeEventListener("touchstart", state.eventHandlers.touchstart);
+    window.removeEventListener("focus", state.eventHandlers.focus);
   }
 
-  timeState = {
-    ...timeState,
-    rafHandle: null,
-    frameCallback: null,
-    updatesPaused: true,
-    isRunning: false,
-    eventHandlers: null,
-  };
+  state.frameCallback = null;
+  state.updatesPaused = true;
+  state.isRunning = false;
+  state.eventHandlers = null;
 }
 
 export function setPaused(paused) {
-  timeState = { ...timeState, updatesPaused: paused };
+  state.updatesPaused = paused;
 }
 
 export function getPerformanceMetrics() {
   return {
-    fps: timeState.currentFps,
-    frameTimeAvg: calculateAverageFrameTime(timeState.frameTimeHistory),
-    physicsIterations: timeState.adaptivePhysicsIterations,
-    deltaTime: timeState.deltaTime,
-    smoothedDelta: timeState.smoothedDelta,
-    isIdle: checkIdleState(timeState.lastInteractionTime),
+    fps: state.currentFps,
+    frameTimeAvg: calculateAverageFrameTime(),
+    physicsIterations: state.adaptivePhysicsIterations,
+    deltaTime: state.deltaTime,
+    smoothedDelta: state.smoothedDelta,
+    isIdle: checkIdleState(),
   };
 }
 
@@ -501,12 +436,12 @@ export function forcePhysicsIterations(iterations) {
     iterations >= PHYSICS_ITERATIONS_MIN &&
     iterations <= PHYSICS_ITERATIONS_MAX
   ) {
-    timeState = { ...timeState, adaptivePhysicsIterations: iterations };
+    state.adaptivePhysicsIterations = iterations;
   }
 }
 
 export function setDeltaSmoothing(strength) {
   if (strength >= 0 && strength <= 1) {
-    timeState = { ...timeState, smoothingStrength: strength };
+    state.smoothingStrength = strength;
   }
 }

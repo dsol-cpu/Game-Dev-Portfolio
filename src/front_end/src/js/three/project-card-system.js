@@ -6,746 +6,568 @@ import {
 import { isLowPoweredDevice } from "../utils/device";
 import { calculateGridPositions, loadModel } from "./model.js";
 import { getScene, registerCamera } from "./threejs-manager.js";
-import { debounce } from "../utils/helper.js";
 import { PROJECT_CARD_DATA } from "../data/projects.js";
 
-const domCache = {};
-let scene = null;
-let projectCamera = null;
-let cameraIndex = -1;
-let raycaster = null;
-let projectModels = new Map();
-let viewWindowPositions = new Map();
+const cache = { models: new Map(), positions: new Map() };
+let scene, camera, canvas;
 
-function getElement(selector, cacheProp) {
-  return (
-    domCache[cacheProp] ||
-    (domCache[cacheProp] = document.querySelector(selector))
+const el = (tag, cls, attrs = {}) => {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  Object.entries(attrs).forEach(
+    ([k, v]) =>
+      v != null &&
+      (k === "textContent" ? (e.textContent = v) : e.setAttribute(k, v))
   );
-}
+  return e;
+};
 
-function createElement(tag, className, attributes = {}) {
-  const el = document.createElement(tag);
-  if (className) el.className = className;
-  Object.entries(attributes).forEach(([key, val]) => {
-    if (val == null) return;
-    key === "textContent" ? (el.textContent = val) : el.setAttribute(key, val);
-  });
-  return el;
-}
+const createButtons = (project, type, id) => {
+  const frag = document.createDocumentFragment();
 
-function createButtons(project, buttonType, projectId) {
-  const fragment = document.createDocumentFragment();
-
-  if (buttonType === "overlay") {
-    const viewBtn = createElement("button", "btn btn-view", {
-      textContent: "View Details",
-    });
-    viewBtn.onclick = (e) => toggleExpand(e, projectId);
-    fragment.appendChild(viewBtn);
-    return fragment;
+  if (type === "overlay") {
+    const btn = el("button", "btn btn-view", { textContent: "View Details" });
+    btn.onclick = (e) => toggleExpand(e, id);
+    return frag.appendChild(btn), frag;
   }
 
-  if (buttonType !== "action") return fragment;
+  if (type !== "action") return frag;
 
   if (project.demoUrl) {
-    const demoButton = createElement("a", "btn btn-primary", {
+    const demo = el("a", "btn btn-primary", {
       href: project.demoUrl,
       target: "_blank",
-      rel: "noopener noreferrer",
     });
-    demoButton.innerHTML = `<svg aria-hidden="true"><use href="#icon-play-btn" /></svg><span>Live Demo</span>`;
-    fragment.appendChild(demoButton);
+    demo.innerHTML = `<svg aria-hidden="true"><use href="#icon-play-btn" /></svg><span>Live Demo</span>`;
+    frag.appendChild(demo);
   }
 
   if (project.githubUrl) {
-    const sourceButton = createElement("a", "btn btn-secondary", {
+    const src = el("a", "btn btn-secondary", {
       href: project.githubUrl,
       target: "_blank",
-      rel: "noopener noreferrer",
     });
-
-    let iconSvg;
-    if (project.githubUrl.includes("github.com")) {
-      iconSvg = `<svg aria-hidden="true"><use href="#icon-github" /></svg>`;
-    } else if (project.githubUrl.includes("gitlab.com")) {
-      iconSvg = `<svg aria-hidden="true"><use href="#icon-gitlab" /></svg>`;
-    } else if (project.githubUrl.includes("itch.io")) {
-      iconSvg = `<svg aria-hidden="true"><use href="#icon-itch" /></svg>`;
-    } else {
-      iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>`;
-    }
-
-    sourceButton.innerHTML = `${iconSvg}<span>Source Code</span>`;
-    fragment.appendChild(sourceButton);
+    const icon = project.githubUrl.includes("github.com")
+      ? "#icon-github"
+      : project.githubUrl.includes("gitlab.com")
+      ? "#icon-gitlab"
+      : project.githubUrl.includes("itch.io")
+      ? "#icon-itch"
+      : `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" fill="none"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>`;
+    src.innerHTML = `${
+      icon.startsWith("#") ? `<svg><use href="${icon}"/></svg>` : icon
+    }<span>Source Code</span>`;
+    frag.appendChild(src);
   }
 
-  const closeBtn = createElement("button", "btn btn-close-expanded", {
+  const close = el("button", "btn btn-close-expanded", {
     textContent: "Close",
   });
-  closeBtn.onclick = (e) => toggleExpand(e, projectId);
-  fragment.appendChild(closeBtn);
+  close.onclick = (e) => toggleExpand(e, id);
+  frag.appendChild(close);
+  return frag;
+};
 
-  return fragment;
-}
-
-function addStaticImage(container, project) {
-  if (!project.imageUrl) return;
-
-  const imageElement = createElement("div", "game-image");
-  imageElement.style.backgroundImage = `url(${project.imageUrl})`;
-
-  container.appendChild(
-    createElement("img", "fallback-image", {
-      src: project.imageUrl,
-      alt: project.title || "Project image",
-      loading: "lazy",
-    })
-  );
-
-  container.appendChild(imageElement);
-}
-
-function addModelViewWindow(container, project) {
-  const viewWindow = createElement("div", "model-view-window", {
-    "data-model-name": project.modelName || "",
-  });
-
-  const scrollContainer = createElement("div", "model-view-scroll-container");
-  const interactionHint = createElement("div", "model-interaction-hint", {
-    textContent: "Drag to rotate",
-  });
-
-  viewWindow.addEventListener(
-    "mouseenter",
-    () => (interactionHint.style.opacity = "0.7"),
-    { passive: true }
-  );
-  viewWindow.addEventListener(
-    "mouseleave",
-    () => (interactionHint.style.opacity = "0"),
-    { passive: true }
-  );
-
-  scrollContainer.appendChild(interactionHint);
-  viewWindow.appendChild(scrollContainer);
-  container.appendChild(viewWindow);
-}
-
-function createExpandedContent(project, projectId) {
-  const expanded = createElement("div", "expanded-content");
-  const inner = createElement("div", "expanded-content-inner");
-
-  inner.appendChild(
-    createElement("h2", "card-title", {
-      textContent: project.title || "Untitled Project",
-    })
-  );
-
-  const tagsContainer = createElement("div", "project-tags");
-  if (project.tags?.length) {
-    const fragment = document.createDocumentFragment();
-    project.tags.forEach((tag) => {
-      fragment.appendChild(
-        createElement("span", "project-tag", { textContent: tag })
-      );
-    });
-    tagsContainer.appendChild(fragment);
-  }
-  inner.appendChild(tagsContainer);
-
-  if (project.shortDescription) {
-    inner.appendChild(
-      createElement("p", "project-description", {
-        textContent: project.shortDescription,
-      })
-    );
-  }
-
-  if (project.fullDescription?.length) {
-    project.fullDescription.forEach((paragraph) => {
-      if (paragraph) {
-        inner.appendChild(
-          createElement("p", "project-description", { textContent: paragraph })
-        );
-      }
-    });
-  }
-
-  inner.appendChild(createButtons(project, "action", projectId));
-  expanded.appendChild(inner);
-
-  return expanded;
-}
-
-function createProjectCard(project) {
+const createCard = (project) => {
   if (!project?.id) return null;
 
-  const card = createElement("div", "game-preview project-card", {
+  const card = el("div", "game-preview project-card", {
     id: project.id,
     "data-category": project.category || project.tags?.[0]?.toLowerCase() || "",
     "data-model": project.modelName || "",
   });
 
-  const imageContainer = createElement(
-    "div",
-    "game-image-container portfolio-canvas"
-  );
-  const isLowPower = isLowPoweredDevice();
+  const container = el("div", "game-image-container portfolio-canvas");
 
-  isLowPower
-    ? addStaticImage(imageContainer, project)
-    : addModelViewWindow(imageContainer, project);
+  // Add content based on device capability
+  if (isLowPoweredDevice() && project.imageUrl) {
+    container.appendChild(
+      el("img", "fallback-image", {
+        src: project.imageUrl,
+        alt: project.title || "Project image",
+        loading: "lazy",
+      })
+    );
+  } else {
+    const window = el("div", "model-view-window", {
+      "data-model-name": project.modelName || "",
+    });
+    const hint = el("div", "model-interaction-hint", {
+      textContent: "Drag to rotate",
+    });
+    window.appendChild(hint);
+    window.onmouseenter = () => (hint.style.opacity = "0.7");
+    window.onmouseleave = () => (hint.style.opacity = "0");
+    container.appendChild(window);
+  }
 
-  const closeBtn = createElement("button", "btn-close", { textContent: "×" });
-  closeBtn.onclick = (e) => toggleExpand(e, project.id);
-  imageContainer.appendChild(closeBtn);
+  const close = el("button", "btn-close", { textContent: "×" });
+  close.onclick = (e) => toggleExpand(e, project.id);
+  container.appendChild(close);
 
-  const overlay = createElement("div", "game-overlay");
+  const overlay = el("div", "game-overlay");
   overlay.appendChild(
-    createElement("h3", "game-title", {
-      textContent: project.title || "Untitled Project",
-    })
+    el("h3", "game-title", { textContent: project.title || "Untitled" })
   );
   overlay.appendChild(createButtons(project, "overlay", project.id));
 
-  card.append(
-    imageContainer,
-    overlay,
-    createExpandedContent(project, project.id)
+  // Expanded content
+  const expanded = el("div", "expanded-content");
+  const inner = el("div", "expanded-content-inner");
+  inner.appendChild(
+    el("h2", "card-title", { textContent: project.title || "Untitled" })
   );
-  card.projectData = project;
-  return card;
-}
 
-function toggleExpand(e, id) {
-  if (e) {
-    e.preventDefault();
-    e.stopPropagation();
+  if (project.tags?.length) {
+    const tags = el("div", "project-tags");
+    project.tags.forEach((tag) =>
+      tags.appendChild(el("span", "project-tag", { textContent: tag }))
+    );
+    inner.appendChild(tags);
   }
+
+  if (project.shortDescription) {
+    inner.appendChild(
+      el("p", "project-description", { textContent: project.shortDescription })
+    );
+  }
+
+  project.fullDescription?.forEach(
+    (p) =>
+      p && inner.appendChild(el("p", "project-description", { textContent: p }))
+  );
+  inner.appendChild(createButtons(project, "action", project.id));
+  expanded.appendChild(inner);
+
+  card.append(container, overlay, expanded);
+  return card;
+};
+
+const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+
+const animate = (model, fromPos, toPos, fromScale, toScale, duration = 400) => {
+  if (!model || model.animating) return;
+
+  model.animating = true;
+  const start = performance.now();
+
+  const tick = (now) => {
+    const t = Math.min((now - start) / duration, 1);
+    const ease = easeOut(t);
+
+    model.position.lerpVectors(fromPos, toPos, ease);
+    const scale = fromScale + (toScale - fromScale) * ease;
+    model.scale.setScalar(scale);
+
+    if (t < 1) {
+      requestAnimationFrame(tick);
+    } else {
+      model.animating = false;
+    }
+  };
+  requestAnimationFrame(tick);
+};
+
+const getModelPos = (modelName, expanded = false) => {
+  if (!canvas || !camera) return new Vector3(0, 0, 10);
+
+  if (expanded) {
+    // For expanded cards, find the model-view-window and center within it
+    const card = document.querySelector(`[data-model="${modelName}"].expanded`);
+    const viewWindow = card?.querySelector(".model-view-window");
+
+    if (viewWindow && card) {
+      const canvasRect = canvas.getBoundingClientRect();
+      const windowRect = viewWindow.getBoundingClientRect();
+
+      console.log("Canvas rect:", canvasRect);
+      console.log("Window rect:", windowRect);
+      console.log("Model name:", modelName);
+
+      // Check if the window is actually visible and has dimensions
+      if (windowRect.width === 0 || windowRect.height === 0) {
+        console.log("Window has no dimensions, using fallback");
+        return new Vector3(0, 0, 6);
+      }
+
+      // Calculate center of the model-view-window relative to the canvas
+      const windowCenterX = windowRect.left + windowRect.width / 2;
+      const windowCenterY = windowRect.top + windowRect.height / 2;
+
+      // Calculate position relative to canvas bounds
+      const relativeX = windowCenterX - canvasRect.left;
+      const relativeY = windowCenterY - canvasRect.top;
+
+      console.log("Window center (viewport):", windowCenterX, windowCenterY);
+      console.log("Canvas bounds:", canvasRect.left, canvasRect.top);
+      console.log("Relative position:", relativeX, relativeY);
+
+      // Convert to normalized device coordinates (-1 to 1)
+      const ndcX = (relativeX / canvasRect.width) * 2 - 1;
+      const ndcY = -((relativeY / canvasRect.height) * 2 - 1);
+
+      console.log("NDC coordinates:", ndcX, ndcY);
+
+      // Create a raycaster from the camera through the window center
+      const raycaster = new Raycaster();
+      raycaster.setFromCamera(new Vector3(ndcX, ndcY, 0), camera);
+
+      // Position the model at a reasonable distance along this ray
+      // Use a distance that keeps the model at an appropriate size
+      const targetDistance = 6; // Adjust this value to control how close/far the model appears
+      const targetPosition = raycaster.ray.origin
+        .clone()
+        .add(raycaster.ray.direction.multiplyScalar(targetDistance));
+
+      console.log("Target position:", targetPosition);
+      return targetPosition;
+    }
+
+    console.log("Card or viewWindow not found, using fallback");
+    // Fallback to canvas center for expanded mode
+    return new Vector3(0, 0, 6);
+  }
+
+  // Normal positioning for non-expanded cards
+  const pos = cache.positions.get(modelName);
+  if (!pos) return new Vector3(0, 0, 10);
+
+  const vec = new Vector3(pos.x, pos.y, 0.5);
+  vec.unproject(camera);
+  vec.sub(camera.position).normalize();
+  vec.multiplyScalar(8);
+  vec.add(camera.position);
+  return vec;
+};
+
+const updatePositions = () => {
+  if (!canvas) return;
+
+  const rect = canvas.getBoundingClientRect();
+  cache.positions.clear();
+
+  // Calculate positions for all visible model-view-windows
+  document.querySelectorAll(".model-view-window").forEach((win) => {
+    const name = win.dataset.modelName;
+    if (!name) return;
+
+    // Check if the parent card is visible (not filtered out)
+    const card = win.closest(".project-card");
+    if (!card || card.style.display === "none") return;
+
+    const winRect = win.getBoundingClientRect();
+
+    // Only calculate position if window is actually visible
+    if (winRect.width === 0 || winRect.height === 0) return;
+
+    const x =
+      ((winRect.left + winRect.width / 2 - rect.left) / rect.width) * 2 - 1;
+    const y = -(
+      ((winRect.top + winRect.height / 2 - rect.top) / rect.height) * 2 -
+      1
+    );
+
+    cache.positions.set(name, {
+      x,
+      y,
+      width: winRect.width / rect.width,
+      height: winRect.height / rect.height,
+    });
+  });
+
+  // Update model positions and visibility
+  cache.models.forEach((model, name) => {
+    if (model.animating) return;
+
+    const card = document.querySelector(`[data-model="${name}"]`);
+
+    // Check if card is filtered out or hidden
+    if (!card || card.style.display === "none") {
+      model.visible = false;
+      return;
+    }
+
+    model.visible = true;
+    const expanded = card.classList.contains("expanded");
+    const targetPos = getModelPos(name, expanded);
+    const targetScale = (model.baseScale || 0.15) * (expanded ? 1.4 : 1);
+
+    // Force immediate position update if significant change is needed
+    const positionChange = model.position.distanceTo(targetPos);
+    const scaleChange = Math.abs(model.scale.x - targetScale);
+
+    if (positionChange > 0.1 || scaleChange > 0.01) {
+      animate(
+        model,
+        model.position.clone(),
+        targetPos,
+        model.scale.x,
+        targetScale,
+        expanded ? 600 : 400
+      );
+    }
+  });
+};
+
+const toggleExpand = (e, id) => {
+  e?.preventDefault();
+  e?.stopPropagation();
 
   const card = document.getElementById(id);
   if (!card) return;
 
   const expanding = !card.classList.contains("expanded");
-  const allCards = document.querySelectorAll(".game-preview.project-card");
-  const currentModelName = card.getAttribute("data-model");
+  const modelName = card.dataset.model;
+
+  console.log(
+    "Toggling expand for:",
+    id,
+    "expanding:",
+    expanding,
+    "modelName:",
+    modelName
+  );
+
+  // Handle card expansion/collapse
+  document.querySelectorAll(".project-card").forEach((c) => {
+    if (c.id === id) {
+      c.classList.toggle("expanded", expanding);
+      c.classList.toggle("section-centered-card", expanding);
+    } else {
+      c.classList.toggle("hidden-card", expanding);
+    }
+  });
+
+  document.body.classList.toggle("overflow-hidden", expanding);
 
   if (expanding) {
-    projectModels.forEach((model, modelName) => {
-      if (modelName !== currentModelName) {
-        model.userData.wasVisible = model.visible;
+    // Hide other models immediately, show only the expanded one
+    cache.models.forEach((model, name) => {
+      if (name === modelName) {
+        model.visible = true;
+        // Reset position immediately to prevent wrong positioning
+        model.position.set(0, 0, 6);
+      } else {
         model.visible = false;
       }
     });
 
-    if (currentModelName && projectModels.has(currentModelName)) {
-      const currentModel = projectModels.get(currentModelName);
-      currentModel.visible = true;
-      currentModel.userData.preExpandPosition = currentModel.position.clone();
+    // Wait for DOM layout to complete before positioning
+    setTimeout(() => {
+      console.log("Updating positions after expansion...");
+      // Force update only the expanded model
+      const expandedModel = cache.models.get(modelName);
+      if (expandedModel) {
+        const targetPos = getModelPos(modelName, true);
+        const targetScale = (expandedModel.baseScale || 0.15) * 1.4;
 
-      const viewWindow = card.querySelector(".model-view-window");
+        console.log("Positioning expanded model:", modelName, "to:", targetPos);
 
-      setTimeout(() => {
-        cacheViewWindowPositions();
-        const viewPos = viewWindowPositions.get(currentModelName);
-
-        if (viewPos) {
-          const targetPosition = calculateModelPositionForExpandedCard(
-            currentModelName,
-            viewWindow
-          );
-          const enhancedScale = currentModel.userData.initialScale * 1.2;
-
-          animateModelTransition(
-            currentModel,
-            currentModel.position.clone(),
-            targetPosition,
-            currentModel.scale.x,
-            enhancedScale,
-            500
-          );
-        }
-      }, 50);
-    }
-
-    allCards.forEach((otherCard) => {
-      if (otherCard.id !== id) {
-        otherCard.classList.add("hidden-card");
+        animate(
+          expandedModel,
+          expandedModel.position.clone(),
+          targetPos,
+          expandedModel.scale.x,
+          targetScale,
+          600
+        );
       }
+
+      // Scroll to center the expanded card after positioning
+      setTimeout(() => {
+        card.scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+          inline: "center",
+        });
+      }, 100);
+    }, 200); // Reduced delay since we're handling specific model
+  } else {
+    // Show all models for visible cards and reset their positions
+    cache.models.forEach((model, name) => {
+      const modelCard = document.querySelector(`[data-model="${name}"]`);
+      model.visible = modelCard && modelCard.style.display !== "none";
     });
 
-    card.classList.add("expanded", "centered-card");
-    card.scrollIntoView({ behavior: "smooth", block: "center" });
-  } else {
-    if (currentModelName && projectModels.has(currentModelName)) {
-      const currentModel = projectModels.get(currentModelName);
-      const originalScale = currentModel.userData.initialScale || 1;
-      const originalPosition =
-        currentModel.userData.preExpandPosition ||
-        currentModel.userData.originalPosition ||
-        new Vector3(0, 0, 10);
-
-      animateModelTransition(
-        currentModel,
-        currentModel.position.clone(),
-        originalPosition,
-        currentModel.scale.x,
-        originalScale,
-        350
-      );
-    }
-
-    card.classList.remove("expanded", "centered-card");
-
+    // Update positions after collapse animation
     setTimeout(() => {
-      allCards.forEach((otherCard) => {
-        otherCard.classList.remove("hidden-card");
-      });
-
-      projectModels.forEach((model, modelName) => {
-        if (model.userData.wasVisible !== undefined) {
-          model.visible = model.userData.wasVisible;
-          delete model.userData.wasVisible;
-        } else {
-          model.visible = true;
-        }
-      });
-
-      setTimeout(updateModelPositions, 150);
-    }, 300);
+      console.log("Updating positions after collapse...");
+      updatePositions();
+    }, 600); // Wait for CSS transitions to complete
   }
+};
 
-  document.body.classList.toggle("overflow-hidden", expanding);
-}
+const setupInteraction = () => {
+  let drag = { active: false, model: null, lastX: 0 };
 
-function cubicBezier(x1, y1, x2, y2, t) {
-  const cx = 3 * x1;
-  const bx = 3 * (x2 - x1) - cx;
-  const ax = 1 - cx - bx;
+  const handleMove = (x, y) => {
+    if (!drag.active || !drag.model) return;
+    drag.model.rotation.y += (x - drag.lastX) * 0.01;
+    drag.lastX = x;
+  };
 
-  const cy = 3 * y1;
-  const by = 3 * (y2 - y1) - cy;
-  const ay = 1 - cy - by;
+  document.addEventListener("mousedown", (e) => {
+    const win = e.target.closest(".model-view-window");
+    if (!win || e.button) return;
 
-  function sampleCurveX(t) {
-    return ((ax * t + bx) * t + cx) * t;
-  }
+    const model = cache.models.get(win.dataset.modelName);
+    if (!model) return;
 
-  function sampleCurveY(t) {
-    return ((ay * t + by) * t + cy) * t;
-  }
+    drag = { active: true, model, lastX: e.clientX };
+    document.body.style.cursor = "grabbing";
+    e.preventDefault();
+  });
 
-  function solveCurveX(x) {
-    let t2 = x;
-    const epsilon = 1e-6;
-    let d2, i;
-
-    for (i = 0; i < 8; i++) {
-      d2 = sampleCurveX(t2) - x;
-      if (Math.abs(d2) < epsilon) return t2;
-      let d1 = (3 * ax * t2 + 2 * bx) * t2 + cx;
-      if (Math.abs(d1) < 1e-6) break;
-      t2 = t2 - d2 / d1;
-    }
-
-    let t0 = 0;
-    let t1 = 1;
-    t2 = x;
-
-    if (t2 < t0) return t0;
-    if (t2 > t1) return t1;
-
-    while (t0 < t1) {
-      d2 = sampleCurveX(t2);
-      if (Math.abs(d2 - x) < epsilon) break;
-      if (x > d2) t0 = t2;
-      else t1 = t2;
-      t2 = (t1 - t0) * 0.5 + t0;
-    }
-
-    return t2;
-  }
-
-  return sampleCurveY(solveCurveX(t));
-}
-
-function animateModelTransition(
-  model,
-  fromPosition,
-  toPosition,
-  fromScale,
-  toScale,
-  duration = 500
-) {
-  if (!model) return;
-
-  // Cancel any ongoing animation
-  if (model.userData.transitionAnimationId) {
-    cancelAnimationFrame(model.userData.transitionAnimationId);
-  }
-
-  const startTime = performance.now();
-  const wasAnimating = model.userData.animate;
-  model.userData.animate = false;
-
-  // Pre-compute values that don't change during animation
-  const scaleDiff = toScale - fromScale;
-
-  // Use a shared function for animation to reduce memory allocation
-  function animate(currentTime) {
-    const elapsed = currentTime - startTime;
-    const progress = Math.min(elapsed / duration, 1);
-
-    // Use pre-computed lookup table for cubic-bezier
-    const easedProgress = cubicBezierLookup(progress);
-
-    // Use vector operations directly instead of lerpVectors to avoid object creation
-    model.position.x =
-      fromPosition.x + (toPosition.x - fromPosition.x) * easedProgress;
-    model.position.y =
-      fromPosition.y + (toPosition.y - fromPosition.y) * easedProgress;
-    model.position.z =
-      fromPosition.z + (toPosition.z - fromPosition.z) * easedProgress;
-
-    // Calculate scale only once and reuse
-    const currentScale = fromScale + scaleDiff * easedProgress;
-    model.scale.set(currentScale, currentScale, currentScale);
-
-    // Only update matrix when needed
-    model.matrixWorldNeedsUpdate = true;
-
-    if (progress < 1) {
-      model.userData.transitionAnimationId = requestAnimationFrame(animate);
-    } else {
-      delete model.userData.transitionAnimationId;
-      model.userData.animate = wasAnimating;
-      model.updateMatrix();
-      model.updateMatrixWorld(true);
-    }
-  }
-
-  model.userData.transitionAnimationId = requestAnimationFrame(animate);
-}
-
-const BEZIER_TABLE_SIZE = 100;
-const cubicBezierTable = new Float32Array(BEZIER_TABLE_SIZE + 1);
-
-// Initialize the lookup table only once
-(function initBezierTable() {
-  for (let i = 0; i <= BEZIER_TABLE_SIZE; i++) {
-    const t = i / BEZIER_TABLE_SIZE;
-    cubicBezierTable[i] = cubicBezier(0.33, 1, 0.68, 1, t);
-  }
-})();
-
-function cubicBezierLookup(t) {
-  // Fast path for common cases
-  if (t <= 0) return 0;
-  if (t >= 1) return 1;
-
-  // Use lookup table with linear interpolation between points
-  const index = t * BEZIER_TABLE_SIZE;
-  const lowerIndex = Math.floor(index);
-  const upperIndex = Math.min(lowerIndex + 1, BEZIER_TABLE_SIZE);
-  const fraction = index - lowerIndex;
-
-  return (
-    cubicBezierTable[lowerIndex] +
-    (cubicBezierTable[upperIndex] - cubicBezierTable[lowerIndex]) * fraction
+  document.addEventListener(
+    "mousemove",
+    (e) => drag.active && handleMove(e.clientX, e.clientY)
   );
-}
+  document.addEventListener("mouseup", () => {
+    drag.active = false;
+    document.body.style.cursor = "";
+  });
 
-function calculateModelPositionForExpandedCard(modelName, viewWindow) {
-  if (!viewWindow) return new Vector3(0, 0, 10);
+  // Touch events
+  document.addEventListener(
+    "touchstart",
+    (e) => {
+      const win = e.target.closest(".model-view-window");
+      if (!win || e.touches.length !== 1) return;
 
-  const card = viewWindow.closest(".project-card");
-  if (!card) return new Vector3(0, 0, 10);
+      const model = cache.models.get(win.dataset.modelName);
+      if (!model) return;
 
-  const cardRect = viewWindow.getBoundingClientRect();
-  const canvas = domCache.mainCanvas;
-  const canvasRect = canvas?.getBoundingClientRect();
-
-  if (!canvasRect) return new Vector3(0, 0, 10);
-
-  const x =
-    ((cardRect.left + cardRect.width / 2 - canvasRect.left) /
-      canvasRect.width) *
-      2 -
-    1;
-  const y = -(
-    ((cardRect.top + cardRect.height / 2 - canvasRect.top) /
-      canvasRect.height) *
-      2 -
-    1
+      drag = { active: true, model, lastX: e.touches[0].clientX };
+    },
+    { passive: true }
   );
 
-  const vector = new Vector3(x, y, 0.5);
-  vector.unproject(projectCamera);
-  vector.sub(projectCamera.position).normalize();
-
-  const zDistance = 7;
-  vector.multiplyScalar(zDistance);
-  vector.add(projectCamera.position);
-
-  return vector;
-}
-
-function loadModelSize(model) {
-  const box = model.userData.boundingBox;
-  if (box) {
-    return Math.max(
-      box.max.x - box.min.x,
-      box.max.y - box.min.y,
-      box.max.z - box.min.z
-    );
-  }
-  return 2;
-}
-
-function positionModelForItem(model, modelName) {
-  if (!model || !modelName) return;
-
-  // Skip positioning if model is currently being animated
-  if (model.userData.transitionAnimationId) return;
-
-  const viewPos = viewWindowPositions.get(modelName);
-  if (!viewPos) return;
-
-  const modelSize = loadModelSize(model);
-  const containerScale = Math.min(viewPos.width, viewPos.height) * 7;
-  const finalScale = Math.min(0.15, (containerScale / modelSize) * 0.15);
-
-  // Calculate target position
-  const zDistance = Math.max(6, modelSize * 3);
-  const targetVector = new Vector3(viewPos.x, viewPos.y, 0.5);
-  targetVector.unproject(projectCamera);
-  targetVector.sub(projectCamera.position).normalize();
-  targetVector.multiplyScalar(zDistance);
-  targetVector.add(projectCamera.position);
-
-  // Initialize model data if needed
-  if (!model.userData.initialScale) {
-    model.userData.initialScale = finalScale;
-    model.userData.currentScale = model.scale.clone();
-  }
-
-  if (!model.userData.originalPosition) {
-    model.userData.originalPosition = targetVector.clone();
-  }
-
-  if (!model.userData.originalRotation) {
-    model.rotation.set(0, Math.PI, 0);
-    model.userData.originalRotation = model.rotation.clone();
-  }
-
-  // Check if significant changes are needed
-  const currentScale = model.scale.x;
-  const scaleThreshold = 0.001;
-  const positionThreshold = 0.01;
-  const currentPos = model.position;
-
-  const needsScaleUpdate = Math.abs(currentScale - finalScale) > scaleThreshold;
-  const needsPositionUpdate =
-    currentPos.distanceTo(targetVector) > positionThreshold;
-
-  // If no significant updates needed, return early
-  if (!needsScaleUpdate && !needsPositionUpdate) return;
-
-  // Use smooth bezier transition for positioning updates
-  if (needsPositionUpdate || needsScaleUpdate) {
-    // Cancel any existing positioning animation
-    if (model.userData.positionAnimationId) {
-      cancelAnimationFrame(model.userData.positionAnimationId);
-    }
-
-    const startPosition = model.position.clone();
-    const startScale = model.scale.x;
-    const startTime = performance.now();
-    const duration = 300; // Smooth 300ms transition
-
-    function animatePosition(currentTime) {
-      const elapsed = currentTime - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-
-      // Use the existing cubic bezier lookup for smooth easing
-      const easedProgress = cubicBezierLookup(progress);
-
-      // Smooth position interpolation
-      if (needsPositionUpdate) {
-        model.position.x =
-          startPosition.x + (targetVector.x - startPosition.x) * easedProgress;
-        model.position.y =
-          startPosition.y + (targetVector.y - startPosition.y) * easedProgress;
-        model.position.z =
-          startPosition.z + (targetVector.z - startPosition.z) * easedProgress;
+  document.addEventListener(
+    "touchmove",
+    (e) => {
+      if (drag.active && e.touches.length === 1) {
+        handleMove(e.touches[0].clientX, e.touches[0].clientY);
       }
+    },
+    { passive: true }
+  );
 
-      // Smooth scale interpolation
-      if (needsScaleUpdate) {
-        const currentScale =
-          startScale + (finalScale - startScale) * easedProgress;
-        model.scale.set(currentScale, currentScale, currentScale);
-        model.userData.currentScale.set(
-          currentScale,
-          currentScale,
-          currentScale
-        );
-      }
-
-      // Ensure rotation stays consistent
-      if (!model.userData.rotationSet) {
-        model.rotation.copy(model.userData.originalRotation);
-        model.userData.rotationSet = true;
-      }
-
-      model.matrixWorldNeedsUpdate = true;
-
-      if (progress < 1) {
-        model.userData.positionAnimationId =
-          requestAnimationFrame(animatePosition);
-      } else {
-        // Animation complete
-        delete model.userData.positionAnimationId;
-
-        // Ensure final values are exact
-        if (needsPositionUpdate) {
-          model.position.copy(targetVector);
-        }
-        if (needsScaleUpdate) {
-          model.scale.set(finalScale, finalScale, finalScale);
-          model.userData.currentScale.set(finalScale, finalScale, finalScale);
-        }
-
-        model.updateMatrix();
-        model.updateMatrixWorld(true);
-      }
-    }
-
-    model.userData.positionAnimationId = requestAnimationFrame(animatePosition);
-  }
-}
-
-function updateModelPositions() {
-  cacheViewWindowPositions();
-
-  projectModels.forEach((model, modelName) => {
-    // Skip if already being transitioned or positioned
-    if (
-      model.userData.transitionAnimationId ||
-      model.userData.positionAnimationId
-    )
-      return;
-
-    const card = document.querySelector(
-      `.project-card[data-model="${modelName}"]`
-    );
-    if (!card) return;
-
-    const isExpanded = card.classList.contains("expanded");
-    const viewPos = viewWindowPositions.get(modelName);
-    if (!viewPos) return;
-
-    if (isExpanded) {
-      const viewWindow = card.querySelector(".model-view-window");
-      if (viewWindow) {
-        const targetPosition = calculateModelPositionForExpandedCard(
-          modelName,
-          viewWindow
-        );
-        const enhancedScale = model.userData.initialScale * 1.2;
-
-        // Use existing transition animation for expanded state
-        if (model.position.distanceTo(targetPosition) > 0.1) {
-          animateModelTransition(
-            model,
-            model.position.clone(),
-            targetPosition,
-            model.scale.x,
-            enhancedScale,
-            350
-          );
-        }
-      }
-    } else {
-      // Use the improved smooth positioning for normal state
-      positionModelForItem(model, modelName);
-    }
+  document.addEventListener("touchend", () => (drag.active = false), {
+    passive: true,
   });
-}
 
-function cacheViewWindowPositions() {
-  const windows = document.querySelectorAll(".model-view-window");
-  const canvas = domCache.mainCanvas;
-  const canvasRect = canvas?.getBoundingClientRect();
+  // Zoom in expanded cards
+  document.addEventListener(
+    "wheel",
+    (e) => {
+      const win = e.target.closest(".model-view-window");
+      const card = win?.closest(".project-card.expanded");
+      if (!card) return;
 
-  if (!canvasRect) return;
+      const model = cache.models.get(win.dataset.modelName);
+      if (!model) return;
 
-  // Don't clear and recreate map - update existing entries
-  const newModelNames = new Set();
+      e.preventDefault();
+      const delta = Math.sign(e.deltaY) * -0.1;
+      const newScale = Math.max(
+        0.05,
+        Math.min(0.8, model.scale.x * (1 + delta))
+      );
+      model.scale.setScalar(newScale);
+    },
+    { passive: false }
+  );
 
-  // Pre-calculate canvas dimensions for faster calculations
-  const canvasWidth = canvasRect.width;
-  const canvasHeight = canvasRect.height;
-  const canvasLeft = canvasRect.left;
-  const canvasTop = canvasRect.top;
-  const invCanvasWidth = 2 / canvasWidth;
-  const invCanvasHeight = 2 / canvasHeight;
-
-  windows.forEach((viewWindow) => {
-    const modelName = viewWindow.dataset.modelName;
-    if (!modelName) return;
-
-    newModelNames.add(modelName);
-    const windowRect = viewWindow.getBoundingClientRect();
-
-    // Calculate center points and dimensions only once
-    const centerX = windowRect.left + windowRect.width / 2 - canvasLeft;
-    const centerY = windowRect.top + windowRect.height / 2 - canvasTop;
-
-    // Faster coordinate calculations
-    const x = centerX * invCanvasWidth - 1;
-    const y = -(centerY * invCanvasHeight - 1);
-
-    // Reuse existing position object if available
-    let position = viewWindowPositions.get(modelName);
-    if (position) {
-      position.x = x;
-      position.y = y;
-      position.width = windowRect.width / canvasWidth;
-      position.height = windowRect.height / canvasHeight;
-      position.pixelWidth = windowRect.width;
-      position.pixelHeight = windowRect.height;
-      position.rect = windowRect;
-    } else {
-      viewWindowPositions.set(modelName, {
-        x,
-        y,
-        width: windowRect.width / canvasWidth,
-        height: windowRect.height / canvasHeight,
-        pixelWidth: windowRect.width,
-        pixelHeight: windowRect.height,
-        rect: windowRect,
-      });
+  // Escape key
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      const expanded = document.querySelector(".project-card.expanded");
+      if (expanded) toggleExpand(null, expanded.id);
     }
   });
 
-  // Remove positions for models that no longer exist
-  for (const modelName of viewWindowPositions.keys()) {
-    if (!newModelNames.has(modelName)) {
-      viewWindowPositions.delete(modelName);
+  // Resize and filter handling
+  const resize = () => {
+    if (!canvas || !camera) return;
+    canvas.width = canvas.clientWidth;
+    canvas.height = canvas.clientHeight;
+    camera.aspect = canvas.width / canvas.height;
+    camera.updateProjectionMatrix();
+    updatePositions();
+  };
+
+  window.addEventListener("resize", resize);
+  new ResizeObserver(resize).observe(document.querySelector("#portfolio"));
+
+  // Listen for portfolio filter changes
+  const checkFilterUpdates = () => {
+    if (window.portfolioFilterState) {
+      updatePositions();
     }
-  }
-}
+  };
 
-function createMainCanvas() {
-  const portfolioSection = getElement("#portfolio", "portfolioSection");
-  if (!portfolioSection) return null;
-
-  const canvas = createElement("canvas", "portfolio-canvas", {
-    id: "portfolio-main-canvas",
+  // Use MutationObserver to detect when cards are shown/hidden
+  const observer = new MutationObserver((mutations) => {
+    let shouldUpdate = false;
+    mutations.forEach((mutation) => {
+      if (
+        mutation.type === "attributes" &&
+        mutation.attributeName === "style" &&
+        mutation.target.classList.contains("project-card")
+      ) {
+        shouldUpdate = true;
+      }
+    });
+    if (shouldUpdate) {
+      setTimeout(updatePositions, 100);
+    }
   });
 
+  // Observe all project cards for style changes
+  document.querySelectorAll(".project-card").forEach((card) => {
+    observer.observe(card, { attributes: true, attributeFilter: ["style"] });
+  });
+
+  // Periodically check for filter updates
+  setInterval(checkFilterUpdates, 200);
+};
+
+const loadProjectModel = async (name) => {
+  if (!name) return null;
+  try {
+    const model = await loadModel(name);
+    scene.add(model);
+    model.baseScale = 0.15;
+    model.scale.setScalar(0.15);
+    return model;
+  } catch (err) {
+    console.error(`Failed to load model ${name}:`, err);
+    return null;
+  }
+};
+
+export const initProjectCards = () => {
+  const grid = document.querySelector(".project-card-grid");
+  if (!Array.isArray(PROJECT_CARD_DATA) || !grid) return;
+
+  const frag = document.createDocumentFragment();
+  PROJECT_CARD_DATA.forEach((project) => {
+    const card = createCard(project);
+    if (card) frag.appendChild(card);
+  });
+  grid.appendChild(frag);
+};
+
+export const initProjectCardScene = async () => {
+  if (isLowPoweredDevice()) return;
+
+  scene = getScene();
+
+  // Setup canvas
+  const portfolio = document.querySelector("#portfolio");
+  if (!portfolio) return;
+
+  canvas = el("canvas", "portfolio-canvas", { id: "portfolio-main-canvas" });
   Object.assign(canvas.style, {
     position: "absolute",
     top: "0",
@@ -756,415 +578,35 @@ function createMainCanvas() {
     pointerEvents: "auto",
   });
 
-  canvas.width = portfolioSection.clientWidth || 300;
-  canvas.height = portfolioSection.clientHeight || 200;
-
-  portfolioSection.style.position = "relative";
-  portfolioSection.append(canvas);
-
-  return canvas;
-}
-
-function setupMainCamera(canvas) {
-  projectCamera = new PerspectiveCamera(
-    45,
-    canvas.width / canvas.height,
-    0.1,
-    16
-  );
-  projectCamera.position.set(0, 0, 10);
-  projectCamera.lookAt(0, 0, 0);
-  projectCamera.up.set(0, 1, 0);
-
-  const ctx = canvas.getContext("2d", { alpha: true });
-  cameraIndex = registerCamera(projectCamera, ctx);
-}
-
-async function loadProjectModel(modelName) {
-  if (!modelName) return null;
-
-  try {
-    const model = await loadModel(modelName);
-    if (!model.parent) scene.add(model);
-
-    model.visible = true;
-    model.userData.name = modelName;
-    model.updateMatrix();
-    model.matrixAutoUpdate = false;
-
-    return model;
-  } catch (error) {
-    console.error(`Failed to load model ${modelName}:`, error);
-    return null;
-  }
-}
-
-function handleDragStart(e, modelName, clientX, clientY, state, viewWindow) {
-  const model = projectModels.get(modelName);
-  if (!model) return false;
-
-  state.active = true;
-  state.model = model;
-  state.lastX = clientX;
-  state.lastY = clientY;
-  model.userData.animate = false;
-
-  document.body.style.cursor = "grabbing";
-  document.body.classList.add("model-interaction");
-  if (viewWindow) viewWindow.style.cursor = "grabbing";
-
-  return true;
-}
-
-function handleDragMove(clientX, clientY, state) {
-  if (!state.active || !state.model) return;
-
-  const model = state.model;
-  const deltaX = clientX - state.lastX;
-
-  // Apply rotation directly without unnecessary calculations
-  model.rotation.y += deltaX * 0.01;
-
-  // Keep other rotations fixed to avoid unnecessary calculations
-  if (model.rotation.x !== 0) model.rotation.x = 0;
-  if (model.rotation.z !== 0) model.rotation.z = 0;
-
-  // Mark matrix for update rather than updating immediately
-  model.matrixWorldNeedsUpdate = true;
-
-  // Store rotation speed for inertia calculations
-  state.rotationSpeed.y = deltaX * 0.01;
-  state.lastX = clientX;
-  state.lastY = clientY;
-
-  // Throttle actual matrix updates to once per frame
-  if (!state.pendingMatrixUpdate) {
-    state.pendingMatrixUpdate = true;
-    requestAnimationFrame(() => {
-      if (state.model) {
-        state.model.updateMatrix();
-        state.model.updateMatrixWorld(true);
-      }
-      state.pendingMatrixUpdate = false;
-    });
-  }
-}
-
-function handleDragEnd(state, viewWindow) {
-  if (state.active && state.model) {
-    applyRotationInertia(state.model, state.rotationSpeed);
-  }
-
-  state.active = false;
-  state.model = null;
-  document.body.style.cursor = "";
-  document.body.classList.remove("model-interaction");
-  if (viewWindow) viewWindow.style.cursor = "pointer";
-}
-
-function applyRotationInertia(model, speed) {
-  if (!model) return;
-
-  const friction = 0.95;
-  let inertiaSpeed = { x: 0, y: speed.y * 0.5 };
-
-  if (model.userData.inertiaAnimationId) {
-    cancelAnimationFrame(model.userData.inertiaAnimationId);
-  }
-
-  if (Math.abs(inertiaSpeed.y) < 0.001) {
-    model.userData.animate = true;
-    return;
-  }
-
-  function animateInertia() {
-    model.rotation.y += inertiaSpeed.y;
-    model.rotation.x = 0;
-    model.rotation.z = 0;
-
-    model.updateMatrix();
-    model.updateMatrixWorld(true);
-
-    inertiaSpeed.y *= friction;
-
-    if (Math.abs(inertiaSpeed.y) > 0.0001) {
-      model.userData.inertiaAnimationId = requestAnimationFrame(animateInertia);
-    } else {
-      model.userData.animate = true;
-    }
-  }
-
-  model.userData.inertiaAnimationId = requestAnimationFrame(animateInertia);
-}
-
-function setupDragInteraction() {
-  const dragState = {
-    active: false,
-    model: null,
-    startX: 0,
-    startY: 0,
-    lastX: 0,
-    lastY: 0,
-    rotationSpeed: { x: 0, y: 0 },
-  };
-
-  document.querySelectorAll(".model-view-window").forEach((viewWindow) => {
-    const modelName = viewWindow.dataset.modelName;
-    if (!modelName) return;
-
-    viewWindow.addEventListener(
-      "mousedown",
-      (e) => {
-        if (e.button !== 0) return;
-        handleDragStart(
-          e,
-          modelName,
-          e.clientX,
-          e.clientY,
-          dragState,
-          viewWindow
-        );
-      },
-      { passive: true }
-    );
-
-    viewWindow.addEventListener(
-      "touchstart",
-      (e) => {
-        if (e.touches.length !== 1) return;
-        const touch = e.touches[0];
-        handleDragStart(
-          e,
-          modelName,
-          touch.clientX,
-          touch.clientY,
-          dragState,
-          viewWindow
-        );
-      },
-      { passive: true }
-    );
-
-    viewWindow.addEventListener(
-      "touchmove",
-      (e) => {
-        if (!dragState.active || e.touches.length !== 1) return;
-        const touch = e.touches[0];
-        handleDragMove(touch.clientX, touch.clientY, dragState);
-      },
-      { passive: true }
-    );
-
-    viewWindow.addEventListener(
-      "touchend",
-      () => handleDragEnd(dragState, viewWindow),
-      { passive: true }
-    );
-    viewWindow.addEventListener(
-      "touchcancel",
-      () => handleDragEnd(dragState, viewWindow),
-      { passive: true }
-    );
-  });
-
-  window.addEventListener(
-    "mousemove",
-    (e) => {
-      if (dragState.active) handleDragMove(e.clientX, e.clientY, dragState);
-    },
-    { passive: true }
-  );
-
-  window.addEventListener(
-    "mouseup",
-    () => {
-      if (dragState.active) handleDragEnd(dragState);
-    },
-    { passive: true }
-  );
-}
-
-function setupScrollInteraction() {
-  document.querySelectorAll(".model-view-window").forEach((viewWindow) => {
-    const modelName = viewWindow.dataset.modelName;
-    if (!modelName) return;
-
-    viewWindow.style.overscrollBehavior = "none";
-
-    viewWindow.addEventListener(
-      "wheel",
-      (event) => {
-        const projectCard = viewWindow.closest(".project-card");
-        if (!projectCard?.classList.contains("expanded")) return;
-
-        event.preventDefault();
-        event.stopPropagation();
-
-        const model = projectModels.get(modelName);
-        if (!model) return;
-
-        const delta = Math.sign(event.deltaY) * -0.05;
-        const scaleFactor = 1 + delta;
-
-        if (!model.userData.currentScale) {
-          model.userData.currentScale = model.scale.clone();
-          model.userData.initialScale = model.scale.x;
-        }
-
-        const minScale = model.userData.initialScale * 0.5;
-        const maxScale = model.userData.initialScale * 3;
-        const newScale = model.userData.currentScale.x * scaleFactor;
-
-        if (newScale >= minScale && newScale <= maxScale) {
-          model.userData.currentScale.set(newScale, newScale, newScale);
-          model.scale.copy(model.userData.currentScale);
-          model.updateMatrix();
-          model.updateMatrixWorld(true);
-        }
-      },
-      { passive: false }
-    );
-  });
-}
-
-function setupResizeObserver() {
-  if (!window.ResizeObserver) return;
-
-  const resizeHandler = debounce(handleResize, 100);
-  const observer = new ResizeObserver(resizeHandler);
-
-  document
-    .querySelectorAll(".project-card")
-    .forEach((item) => observer.observe(item));
-
-  const grid = getElement(".project-card-grid", "portfolioGrid");
-  if (grid) observer.observe(grid);
-
-  const portfolioSection = getElement("#portfolio", "portfolioSection");
-  if (portfolioSection) observer.observe(portfolioSection);
-}
-
-let resizeRAFPending = false;
-function handleResize() {
-  if (resizeRAFPending) return;
-
-  resizeRAFPending = true;
-  requestAnimationFrame(() => {
-    const canvas = domCache.mainCanvas;
-    if (!canvas || !projectCamera) return;
-
-    // Only resize if dimensions actually changed
-    if (
-      canvas.width !== canvas.clientWidth ||
-      canvas.height !== canvas.clientHeight
-    ) {
-      canvas.width = canvas.clientWidth;
-      canvas.height = canvas.clientHeight;
-      projectCamera.aspect = canvas.width / canvas.height;
-      projectCamera.updateProjectionMatrix();
-    }
-
-    cacheViewWindowPositions();
-    updateModelPositions();
-    resizeRAFPending = false;
-  });
-}
-
-function setupKeyboardSupport() {
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") {
-      const expandedCard = document.querySelector(".game-preview.expanded");
-      if (expandedCard) toggleExpand(null, expandedCard.id);
-    }
-  });
-}
-
-function enhanceProjectCards() {
-  setupKeyboardSupport();
-
-  const observer = new MutationObserver((mutations) => {
-    mutations.forEach((mutation) => {
-      if (
-        mutation.attributeName === "class" &&
-        mutation.target.classList.contains("project-card")
-      ) {
-        setTimeout(updateModelPositions, 100);
-      }
-    });
-  });
-
-  document.querySelectorAll(".project-card").forEach((card) => {
-    observer.observe(card, { attributes: true });
-  });
-}
-
-async function setupProjects() {
-  const loadPromises = [];
-
-  document.querySelectorAll(".project-card").forEach((item) => {
-    const modelName = item.getAttribute("data-model");
-    if (!modelName) return;
-
-    loadPromises.push(
-      loadProjectModel(modelName)
-        .then((model) => {
-          if (model) {
-            projectModels.set(modelName, model);
-            positionModelForItem(model, modelName);
-          }
-        })
-        .catch((err) =>
-          console.error(`Failed to load model ${modelName}:`, err)
-        )
-    );
-  });
-
-  await Promise.all(loadPromises);
-  enhanceProjectCards();
-}
-
-function setupInteractions() {
-  const canvas = domCache.mainCanvas;
-  if (!canvas) return;
-
-  window.addEventListener("resize", debounce(handleResize, 100));
-  setupDragInteraction();
-  setupScrollInteraction();
-  setupResizeObserver();
-}
-
-export function initProjectCards() {
-  const grid = getElement(".project-card-grid", "portfolioGrid");
-  if (!Array.isArray(PROJECT_CARD_DATA)) return;
-
-  const fragment = document.createDocumentFragment();
-  PROJECT_CARD_DATA.forEach((project) => {
-    const card = createProjectCard(project);
-    if (card) fragment.appendChild(card);
-  });
-
-  grid.appendChild(fragment);
-}
-
-export function initProjectCardScene() {
-  if (isLowPoweredDevice()) return;
-
-  scene = getScene();
-  raycaster = new Raycaster();
-
-  const canvas = createMainCanvas();
-  if (!canvas) return;
-  domCache.mainCanvas = canvas;
-
-  // Get model names from portfolio items
-  const modelNames = Array.from(document.querySelectorAll(".project-card"))
-    .map((item) => item.getAttribute("data-model"))
+  portfolio.style.position = "relative";
+  portfolio.appendChild(canvas);
+
+  // Setup camera
+  canvas.width = canvas.clientWidth || 300;
+  canvas.height = canvas.clientHeight || 200;
+  camera = new PerspectiveCamera(45, canvas.width / canvas.height, 0.1, 16);
+  camera.position.set(0, 0, 10);
+  registerCamera(camera, canvas.getContext("2d", { alpha: true }));
+
+  // Load models
+  const modelNames = [...document.querySelectorAll("[data-model]")]
+    .map((el) => el.dataset.model)
     .filter(Boolean);
 
-  // Setup scene components
   calculateGridPositions(modelNames);
-  setupMainCamera(canvas);
-  cacheViewWindowPositions();
-  setupProjects();
-  setupInteractions();
-}
+
+  await Promise.all(
+    modelNames.map(async (name) => {
+      const model = await loadProjectModel(name);
+      if (model) cache.models.set(name, model);
+    })
+  );
+
+  // Wait for DOM layout to complete, then position models
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      updatePositions();
+      setupInteraction();
+    });
+  });
+};
