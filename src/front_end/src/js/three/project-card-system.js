@@ -168,62 +168,102 @@ const animate = (model, fromPos, toPos, fromScale, toScale, duration = 400) => {
   requestAnimationFrame(tick);
 };
 
+const waitForLayout = () => {
+  return new Promise((resolve) => {
+    // Force multiple layout flushes to ensure DOM is fully updated
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        // Additional delay to account for CSS transitions
+        setTimeout(resolve, 100);
+      });
+    });
+  });
+};
+
+const waitForTransition = (element, property = "all") => {
+  return new Promise((resolve) => {
+    const handleTransitionEnd = (e) => {
+      if (
+        e.target === element &&
+        (property === "all" || e.propertyName === property)
+      ) {
+        element.removeEventListener("transitionend", handleTransitionEnd);
+        resolve();
+      }
+    };
+
+    element.addEventListener("transitionend", handleTransitionEnd);
+
+    // Fallback timeout in case transition doesn't fire
+    setTimeout(() => {
+      element.removeEventListener("transitionend", handleTransitionEnd);
+      resolve();
+    }, 1000);
+  });
+};
+
 const getModelPos = (modelName, expanded = false) => {
   if (!canvas || !camera) return new Vector3(0, 0, 10);
 
   if (expanded) {
-    // For expanded cards, find the model-view-window and center within it
+    // For expanded cards, we need to position the model in the image container area
     const card = document.querySelector(`[data-model="${modelName}"].expanded`);
-    const viewWindow = card?.querySelector(".model-view-window");
 
-    if (viewWindow && card) {
+    if (card) {
       const canvasRect = canvas.getBoundingClientRect();
-      const windowRect = viewWindow.getBoundingClientRect();
+      const imageContainer = card.querySelector(".game-image-container");
 
-      console.log("Canvas rect:", canvasRect);
-      console.log("Window rect:", windowRect);
-      console.log("Model name:", modelName);
+      if (imageContainer) {
+        const containerRect = imageContainer.getBoundingClientRect();
 
-      // Check if the window is actually visible and has dimensions
-      if (windowRect.width === 0 || windowRect.height === 0) {
-        console.log("Window has no dimensions, using fallback");
-        return new Vector3(0, 0, 6);
+        console.log("Canvas rect:", canvasRect);
+        console.log("Image container rect:", containerRect);
+        console.log("Model name:", modelName);
+
+        // Check if the container is actually visible and has dimensions
+        if (containerRect.width === 0 || containerRect.height === 0) {
+          console.log("Container has no dimensions, using fallback");
+          return new Vector3(0, 0, 6);
+        }
+
+        // Calculate center of the image container relative to the canvas
+        const containerCenterX = containerRect.left + containerRect.width / 2;
+        const containerCenterY = containerRect.top + containerRect.height / 2;
+
+        // Calculate position relative to canvas bounds
+        const relativeX = containerCenterX - canvasRect.left;
+        const relativeY = containerCenterY - canvasRect.top;
+
+        console.log(
+          "Container center (viewport):",
+          containerCenterX,
+          containerCenterY
+        );
+        console.log("Canvas bounds:", canvasRect.left, canvasRect.top);
+        console.log("Relative position:", relativeX, relativeY);
+
+        // Convert to normalized device coordinates (-1 to 1)
+        const ndcX = (relativeX / canvasRect.width) * 2 - 1;
+        const ndcY = -((relativeY / canvasRect.height) * 2 - 1);
+
+        console.log("NDC coordinates:", ndcX, ndcY);
+
+        // Create a raycaster from the camera through the container center
+        const raycaster = new Raycaster();
+        raycaster.setFromCamera(new Vector3(ndcX, ndcY, 0), camera);
+
+        // Position the model at a reasonable distance along this ray
+        const targetDistance = 6;
+        const targetPosition = raycaster.ray.origin
+          .clone()
+          .add(raycaster.ray.direction.multiplyScalar(targetDistance));
+
+        console.log("Target position:", targetPosition);
+        return targetPosition;
       }
-
-      // Calculate center of the model-view-window relative to the canvas
-      const windowCenterX = windowRect.left + windowRect.width / 2;
-      const windowCenterY = windowRect.top + windowRect.height / 2;
-
-      // Calculate position relative to canvas bounds
-      const relativeX = windowCenterX - canvasRect.left;
-      const relativeY = windowCenterY - canvasRect.top;
-
-      console.log("Window center (viewport):", windowCenterX, windowCenterY);
-      console.log("Canvas bounds:", canvasRect.left, canvasRect.top);
-      console.log("Relative position:", relativeX, relativeY);
-
-      // Convert to normalized device coordinates (-1 to 1)
-      const ndcX = (relativeX / canvasRect.width) * 2 - 1;
-      const ndcY = -((relativeY / canvasRect.height) * 2 - 1);
-
-      console.log("NDC coordinates:", ndcX, ndcY);
-
-      // Create a raycaster from the camera through the window center
-      const raycaster = new Raycaster();
-      raycaster.setFromCamera(new Vector3(ndcX, ndcY, 0), camera);
-
-      // Position the model at a reasonable distance along this ray
-      // Use a distance that keeps the model at an appropriate size
-      const targetDistance = 6; // Adjust this value to control how close/far the model appears
-      const targetPosition = raycaster.ray.origin
-        .clone()
-        .add(raycaster.ray.direction.multiplyScalar(targetDistance));
-
-      console.log("Target position:", targetPosition);
-      return targetPosition;
     }
 
-    console.log("Card or viewWindow not found, using fallback");
+    console.log("Card or imageContainer not found, using fallback");
     // Fallback to canvas center for expanded mode
     return new Vector3(0, 0, 6);
   }
@@ -240,8 +280,11 @@ const getModelPos = (modelName, expanded = false) => {
   return vec;
 };
 
-const updatePositions = () => {
+const updatePositions = async () => {
   if (!canvas) return;
+
+  // Force layout calculation
+  canvas.getBoundingClientRect();
 
   const rect = canvas.getBoundingClientRect();
   cache.positions.clear();
@@ -255,6 +298,7 @@ const updatePositions = () => {
     const card = win.closest(".project-card");
     if (!card || card.style.display === "none") return;
 
+    // Force layout for this specific window
     const winRect = win.getBoundingClientRect();
 
     // Only calculate position if window is actually visible
@@ -309,7 +353,7 @@ const updatePositions = () => {
   });
 };
 
-const toggleExpand = (e, id) => {
+const toggleExpand = async (e, id) => {
   e?.preventDefault();
   e?.stopPropagation();
 
@@ -345,24 +389,30 @@ const toggleExpand = (e, id) => {
     cache.models.forEach((model, name) => {
       if (name === modelName) {
         model.visible = true;
-        // Reset position immediately to prevent wrong positioning
-        model.position.set(0, 0, 6);
       } else {
         model.visible = false;
       }
     });
 
-    // Wait for DOM layout to complete before positioning
-    setTimeout(() => {
-      console.log("Updating positions after expansion...");
+    // Wait for CSS transitions to complete and layout to settle
+    try {
+      await waitForTransition(card);
+      await waitForLayout();
+
+      console.log("Layout settled, updating positions after expansion...");
+
       // Force update only the expanded model
       const expandedModel = cache.models.get(modelName);
       if (expandedModel) {
+        // Force a synchronous layout calculation
+        card.getBoundingClientRect(); // Force layout
+
         const targetPos = getModelPos(modelName, true);
         const targetScale = (expandedModel.baseScale || 0.15) * 1.4;
 
         console.log("Positioning expanded model:", modelName, "to:", targetPos);
 
+        // Animate to the correct position
         animate(
           expandedModel,
           expandedModel.position.clone(),
@@ -380,8 +430,18 @@ const toggleExpand = (e, id) => {
           block: "center",
           inline: "center",
         });
-      }, 100);
-    }, 200); // Reduced delay since we're handling specific model
+      }, 200);
+    } catch (error) {
+      console.error("Error during expansion:", error);
+      // Fallback positioning
+      const expandedModel = cache.models.get(modelName);
+      if (expandedModel) {
+        const targetPos = getModelPos(modelName, true);
+        const targetScale = (expandedModel.baseScale || 0.15) * 1.4;
+        expandedModel.position.copy(targetPos);
+        expandedModel.scale.setScalar(targetScale);
+      }
+    }
   } else {
     // Show all models for visible cards and reset their positions
     cache.models.forEach((model, name) => {
@@ -389,11 +449,16 @@ const toggleExpand = (e, id) => {
       model.visible = modelCard && modelCard.style.display !== "none";
     });
 
-    // Update positions after collapse animation
-    setTimeout(() => {
+    // Wait for collapse transition to complete
+    try {
+      await waitForTransition(card);
+      await waitForLayout();
       console.log("Updating positions after collapse...");
       updatePositions();
-    }, 600); // Wait for CSS transitions to complete
+    } catch (error) {
+      console.error("Error during collapse:", error);
+      setTimeout(updatePositions, 600);
+    }
   }
 };
 
