@@ -16,6 +16,7 @@ const state = {
   camera: null,
   canvas: null,
   dragging: { active: false, model: null, lastX: 0 },
+  isTransitioning: false, // Track transition state
 };
 
 // Utility functions
@@ -45,45 +46,51 @@ const createButtons = (project, type, id) => {
 
   if (type !== "action") return frag;
 
-  // Create action buttons with simplified icon logic
-  [
-    {
+  const btnWrapper = el("div", "action-buttons");
+
+  const buttons = [];
+
+  if (project.demoUrl) {
+    buttons.push({
       url: project.demoUrl,
       cls: "btn-primary",
       icon: "#icon-play-btn",
       text: "Live Demo",
-    },
-    {
-      url: project.githubUrl,
+    });
+  }
+
+  if (project.sourceUrl) {
+    let icon = null;
+    if (project.sourceUrl.includes("github.com")) icon = "#icon-github";
+    else if (project.sourceUrl.includes("gitlab.com")) icon = "#icon-gitlab";
+    else if (project.sourceUrl.includes("itch.io")) icon = "#icon-itch";
+
+    buttons.push({
+      url: project.sourceUrl,
       cls: "btn-secondary",
-      icon: project.githubUrl?.includes("github.com")
-        ? "#icon-github"
-        : project.githubUrl?.includes("gitlab.com")
-        ? "#icon-gitlab"
-        : project.githubUrl?.includes("itch.io")
-        ? "#icon-itch"
-        : null,
+      icon,
       text: "Source Code",
-    },
-  ].forEach(({ url, cls, icon, text }) => {
-    if (!url) return;
+    });
+  }
+
+  buttons.forEach(({ url, cls, icon, text }) => {
     const btn = el("a", `btn ${cls}`, { href: url, target: "_blank" });
     btn.innerHTML = `${
-      icon ? `<svg><use href="${icon}"/></svg>` : ""
-    }<span>${text}</span>`;
-    frag.appendChild(btn);
+      icon ? `<svg><use href="${icon}"></use></svg>` : ""
+    }${text}`;
+    btnWrapper.appendChild(btn);
   });
 
-  // Close button
-  const close = el("button", "btn btn-close-expanded", {
+  const close = el("button", "btn btn-secondary", {
     textContent: "Close",
   });
   close.onclick = (e) => toggleExpand(e, id);
-  frag.appendChild(close);
+  btnWrapper.appendChild(close);
+
+  frag.appendChild(btnWrapper);
   return frag;
 };
 
-// Optimized card creation
 const createCard = (project) => {
   if (!project?.id) return null;
 
@@ -157,9 +164,20 @@ const createCard = (project) => {
   return card;
 };
 
-// Simplified animation
-const animate = (model, toPos, toScale, duration = 400) => {
-  if (!model || model.animating) return;
+// Simplified animation with instant positioning option
+const animate = (model, toPos, toScale, duration = 400, instant = false) => {
+  if (!model) return;
+
+  // Stop any existing animation
+  if (model.animating) {
+    model.animating = false;
+  }
+
+  if (instant) {
+    model.position.copy(toPos);
+    model.scale.setScalar(toScale);
+    return;
+  }
 
   model.animating = true;
   const startPos = model.position.clone();
@@ -179,7 +197,6 @@ const animate = (model, toPos, toScale, duration = 400) => {
   requestAnimationFrame(tick);
 };
 
-// Optimized position calculation
 const getModelPos = (modelName, expanded = false) => {
   if (!state.canvas || !state.camera) return new Vector3(0, 0, 10);
 
@@ -222,9 +239,16 @@ const getModelPos = (modelName, expanded = false) => {
   return vec;
 };
 
+export const resetExpandedCards = () => {
+  const expandedCard = document.querySelector(".project-card.expanded");
+  if (expandedCard) {
+    toggleExpand(null, expandedCard.id);
+  }
+};
+
 // Consolidated position update
 const updatePositions = () => {
-  if (!state.canvas) return;
+  if (!state.canvas || state.isTransitioning) return;
 
   const rect = state.canvas.getBoundingClientRect();
   state.positions.clear();
@@ -255,8 +279,6 @@ const updatePositions = () => {
   const expandedModelName = expandedCard?.dataset.model;
 
   state.models.forEach((model, name) => {
-    if (model.animating) return;
-
     const card = document.querySelector(`[data-model="${name}"]`);
     const shouldBeVisible = card && card.style.display !== "none";
 
@@ -279,16 +301,77 @@ const updatePositions = () => {
       model.position.distanceTo(targetPos) > 0.1 ||
       Math.abs(model.scale.x - targetScale) > 0.01
     ) {
+      // Stop current animation and start new one
+      model.animating = false;
       animate(model, targetPos, targetScale, expanded ? 600 : 400);
     }
   });
 };
 
-export const resetExpandedCards = () => {
-  const expandedCard = document.querySelector(".project-card.expanded");
-  if (expandedCard) {
-    toggleExpand(null, expandedCard.id);
-  }
+// Wait for DOM layout to be completely settled
+const waitForLayoutComplete = (expanding, modelName) => {
+  return new Promise((resolve) => {
+    let attempts = 0;
+    const maxAttempts = 100; // Prevent infinite loop
+
+    const checkLayout = () => {
+      attempts++;
+
+      if (expanding) {
+        const card = document.querySelector(
+          `[data-model="${modelName}"].expanded`
+        );
+        const container = card?.querySelector(".game-image-container");
+        const rect = container?.getBoundingClientRect();
+
+        // Wait for expanded container to have stable, large dimensions
+        if (rect && rect.width > 200 && rect.height > 200) {
+          // Additional check - make sure dimensions are stable
+          setTimeout(() => {
+            const newRect = container.getBoundingClientRect();
+            if (
+              Math.abs(newRect.width - rect.width) < 5 &&
+              Math.abs(newRect.height - rect.height) < 5
+            ) {
+              resolve();
+            } else if (attempts < maxAttempts) {
+              requestAnimationFrame(checkLayout);
+            } else {
+              resolve(); // Fallback
+            }
+          }, 50);
+        } else if (attempts < maxAttempts) {
+          requestAnimationFrame(checkLayout);
+        } else {
+          resolve(); // Fallback
+        }
+      } else {
+        // For collapsing, wait for all cards to settle into grid positions
+        const cards = document.querySelectorAll(
+          ".project-card:not(.hidden-card)"
+        );
+        let allSettled = true;
+
+        cards.forEach((card) => {
+          const window = card.querySelector(".model-view-window");
+          if (window) {
+            const rect = window.getBoundingClientRect();
+            if (rect.width < 50 || rect.height < 50) {
+              allSettled = false;
+            }
+          }
+        });
+
+        if (allSettled || attempts >= maxAttempts) {
+          resolve();
+        } else {
+          requestAnimationFrame(checkLayout);
+        }
+      }
+    };
+
+    requestAnimationFrame(checkLayout);
+  });
 };
 
 const toggleExpand = async (e, id) => {
@@ -296,10 +379,18 @@ const toggleExpand = async (e, id) => {
   e?.stopPropagation();
 
   const card = document.getElementById(id);
-  if (!card) return;
+  if (!card || state.isTransitioning) return;
 
   const expanding = !card.classList.contains("expanded");
   const modelName = card.dataset.model;
+
+  // Set transition flag to prevent intermediate updates
+  state.isTransitioning = true;
+
+  // Hide all models immediately to prevent intermediate animations
+  state.models.forEach((model) => {
+    model.visible = false;
+  });
 
   // Toggle card states
   document.querySelectorAll(".project-card").forEach((c) => {
@@ -313,45 +404,50 @@ const toggleExpand = async (e, id) => {
 
   document.body.classList.toggle("overflow-hidden", expanding);
 
-  // Update model visibility - hide all others when expanding, show all when collapsing
+  // Wait for CSS transitions and DOM layout to be completely stable
+  await waitForLayoutComplete(expanding, modelName);
+
+  // Add extra delay to ensure everything is settled
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  // Now calculate final positions and animate models directly to them
+  const expandedCard = document.querySelector(".project-card.expanded");
+  const isAnyCardExpanded = !!expandedCard;
+  const expandedModelName = expandedCard?.dataset.model;
+
   state.models.forEach((model, name) => {
-    if (expanding) {
-      // When expanding, only show the focused model
-      model.visible = name === modelName;
+    const modelCard = document.querySelector(`[data-model="${name}"]`);
+    const shouldBeVisible = modelCard && modelCard.style.display !== "none";
+
+    // Set final visibility
+    if (isAnyCardExpanded) {
+      model.visible = name === expandedModelName;
     } else {
-      // When collapsing, show all models that have visible cards
-      const modelCard = document.querySelector(`[data-model="${name}"]`);
-      model.visible = modelCard && modelCard.style.display !== "none";
+      model.visible = shouldBeVisible;
     }
+
+    if (!model.visible) return;
+
+    // Calculate final position
+    const expanded = modelCard.classList.contains("expanded");
+    const targetPos = getModelPos(name, expanded);
+    const targetScale = (model.baseScale || 0.15) * (expanded ? 1.4 : 1);
+
+    // Animate directly to final position
+    animate(model, targetPos, targetScale, expanding ? 600 : 400);
   });
 
-  // If we're collapsing, reapply the current filter to restore proper visibility
-  if (!expanding && window.portfolioFilterAPI) {
+  // Clear transition flag after animation starts
+  setTimeout(() => {
+    state.isTransitioning = false;
+  }, 100);
+
+  // Handle scroll for expanded cards
+  if (expanding) {
     setTimeout(() => {
-      window.portfolioFilterAPI.applyFilter(
-        window.portfolioFilterAPI.getActiveFilter()
-      );
-    }, 100);
+      card.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 300);
   }
-
-  // Wait for transition and update positions
-  await new Promise((resolve) => {
-    const handleTransition = () => {
-      card.removeEventListener("transitionend", handleTransition);
-      setTimeout(() => {
-        updatePositions();
-        if (expanding) {
-          setTimeout(
-            () => card.scrollIntoView({ behavior: "smooth", block: "center" }),
-            200
-          );
-        }
-        resolve();
-      }, 100);
-    };
-    card.addEventListener("transitionend", handleTransition);
-    setTimeout(handleTransition, 1000); // Fallback
-  });
 };
 
 // Consolidated interaction setup

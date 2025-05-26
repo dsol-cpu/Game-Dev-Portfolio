@@ -281,7 +281,7 @@ const createMusicPlayer = () => {
   );
   prevBtn.id = "music-prev-btn";
 
-  const playBtn = createControlButton("▶️", "Play", handlePlayPause);
+  const playBtn = createControlButton("", "Play", handlePlayPause);
   playBtn.id = "music-play-btn";
   playBtn.style.background = "rgba(0, 212, 170, 0.12)"; // More subtle accent
   playBtn.style.border = "1px solid rgba(0, 212, 170, 0.3)";

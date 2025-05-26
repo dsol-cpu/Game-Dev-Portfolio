@@ -1,6 +1,5 @@
 /**
- * Optimized Device Performance Detection Module
- * Streamlined for maximum performance while maintaining readability
+ * Device Performance Detection Module
  */
 
 // Performance levels
@@ -205,7 +204,6 @@ function getHardware() {
     (mobile ? (cores >= 6 ? 4 : 2) : cores >= 8 ? 8 : 4);
   const pixels = screen.width * screen.height * (window.devicePixelRatio || 1);
 
-  // Optimized scoring
   const cpuScore = mobile
     ? Math.min(35, cores * 4)
     : Math.min(

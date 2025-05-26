@@ -9,6 +9,7 @@ const BlogTag = Object.freeze({
 // Blog post data
 export const blogPostsData = [
   {
+    date: "05/26/2025",
     tags: [BlogTag.GENERAL],
     title: "I am Lorem",
     description:
@@ -16,6 +17,7 @@ export const blogPostsData = [
     thumbnail: cupil,
   },
   {
+    date: "05/26/2025",
     tags: [BlogTag.REAL],
     title: "Chiikawa Motivational Poster",
     description: "You can do it.",
@@ -24,8 +26,10 @@ export const blogPostsData = [
 
   {
     tags: [BlogTag.REAL],
-    title: "Code for a Cause Game Jam",
-    description: "You can do it.",
+    date: "05/26/2025",
+    title: "Mini Code for a Cause Game Jam - My Experience",
+    description:
+      "I joined a game jam and had a great time!  I used this experience to learn more about working with Unreal Engine. I learned how much we could improve ",
     thumbnail: fallback,
   },
 ];

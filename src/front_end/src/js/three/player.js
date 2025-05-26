@@ -384,3 +384,44 @@ export const getHeightLimits = () => ({
 });
 
 export const disposePlayerControls = initPlayerControls;
+
+// Autopilot state flag
+let isAutoPilotActive = false;
+
+/**
+ * Enable or disable autopilot mode for the player ship.
+ * This typically disables manual input and lets navigation take over.
+ * @param {boolean} isEnabled - Whether to enable autopilot
+ */
+export function setPlayerAutoPilot(isEnabled) {
+  isAutoPilotActive = isEnabled;
+
+  // Example: Disable user inputs if autopilot is on
+  if (isEnabled) {
+    console.log("🧭 Autopilot engaged – manual controls disabled");
+    // You might want to disable input listeners or lock movement updates here
+    // e.g., inputManager.disable(), movementEnabled = false, etc.
+  } else {
+    console.log(
+      "🧭 Autopilot flag set, but not fully cleared (call clearPlayerAutoPilot)"
+    );
+  }
+}
+
+/**
+ * Fully clear autopilot mode and re-enable manual control.
+ */
+export function clearPlayerAutoPilot() {
+  isAutoPilotActive = false;
+  console.log("🕹️ Autopilot disengaged – manual controls re-enabled");
+  // Re-enable any user input systems here
+  // e.g., inputManager.enable(), movementEnabled = true, etc.
+}
+
+/**
+ * Optionally expose autopilot state if needed by other systems
+ * @returns {boolean}
+ */
+export function isPlayerAutoPiloting() {
+  return isAutoPilotActive;
+}
