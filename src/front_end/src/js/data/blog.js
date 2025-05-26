@@ -21,4 +21,11 @@ export const blogPostsData = [
     description: "You can do it.",
     thumbnail: fallback,
   },
+
+  {
+    tags: [BlogTag.REAL],
+    title: "Code for a Cause Game Jam",
+    description: "You can do it.",
+    thumbnail: fallback,
+  },
 ];
