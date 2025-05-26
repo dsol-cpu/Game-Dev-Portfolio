@@ -36,6 +36,7 @@ const COLORS = {
   shipAccent: 0x66ccff,
 };
 import { TWO_PI } from "../constants/constants.js";
+import { resetExpandedCards } from "./project-cards.js";
 
 export const ISLAND_DATA = [
   { name: "Home Island", position: new Vector3(0, 0, 1000), section: "home" },
@@ -298,6 +299,12 @@ export function toggleGameView(elements) {
   const newViewMode = isGameView() ? VIEW_MODES.SCROLL : VIEW_MODES.GAME;
   const switchingToGameView = newViewMode === VIEW_MODES.GAME;
 
+  // Reset any expanded cards when switching to game view
+  if (switchingToGameView) {
+    // Reset expanded cards before switching views
+    resetExpandedCards();
+  }
+
   // Update button text
   viewLabel.textContent = switchingToGameView ? "Scroll View" : "Game View";
 
@@ -370,6 +377,11 @@ export function toggleGameView(elements) {
   handleUserInteraction();
   return switchingToGameView;
 }
+
+// Update page visibility handling for improved audio behavior
+document.addEventListener("visibilitychange", () => {
+  handleVisibilityChange(document.visibilityState === "visible", isGameView());
+});
 
 // Update page visibility handling for improved audio behavior
 document.addEventListener("visibilitychange", () => {

@@ -17,7 +17,7 @@ import { preloadModels } from "./three/model.js";
 import {
   initProjectCardScene,
   initProjectCards,
-} from "./three/project-card-system.js";
+} from "./three/project-cards.js";
 import {
   hasActiveCamera,
   initThreeJSManager,
@@ -100,7 +100,6 @@ function frameUpdateCallback(timestamp) {
   const deltaTime = getDeltaTime();
 
   if (isGameView()) {
-    updateIslandBobbing(deltaTime);
     updateGameLoop(deltaTime);
   }
   // General engine operations for all registered physics bodies and cameras

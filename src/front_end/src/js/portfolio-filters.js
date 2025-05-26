@@ -21,6 +21,12 @@ function initPortfolioFilters() {
   state.buttons.forEach((btn) =>
     btn.addEventListener("click", (e) => {
       e.preventDefault();
+
+      const expandedCard = document.querySelector(".project-card.expanded");
+      if (expandedCard) {
+        return;
+      }
+
       const filter = btn.getAttribute("data-filter");
       if (filter === state.filter && !state.customFilter) return;
 
@@ -30,6 +36,24 @@ function initPortfolioFilters() {
       applyFilter(filter);
     })
   );
+
+  // Monitor for card expansion/collapse to update button states
+  const observer = new MutationObserver((mutations) => {
+    mutations.forEach((mutation) => {
+      if (
+        mutation.type === "attributes" &&
+        mutation.attributeName === "class" &&
+        mutation.target.classList.contains("project-card")
+      ) {
+        updateFilterButtonStates();
+      }
+    });
+  });
+
+  // Start observing card state changes
+  state.items.forEach((item) => {
+    observer.observe(item, { attributes: true, attributeFilter: ["class"] });
+  });
 
   const init = window.location.hash.substring(1) || ALL;
   if (init !== ALL) {
@@ -41,6 +65,9 @@ function initPortfolioFilters() {
       applyFilter(init);
     }
   }
+
+  // Initial button state check
+  updateFilterButtonStates();
 
   return {
     getFilteredItems: () =>
@@ -56,6 +83,7 @@ function initPortfolioFilters() {
       applyFilter(state.filter);
     },
     getActiveFilter: () => state.filter,
+    updateFilterButtonStates, // Expose this function for manual updates if needed
   };
 }
 
@@ -100,6 +128,26 @@ function applyFilter(filter) {
     visibleItemIds: visibleIds,
     hiddenItemIds: hiddenIds,
   };
+}
+
+/**
+ * Update filter button states based on expanded card status
+ */
+function updateFilterButtonStates() {
+  const expandedCard = document.querySelector(".project-card.expanded");
+  const isDisabled = !!expandedCard;
+
+  state.buttons.forEach((btn) => {
+    if (isDisabled) {
+      btn.classList.add("disabled");
+      btn.style.opacity = "0.5";
+      btn.style.cursor = "not-allowed";
+    } else {
+      btn.classList.remove("disabled");
+      btn.style.opacity = "";
+      btn.style.cursor = "";
+    }
+  });
 }
 
 export { initPortfolioFilters };

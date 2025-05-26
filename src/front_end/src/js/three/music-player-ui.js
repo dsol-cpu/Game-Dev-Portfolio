@@ -24,14 +24,14 @@ import {
 
 // Constants
 const MUSIC_CONFIG = {
-  width: 420,
+  width: 480,
   height: 80,
   padding: 20,
-  spacing: 12,
-  controlSize: 40,
-  smallControlSize: 32,
+  spacing: 10,
+  controlSize: 36,
+  smallControlSize: 28,
   borderRadius: 16,
-  volumeSliderWidth: 120, // Increased from 80
+  volumeSliderWidth: 100,
 };
 
 const MUSIC_THEME = {
@@ -51,8 +51,8 @@ const MUSIC_THEME = {
     bg: "rgba(100, 120, 150, 0.25)",
     fill: "linear-gradient(90deg, #00d4aa 0%, #00b894 100%)",
   },
-  shadow: "0 12px 32px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.3)",
-  glowShadow: "0 0 24px rgba(0, 212, 170, 0.3)",
+  shadow: "0 8px 24px rgba(0, 0, 0, 0.3)", // Reduced shadow intensity
+  glowShadow: "0 0 16px rgba(0, 212, 170, 0.2)", // Softer glow
 };
 
 // Music player state
@@ -134,11 +134,11 @@ const createControlButton = (
     style: {
       width: `${size}px`,
       height: `${size}px`,
-      fontSize: size === MUSIC_CONFIG.controlSize ? "18px" : "16px",
-      background: "rgba(255, 255, 255, 0.08)",
-      backdropFilter: "blur(12px)",
-      border: "1px solid rgba(255, 255, 255, 0.15)",
-      borderRadius: "12px",
+      fontSize: size === MUSIC_CONFIG.controlSize ? "16px" : "14px", // Reduced font sizes
+      background: "rgba(255, 255, 255, 0.06)", // More subtle background
+      backdropFilter: "blur(8px)", // Reduced blur
+      border: "1px solid rgba(255, 255, 255, 0.12)", // Softer border
+      borderRadius: "10px", // Slightly smaller radius
     },
   });
 };
@@ -166,7 +166,7 @@ const createProgressBar = (value = 0, max = 100, onChange = null) => {
       height: "100%",
       background: MUSIC_THEME.progress.fill,
       borderRadius: "6px",
-      width: `${(value / max) * 100}%`,
+      width: `${max > 0 ? (value / max) * 100 : 0}%`,
       transition: "width 0.3s ease, box-shadow 0.2s ease",
       boxShadow: "0 0 12px rgba(0, 212, 170, 0.5)",
     },
@@ -186,19 +186,24 @@ const createProgressBar = (value = 0, max = 100, onChange = null) => {
     container.addEventListener("click", (e) => {
       const rect = container.getBoundingClientRect();
       const percent = (e.clientX - rect.left) / rect.width;
-      const newValue = percent * max;
+      const newValue = percent * (container.maxValue || max);
       onChange(newValue);
     });
   }
 
-  container.updateValue = (newValue) => {
-    fill.style.width = `${(newValue / max) * 100}%`;
+  container.updateValue = (newValue, newMax = null) => {
+    if (newMax !== null) {
+      container.maxValue = newMax;
+    }
+    const currentMax = container.maxValue || max;
+    const percentage = currentMax > 0 ? (newValue / currentMax) * 100 : 0;
+    fill.style.width = `${Math.min(100, Math.max(0, percentage))}%`;
   };
 
+  container.maxValue = max;
   return container;
 };
 
-// Volume slider creation - Now longer and better styled
 const createVolumeSlider = () => {
   const slider = createElement("input", {
     type: "range",
@@ -210,16 +215,226 @@ const createVolumeSlider = () => {
     style: {
       width: `${MUSIC_CONFIG.volumeSliderWidth}px`,
       cursor: "pointer",
-      height: "8px",
-      borderRadius: "4px",
+      height: "6px", // Thinner slider
+      borderRadius: "3px",
       background: "rgba(100, 120, 150, 0.25)",
       outline: "none",
       appearance: "none",
+      flexShrink: 0, // Prevent shrinking
     },
   });
 
   slider.addEventListener("input", handleVolumeChange);
   return slider;
+};
+
+// Main music player creation - Improved layout
+const createMusicPlayer = () => {
+  const container = createElement("div", {
+    id: "music-player-container",
+    className: "game-ui-element",
+    style: {
+      width: `${MUSIC_CONFIG.width}px`,
+      minHeight: `${MUSIC_CONFIG.height}px`,
+      background: MUSIC_THEME.bg,
+      border: `1px solid ${MUSIC_THEME.border}`,
+      borderRadius: `${MUSIC_CONFIG.borderRadius}px`,
+      padding: `${MUSIC_CONFIG.padding}px`,
+      display: "flex",
+      flexDirection: "column",
+      gap: `${MUSIC_CONFIG.spacing}px`,
+      pointerEvents: "auto",
+      overflow: "hidden",
+      transition: "all 0.3s ease", // Faster transition
+      backdropFilter: "blur(16px)", // Reduced blur
+      boxShadow: MUSIC_THEME.shadow,
+      position: "relative",
+      boxSizing: "border-box", // Ensure proper sizing
+    },
+  });
+
+  // Softer hover effects
+  container.addEventListener("mouseenter", () => {
+    container.style.boxShadow = `${MUSIC_THEME.shadow}, ${MUSIC_THEME.glowShadow}`;
+  });
+
+  container.addEventListener("mouseleave", () => {
+    container.style.boxShadow = MUSIC_THEME.shadow;
+  });
+
+  // Top row - main controls with better spacing
+  const topRow = createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: `${MUSIC_CONFIG.spacing}px`,
+      marginBottom: "6px", // Reduced margin
+    },
+  });
+
+  // Simplified control buttons - Remove audio toggle and stop for cleaner look
+  const prevBtn = createControlButton(
+    "⏮",
+    "Previous",
+    handlePrevious,
+    MUSIC_CONFIG.smallControlSize
+  );
+  prevBtn.id = "music-prev-btn";
+
+  const playBtn = createControlButton("▶️", "Play", handlePlayPause);
+  playBtn.id = "music-play-btn";
+  playBtn.style.background = "rgba(0, 212, 170, 0.12)"; // More subtle accent
+  playBtn.style.border = "1px solid rgba(0, 212, 170, 0.3)";
+
+  const nextBtn = createControlButton(
+    "⏭",
+    "Next",
+    handleNext,
+    MUSIC_CONFIG.smallControlSize
+  );
+  nextBtn.id = "music-next-btn";
+
+  // Track info with better proportions
+  const trackInfo = createElement("div", {
+    style: {
+      flex: "1",
+      display: "flex",
+      flexDirection: "column",
+      minWidth: "0",
+      marginLeft: `${MUSIC_CONFIG.spacing}px`,
+      marginRight: `${MUSIC_CONFIG.spacing}px`, // Add right margin
+    },
+  });
+
+  // Create scrolling title container
+  const titleContainer = createElement("div", {
+    id: "music-track-title-container",
+    style: {
+      overflow: "hidden",
+      position: "relative",
+      height: "16px", // Fixed height for consistent layout
+    },
+  });
+
+  const trackTitle = createElement(
+    "div",
+    {
+      id: "music-track-title",
+      style: {
+        fontSize: "13px", // Slightly smaller
+        fontWeight: "500", // Less bold
+        color: MUSIC_THEME.text,
+        whiteSpace: "nowrap",
+        textShadow: "0 1px 2px rgba(0, 0, 0, 0.3)",
+        transition: "transform 0.3s ease",
+      },
+    },
+    ["No track selected"]
+  );
+
+  titleContainer.appendChild(trackTitle);
+
+  const timeDisplay = createElement(
+    "div",
+    {
+      id: "music-time-display",
+      style: {
+        fontSize: "11px",
+        color: MUSIC_THEME.textSecondary,
+        marginTop: "2px", // Reduced margin
+        fontFamily: "monospace",
+        letterSpacing: "0.3px",
+      },
+    },
+    ["0:00 / 0:00"]
+  );
+
+  trackInfo.appendChild(titleContainer);
+  trackInfo.appendChild(timeDisplay);
+
+  // Simplified volume controls - More compact
+  const volumeContainer = createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: "8px", // Reduced gap
+      background: "rgba(255, 255, 255, 0.04)", // More subtle background
+      padding: "8px 12px", // Reduced padding
+      borderRadius: "10px", // Smaller radius
+      border: "1px solid rgba(255, 255, 255, 0.08)", // Softer border
+      backdropFilter: "blur(6px)",
+      flexShrink: 0, // Prevent shrinking
+    },
+  });
+
+  const muteBtn = createControlButton(
+    "🔊",
+    "Mute",
+    handleMute,
+    MUSIC_CONFIG.smallControlSize
+  );
+  muteBtn.id = "music-mute-btn";
+
+  const volumeSlider = createVolumeSlider();
+  volumeSlider.id = "music-volume-slider";
+
+  volumeContainer.appendChild(muteBtn);
+  volumeContainer.appendChild(volumeSlider);
+
+  const expandBtn = createControlButton(
+    "🔽",
+    "Collapse",
+    handleExpand,
+    MUSIC_CONFIG.smallControlSize
+  );
+  expandBtn.id = "music-expand-btn";
+
+  // Assemble top row - Remove clutter
+  topRow.appendChild(prevBtn);
+  topRow.appendChild(playBtn);
+  topRow.appendChild(nextBtn);
+  topRow.appendChild(trackInfo);
+  topRow.appendChild(volumeContainer);
+  topRow.appendChild(expandBtn);
+
+  // Progress bar row with better spacing
+  const progressRow = createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      marginTop: "2px", // Reduced margin
+    },
+  });
+
+  const progressBar = createProgressBar(
+    0,
+    getDuration() || 100,
+    handleProgressChange
+  );
+  progressBar.id = "music-progress-bar";
+  progressBar.maxValue = getDuration() || 100;
+  progressRow.appendChild(progressBar);
+
+  // Playlist container with cleaner styling
+  const playlist = createElement("div", {
+    id: "music-playlist",
+    style: {
+      display: "block",
+      maxHeight: "180px", // Reduced height
+      overflowY: "auto",
+      background: "rgba(255, 255, 255, 0.025)", // More subtle background
+      border: `1px solid rgba(255, 255, 255, 0.08)`,
+      borderRadius: "10px", // Smaller radius
+      marginTop: "8px", // Reduced margin
+      backdropFilter: "blur(8px)",
+    },
+  });
+
+  container.appendChild(topRow);
+  container.appendChild(progressRow);
+  container.appendChild(playlist);
+
+  return container;
 };
 
 // Status synchronization
@@ -230,8 +445,9 @@ const syncWithAudioSystem = () => {
   const duration = getDuration();
   const currentTrackIndex = getCurrentTrackIndex();
 
+  // Always update in this order to ensure proper synchronization
   updatePlayButton(audioPlaying);
-  updateVolumeSlider(currentVolume);
+  updateVolumeSlider(currentVolume); // This will also update mute button
   updateTimeDisplay(currentPosition, duration);
   updateTrackDisplay(currentTrackIndex);
   updatePlaylistDisplay(currentTrackIndex);
@@ -305,19 +521,30 @@ const handleMute = () => {
   const currentVolume = getVolume();
 
   if (currentVolume === 0) {
+    // Unmute: restore previous volume
     const newVolume = musicState.lastKnownVolume || 0.7;
     setVolume(newVolume);
   } else {
+    // Mute: save current volume and set to 0
     musicState.lastKnownVolume = currentVolume;
     setVolume(0);
   }
+
+  // Immediately update the mute button and volume slider
+  updateMuteButton();
+  updateVolumeSlider();
 };
 
 const handleVolumeChange = (e) => {
   const newVolume = parseFloat(e.target.value);
   setVolume(newVolume);
 
-  if (newVolume > 0) musicState.lastKnownVolume = newVolume;
+  // Save non-zero volume as last known volume
+  if (newVolume > 0) {
+    musicState.lastKnownVolume = newVolume;
+  }
+
+  // Update mute button immediately
   updateMuteButton();
 };
 
@@ -344,6 +571,18 @@ const updatePlayButton = (isPlaying = null) => {
   const playing = isPlaying !== null ? isPlaying : isMusicPlaying();
   playBtn.innerHTML = playing ? "⏸️" : "▶️";
   playBtn.title = playing ? "Pause" : "Play";
+
+  // Control title scrolling based on play state
+  const trackTitle = document.getElementById("music-track-title");
+  if (trackTitle) {
+    if (playing) {
+      trackTitle.classList.remove("music-title-paused");
+      trackTitle.classList.add("music-title-scrolling");
+    } else {
+      trackTitle.classList.add("music-title-paused");
+      trackTitle.style.transform = "translateX(0)"; // Reset to start position
+    }
+  }
 };
 
 const updateMuteButton = () => {
@@ -351,8 +590,21 @@ const updateMuteButton = () => {
   if (!muteBtn) return;
 
   const volume = getVolume();
-  muteBtn.innerHTML = volume === 0 ? "🔇" : "🔊";
-  muteBtn.title = volume === 0 ? "Unmute" : "Mute";
+
+  // Use different icons based on volume level
+  if (volume === 0) {
+    muteBtn.innerHTML = "🔇"; // Muted icon
+    muteBtn.title = "Unmute";
+    muteBtn.style.color = MUSIC_THEME.textSecondary; // Dimmed when muted
+  } else if (volume < 0.5) {
+    muteBtn.innerHTML = "🔉"; // Low volume icon
+    muteBtn.title = "Mute";
+    muteBtn.style.color = MUSIC_THEME.button.idle;
+  } else {
+    muteBtn.innerHTML = "🔊"; // High volume icon
+    muteBtn.title = "Mute";
+    muteBtn.style.color = MUSIC_THEME.button.idle;
+  }
 };
 
 const updateVolumeSlider = (volume = null) => {
@@ -362,42 +614,78 @@ const updateVolumeSlider = (volume = null) => {
   const currentVolume = volume !== null ? volume : getVolume();
   volumeSlider.value = currentVolume.toString();
   volumeSlider.style.opacity = currentVolume === 0 ? "0.6" : "1";
+
+  // Also update mute button when volume slider is updated
+  updateMuteButton();
 };
 
 const updateTrackDisplay = (trackIndex = null) => {
   const trackTitle = document.getElementById("music-track-title");
-  if (!trackTitle) return;
+  const titleContainer = document.getElementById("music-track-title-container");
+  if (!trackTitle || !titleContainer) return;
 
   const playlist = getPlaylist();
   const currentIndex =
     trackIndex !== null ? trackIndex : getCurrentTrackIndex();
   const currentTrack = playlist[currentIndex];
 
-  trackTitle.textContent = currentTrack
+  const trackName = currentTrack
     ? extractFilename(currentTrack)
     : "No track selected";
+  trackTitle.textContent = trackName;
+
+  // Reset scrolling animation
+  trackTitle.classList.remove("music-title-scrolling", "music-title-paused");
+  trackTitle.style.animation = "none";
+  trackTitle.style.transform = "translateX(0)";
+
+  // Check if title needs scrolling (is wider than container)
+  setTimeout(() => {
+    const containerWidth = titleContainer.offsetWidth;
+    const titleWidth = trackTitle.scrollWidth;
+
+    if (titleWidth > containerWidth && currentTrack) {
+      const scrollDistance = titleWidth - containerWidth + 20; // Add some padding
+      trackTitle.style.setProperty("--scroll-distance", `-${scrollDistance}px`);
+
+      // Apply scrolling animation if music is playing
+      if (isMusicPlaying()) {
+        trackTitle.classList.add("music-title-scrolling");
+      } else {
+        trackTitle.classList.add("music-title-paused");
+      }
+    }
+  }, 100);
 };
 
 const updateTimeDisplay = (position = null, duration = null) => {
   const timeDisplay = document.getElementById("music-time-display");
+  const progressBar = document.getElementById("music-progress-bar");
+
+  const currentPos = position !== null ? position : getCurrentPosition();
+  const totalDuration = duration !== null ? duration : getDuration();
+
+  // Update time display
   if (timeDisplay) {
-    const currentPos = position !== null ? position : getCurrentPosition();
-    const totalDuration = duration !== null ? duration : getDuration();
     timeDisplay.textContent = `${formatTime(currentPos)} / ${formatTime(
       totalDuration
     )}`;
   }
 
-  const progressBar = document.getElementById("music-progress-bar");
+  // Update progress bar with proper synchronization
   if (progressBar?.updateValue) {
-    const currentPos = position !== null ? position : getCurrentPosition();
-    const totalDuration = duration !== null ? duration : getDuration();
-
+    // Only update if we have valid duration
     if (totalDuration > 0) {
-      progressBar.updateValue(currentPos);
+      // Update the max value if duration changed
       if (progressBar.maxValue !== totalDuration) {
         progressBar.maxValue = totalDuration;
       }
+
+      // Update the current position
+      progressBar.updateValue(currentPos, totalDuration);
+    } else {
+      // No duration available, reset progress bar
+      progressBar.updateValue(0, 100);
     }
   }
 };
@@ -519,220 +807,7 @@ const selectTrack = async (index) => {
   await loadAndPlayTrack(index);
 };
 
-// Main music player creation
-const createMusicPlayer = () => {
-  const container = createElement("div", {
-    id: "music-player-container",
-    className: "game-ui-element",
-    style: {
-      width: `${MUSIC_CONFIG.width}px`,
-      minHeight: `${MUSIC_CONFIG.height}px`,
-      background: MUSIC_THEME.bg,
-      border: `1px solid ${MUSIC_THEME.border}`,
-      borderRadius: `${MUSIC_CONFIG.borderRadius}px`,
-      padding: `${MUSIC_CONFIG.padding}px`,
-      display: "flex",
-      flexDirection: "column",
-      gap: `${MUSIC_CONFIG.spacing}px`,
-      pointerEvents: "auto",
-      overflow: "hidden",
-      transition: "all 0.4s cubic-bezier(0.4, 0, 0.2, 1)",
-      backdropFilter: "blur(20px)",
-      boxShadow: MUSIC_THEME.shadow,
-      position: "relative",
-    },
-  });
-
-  // Hover effects
-  container.addEventListener("mouseenter", () => {
-    container.style.boxShadow = `${MUSIC_THEME.shadow}, ${MUSIC_THEME.glowShadow}`;
-  });
-
-  container.addEventListener("mouseleave", () => {
-    container.style.boxShadow = MUSIC_THEME.shadow;
-  });
-
-  // Top row - main controls
-  const topRow = createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: `${MUSIC_CONFIG.spacing}px`,
-      marginBottom: "8px",
-    },
-  });
-
-  // Control buttons
-  const audioToggleBtn = createControlButton(
-    isAudioEnabled() ? "🎵" : "🔇",
-    isAudioEnabled() ? "Disable Audio" : "Enable Audio",
-    handleAudioToggle,
-    MUSIC_CONFIG.smallControlSize
-  );
-  audioToggleBtn.id = "music-audio-toggle-btn";
-
-  const prevBtn = createControlButton(
-    "⏮️",
-    "Previous",
-    handlePrevious,
-    MUSIC_CONFIG.smallControlSize
-  );
-  prevBtn.id = "music-prev-btn";
-
-  const playBtn = createControlButton("▶️", "Play", handlePlayPause);
-  playBtn.id = "music-play-btn";
-  playBtn.style.background = "rgba(0, 212, 170, 0.15)";
-  playBtn.style.border = "2px solid rgba(0, 212, 170, 0.4)";
-
-  const nextBtn = createControlButton(
-    "⏭️",
-    "Next",
-    handleNext,
-    MUSIC_CONFIG.smallControlSize
-  );
-  nextBtn.id = "music-next-btn";
-
-  const stopBtn = createControlButton(
-    "⏹️",
-    "Stop",
-    handleStop,
-    MUSIC_CONFIG.smallControlSize
-  );
-  stopBtn.id = "music-stop-btn";
-
-  // Track info
-  const trackInfo = createElement("div", {
-    style: {
-      flex: "1",
-      display: "flex",
-      flexDirection: "column",
-      minWidth: "0",
-      marginLeft: `${MUSIC_CONFIG.spacing}px`,
-    },
-  });
-
-  const trackTitle = createElement(
-    "div",
-    {
-      id: "music-track-title",
-      style: {
-        fontSize: "14px",
-        fontWeight: "600",
-        color: MUSIC_THEME.text,
-        overflow: "hidden",
-        textOverflow: "ellipsis",
-        whiteSpace: "nowrap",
-        textShadow: "0 1px 2px rgba(0, 0, 0, 0.4)",
-      },
-    },
-    ["No track selected"]
-  );
-
-  const timeDisplay = createElement(
-    "div",
-    {
-      id: "music-time-display",
-      style: {
-        fontSize: "11px",
-        color: MUSIC_THEME.textSecondary,
-        marginTop: "4px",
-        fontFamily: "monospace",
-        letterSpacing: "0.5px",
-      },
-    },
-    ["0:00 / 0:00"]
-  );
-
-  trackInfo.appendChild(trackTitle);
-  trackInfo.appendChild(timeDisplay);
-
-  // Volume controls - Enhanced container
-  const volumeContainer = createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: "12px",
-      background: "rgba(255, 255, 255, 0.05)",
-      padding: "10px 16px",
-      borderRadius: "14px",
-      border: "1px solid rgba(255, 255, 255, 0.1)",
-      backdropFilter: "blur(10px)",
-    },
-  });
-
-  const muteBtn = createControlButton(
-    "🔊",
-    "Mute",
-    handleMute,
-    MUSIC_CONFIG.smallControlSize
-  );
-  muteBtn.id = "music-mute-btn";
-
-  const volumeSlider = createVolumeSlider();
-  volumeSlider.id = "music-volume-slider";
-
-  volumeContainer.appendChild(muteBtn);
-  volumeContainer.appendChild(volumeSlider);
-
-  const expandBtn = createControlButton(
-    "🔽",
-    "Collapse",
-    handleExpand,
-    MUSIC_CONFIG.smallControlSize
-  );
-  expandBtn.id = "music-expand-btn";
-
-  // Assemble top row
-  topRow.appendChild(audioToggleBtn);
-  topRow.appendChild(prevBtn);
-  topRow.appendChild(playBtn);
-  topRow.appendChild(nextBtn);
-  topRow.appendChild(stopBtn);
-  topRow.appendChild(trackInfo);
-  topRow.appendChild(volumeContainer);
-  topRow.appendChild(expandBtn);
-
-  // Progress bar row
-  const progressRow = createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      marginTop: "4px",
-    },
-  });
-
-  const progressBar = createProgressBar(
-    0,
-    getDuration() || 100,
-    handleProgressChange
-  );
-  progressBar.id = "music-progress-bar";
-  progressBar.maxValue = getDuration() || 100;
-  progressRow.appendChild(progressBar);
-
-  // Playlist container
-  const playlist = createElement("div", {
-    id: "music-playlist",
-    style: {
-      display: "block",
-      maxHeight: "200px",
-      overflowY: "auto",
-      background: "rgba(255, 255, 255, 0.03)",
-      border: `1px solid rgba(255, 255, 255, 0.1)`,
-      borderRadius: "12px",
-      marginTop: "12px",
-      backdropFilter: "blur(10px)",
-    },
-  });
-
-  container.appendChild(topRow);
-  container.appendChild(progressRow);
-  container.appendChild(playlist);
-
-  return container;
-};
-
-// Improved styles
+// Improved styles with cleaner aesthetics
 const createMusicPlayerStyles = () => {
   if (document.getElementById("music-player-styles")) return;
 
@@ -740,25 +815,25 @@ const createMusicPlayerStyles = () => {
     id: "music-player-styles",
     textContent: `
       .music-control-btn {
-        background: rgba(255, 255, 255, 0.08);
-        border: 1px solid rgba(255, 255, 255, 0.15);
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.12);
         cursor: pointer;
         display: flex;
         align-items: center;
         justify-content: center;
-        border-radius: 12px;
+        border-radius: 10px;
         color: ${MUSIC_THEME.button.idle};
-        transition: all 0.25s ease;
+        transition: all 0.2s ease;
         flex-shrink: 0;
-        backdrop-filter: blur(12px);
+        backdrop-filter: blur(8px);
       }
 
       .music-control-btn:hover {
         color: ${MUSIC_THEME.button.hover};
-        background: rgba(0, 212, 170, 0.15);
-        border-color: rgba(0, 212, 170, 0.4);
-        box-shadow: 0 4px 16px rgba(0, 212, 170, 0.25);
-        transform: translateY(-1px);
+        background: rgba(0, 212, 170, 0.12);
+        border-color: rgba(0, 212, 170, 0.3);
+        box-shadow: 0 2px 8px rgba(0, 212, 170, 0.2);
+        transform: translateY(-0.5px);
       }
 
       .music-control-btn:active {
@@ -766,56 +841,50 @@ const createMusicPlayerStyles = () => {
         transform: translateY(0);
       }
 
-      .music-control-btn:disabled {
-        color: ${MUSIC_THEME.button.disabled};
-        cursor: not-allowed;
-        opacity: 0.5;
-      }
-
       .volume-slider {
         -webkit-appearance: none;
         appearance: none;
         background: rgba(100, 120, 150, 0.25);
         outline: none;
-        border-radius: 4px;
+        border-radius: 3px;
         transition: all 0.2s ease;
       }
 
       .volume-slider::-webkit-slider-thumb {
         -webkit-appearance: none;
         appearance: none;
-        width: 18px;
-        height: 18px;
+        width: 14px;
+        height: 14px;
         border-radius: 50%;
         background: ${MUSIC_THEME.accent};
         cursor: pointer;
-        box-shadow: 0 2px 8px rgba(0, 212, 170, 0.5);
+        box-shadow: 0 1px 4px rgba(0, 212, 170, 0.4);
         transition: all 0.2s ease;
       }
 
       .volume-slider::-webkit-slider-thumb:hover {
-        box-shadow: 0 4px 16px rgba(0, 212, 170, 0.7);
-        transform: scale(1.1);
+        box-shadow: 0 2px 8px rgba(0, 212, 170, 0.6);
+        transform: scale(1.05);
       }
 
       .volume-slider::-moz-range-thumb {
-        width: 18px;
-        height: 18px;
+        width: 14px;
+        height: 14px;
         border-radius: 50%;
         background: ${MUSIC_THEME.accent};
         cursor: pointer;
         border: none;
-        box-shadow: 0 2px 8px rgba(0, 212, 170, 0.5);
+        box-shadow: 0 1px 4px rgba(0, 212, 170, 0.4);
       }
 
       .playlist-item {
         transition: all 0.2s ease;
-        border-radius: 8px;
+        border-radius: 6px;
       }
 
       .playlist-item:hover {
-        background: rgba(0, 212, 170, 0.1) !important;
-        transform: translateX(4px);
+        background: rgba(0, 212, 170, 0.08) !important;
+        transform: translateX(2px);
       }
 
       .playlist-remove-btn {
@@ -825,32 +894,56 @@ const createMusicPlayerStyles = () => {
 
       .playlist-remove-btn:hover {
         color: ${MUSIC_THEME.accent} !important;
-        background: rgba(0, 212, 170, 0.15);
-        transform: scale(1.1);
+        background: rgba(0, 212, 170, 0.12);
+        transform: scale(1.05);
       }
 
-      #music-player-container::-webkit-scrollbar,
       #music-playlist::-webkit-scrollbar {
-        width: 8px;
+        width: 6px;
       }
 
-      #music-player-container::-webkit-scrollbar-track,
       #music-playlist::-webkit-scrollbar-track {
-        background: rgba(255, 255, 255, 0.05);
-        border-radius: 4px;
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 3px;
       }
 
-      #music-player-container::-webkit-scrollbar-thumb,
       #music-playlist::-webkit-scrollbar-thumb {
         background: linear-gradient(135deg, ${MUSIC_THEME.accent}, ${MUSIC_THEME.accentHover});
-        border-radius: 4px;
+        border-radius: 3px;
         transition: all 0.2s ease;
       }
 
-      #music-player-container::-webkit-scrollbar-thumb:hover,
       #music-playlist::-webkit-scrollbar-thumb:hover {
         background: ${MUSIC_THEME.accent};
-        box-shadow: 0 0 8px rgba(0, 212, 170, 0.4);
+        box-shadow: 0 0 4px rgba(0, 212, 170, 0.3);
+      }
+
+      /* Scrolling title animation */
+      @keyframes scrollTitle {
+        0% {
+          transform: translateX(0);
+        }
+        25% {
+          transform: translateX(0);
+        }
+        75% {
+          transform: translateX(var(--scroll-distance));
+        }
+        100% {
+          transform: translateX(var(--scroll-distance));
+        }
+      }
+
+      .music-title-scrolling {
+        animation: scrollTitle 8s ease-in-out infinite;
+      }
+
+      .music-title-paused {
+        animation-play-state: paused;
+      }
+
+      #music-track-title-container:hover #music-track-title {
+        animation-play-state: paused;
       }
     `,
   });
