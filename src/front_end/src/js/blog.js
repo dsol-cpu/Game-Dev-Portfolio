@@ -15,6 +15,7 @@ function createBlogPost(item) {
       <h3 class="blog-post-title">${item.title}</h3>
       <p class="blog-post-tags">${item.tags.join(", ")}</p>
       <p class="blog-post-description">${item.description}</p>
+      <p class="blog-date"><i>${item.date}</i></p>
     </div>
   `;
   return wrapper;

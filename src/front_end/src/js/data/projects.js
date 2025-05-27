@@ -43,9 +43,9 @@ export const PROJECT_CARD_DATA = [
   },
   {
     id: "broadside",
-    category: PortfolioCategory.GODOT,
+    category: PortfolioCategory.UNREAL,
     title: "Broadside",
-    tags: [TechTags.GODOT, TechTags.CPP],
+    tags: [TechTags.UNREAL, TechTags.CPP],
     shortDescription:
       "A roguelike on the open seas where you defeat towers and collect upgrades.",
     sourceUrl: "https://smeppu.itch.io/broadside",
@@ -54,23 +54,6 @@ export const PROJECT_CARD_DATA = [
     imageAlt: "Broadside",
     fullDescription: [
       "This was a submission for the game jam for charity: Mini Code for a Cause.",
-    ],
-  },
-  {
-    id: "geospatial-visualizer-3",
-    category: PortfolioCategory.UNREAL,
-    title: "Geospatial Visualizer",
-    tags: [TechTags.UNREAL, TechTags.BLENDER, TechTags.ASEPRITE],
-    shortDescription:
-      "Open-seas Roguelike made for the Mini Code for a Cause Charity Game Jam.",
-    sourceUrl:
-      "https://github.com/dsol-cpu/GeospatialDataVisualization-Aug2024",
-    modelName: "",
-    imageUrl: "/images/me.png",
-    imageAlt: "Geospatial Visualizer",
-    fullDescription: [
-      "A detailed visualization of geospatial information using Unity and C#.",
-      "This project demonstrates advanced features for visualizing complex map data.",
     ],
   },
   {

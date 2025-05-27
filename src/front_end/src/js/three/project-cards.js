@@ -61,15 +61,19 @@ const createButtons = (project, type, id) => {
 
   if (project.sourceUrl) {
     let icon = null;
+    let text = "Source Code";
     if (project.sourceUrl.includes("github.com")) icon = "#icon-github";
     else if (project.sourceUrl.includes("gitlab.com")) icon = "#icon-gitlab";
-    else if (project.sourceUrl.includes("itch.io")) icon = "#icon-itch";
+    else if (project.sourceUrl.includes("itch.io")) {
+      icon = "#icon-itch";
+      text = "Itch Page";
+    }
 
     buttons.push({
       url: project.sourceUrl,
       cls: "btn-secondary",
       icon,
-      text: "Source Code",
+      text,
     });
   }
 
@@ -431,7 +435,7 @@ const toggleExpand = async (e, id) => {
     // Calculate final position
     const expanded = modelCard.classList.contains("expanded");
     const targetPos = getModelPos(name, expanded);
-    const targetScale = (model.baseScale || 0.15) * (expanded ? 1.4 : 1);
+    const targetScale = (model.baseScale || 0.1) * (expanded ? 1.4 : 1);
 
     // Animate directly to final position
     animate(model, targetPos, targetScale, expanding ? 600 : 400);

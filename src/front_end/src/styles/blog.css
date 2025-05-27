@@ -27,12 +27,12 @@
 }
 
 .blog-post-content {
-  padding: 1.5rem;
+  padding: 1.7rem;
   text-align: left;
 }
 
 .blog-post-title {
-  font-size: 1.5rem;
+  font-size: 1.2rem;
   margin-bottom: 0.5rem;
   color: var(--text-primary);
 }
@@ -48,4 +48,7 @@
 .blog-post-description {
   font-size: 1rem;
   color: var(--text-body);
+}
+
+.blog-date {
 }

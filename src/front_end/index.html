@@ -315,6 +315,15 @@
         window.addEventListener("resize", () => {
           document.body.classList.contains("game-mode") && initGameCanvas();
         });
+
+        // Update copyright year dynamically
+        const currentYear = new Date(Date.now()).getFullYear();
+        const copyrightElement = document.querySelector(
+          ".sidebar-attribution .copyright-year"
+        );
+        if (copyrightElement) {
+          copyrightElement.textContent = `©${currentYear} David Solinsky`;
+        }
       })();
     </script>
   </head>
@@ -406,6 +415,15 @@
         <button id="view-toggle-btn" class="view-toggle-btn">
           <span class="view-label">Game View</span>
         </button>
+      </div>
+
+      <div class="sidebar-attribution">
+        <div class="copyright-year">
+          @You need Javascript For this Website Lol
+        </div>
+        <div class="icon-attribution">
+          Most SVG Icons by Freepik and Devicons
+        </div>
       </div>
     </div>
 
