@@ -3,6 +3,49 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- Open Graph Meta Tags (Facebook, Discord, etc.) -->
+    <meta
+      property="og:title"
+      content="David Solinsky - Gameplay & Systems Programmer"
+    />
+    <meta
+      property="og:description"
+      content="Game developer specializing in Unity and Godot with focus on gameplay programming, procedural generation, and shader development."
+    />
+    <meta property="og:image" content="/images/me.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:url"
+      content="https://david-solinsky-game-dev.pages.dev/"
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="David Solinsky Portfolio" />
+
+    <!-- Twitter Card Meta Tags -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta
+      name="twitter:title"
+      content="David Solinsky - Gameplay & Systems Programmer"
+    />
+    <meta
+      name="twitter:description"
+      content="Game developer specializing in Unity and Godot with focus on gameplay programming, procedural generation, and shader development."
+    />
+    <meta name="twitter:image" content="/images/me.png" />
+
+    <!-- General Meta Tags -->
+    <meta
+      name="description"
+      content="Game developer specializing in Unity and Godot with focus on gameplay programming, procedural generation, and shader development."
+    />
+    <meta
+      name="keywords"
+      content="game developer, unity, godot, gameplay programming, procedural generation, shader development"
+    />
+    <meta name="author" content="David Solinsky" />
+
     <link rel="icon" href="/icons/favicon.ico" type="image/x-icon" />
     <title>David Solinsky</title>
 
@@ -12,12 +55,13 @@
     <!-- CSS files -->
     <link rel="stylesheet" href="src/styles/main.css" />
     <link rel="stylesheet" href="src/styles/game.css" />
+    <link rel="stylesheet" href="src/styles/game-controls-ui.css" />
     <link rel="stylesheet" href="src/styles/project-card.css" />
     <link rel="stylesheet" href="src/styles/sidebar.css" />
     <link rel="stylesheet" href="src/styles/about-section.css" />
     <link rel="stylesheet" href="src/styles/blog.css" />
     <link rel="stylesheet" href="src/styles/responsive.css" />
-
+    <link rel="stylesheet" href="src/styles/music-player-ui.css" />
     <script>
       // Compressed SVG Sprite System
       const createSvgSprite = (svgData = {}) => {
@@ -584,51 +628,70 @@
         </div>
       </div>
 
+      <!-- Game Controls UI -->
       <div class="game-controls-info">
         <div class="controls-header">
-          <svg class="controller-icon">
-            <use href="#icon-gamepad"></use>
-          </svg>
-          <p2>Game Controls</p2>
+          <h3 class="controls-title">Controls</h3>
+          <div class="controls-buttons">
+            <button class="toggle-btn">-</button>
+            <button class="close-btn">×</button>
+          </div>
         </div>
 
         <div class="controls-content">
-          <ul class="controls-list">
-            <li class="control-item">
-              <div class="key-icons">
-                <div class="key-grid" id="wasd-keys">
-                  <div class="key" data-key="KeyW">W</div>
-                  <div class="key" data-key="KeyA">A</div>
-                  <div class="key" data-key="KeyS">S</div>
-                  <div class="key" data-key="KeyD">D</div>
-                </div>
-                <span class="key-separator">/</span>
-                <div class="key-grid" id="arrow-keys">
-                  <div class="key arrow" data-key="ArrowUp">↑</div>
-                  <div class="key arrow" data-key="ArrowLeft">←</div>
-                  <div class="key arrow" data-key="ArrowDown">↓</div>
-                  <div class="key arrow" data-key="ArrowRight">→</div>
-                </div>
+          <div class="controls-layout">
+            <div class="control-section">
+              <span class="control-label">Move:</span>
+              <div class="key-group">
+                <span class="key" data-key="KeyW">W</span>
+                <span class="key" data-key="KeyA">A</span>
+                <span class="key" data-key="KeyS">S</span>
+                <span class="key" data-key="KeyD">D</span>
+                <span class="key-separator">or</span>
+                <span class="key" data-key="ArrowUp">↑</span>
+                <span class="key" data-key="ArrowLeft">←</span>
+                <span class="key" data-key="ArrowDown">↓</span>
+                <span class="key" data-key="ArrowRight">→</span>
               </div>
-              <div class="command-desc">Move</div>
-            </li>
-            <li class="control-item">
-              <div class="key-icons">
-                <div class="key space" data-key="Space">Space</div>
-                <span class="key-separator">/</span>
-                <div class="key" data-key="ShiftLeft">Shift</div>
+            </div>
+
+            <div class="control-section">
+              <span class="control-label">Sprint:</span>
+              <div class="key-group">
+                <span class="key" data-key="ShiftLeft">Shift</span>
               </div>
-              <div class="command-desc">Ascend/Descend</div>
-            </li>
-            <li class="control-item">
-              <div class="key-icons">
-                <div class="key" data-key="ScrollUp">Scroll Up</div>
-                <span class="key-separator">/</span>
-                <div class="key" data-key="ScrollDown">Scroll Down</div>
+            </div>
+
+            <div class="control-section">
+              <span class="control-label">Actions:</span>
+              <div class="key-group">
+                <span class="key" data-key="Space">Space</span>
+                <span class="key" data-key="Enter">Enter</span>
+                <span class="key" data-key="Escape">Esc</span>
               </div>
-              <div class="command-desc">Zoom In/Zoom Out</div>
-            </li>
-          </ul>
+            </div>
+
+            <div class="control-section">
+              <span class="control-label">Other:</span>
+              <div class="key-group">
+                <span class="key" data-key="KeyQ">Q</span>
+                <span class="key" data-key="KeyE">E</span>
+                <span class="key" data-key="KeyR">R</span>
+                <span class="key" data-key="KeyF">F</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="status-section">
+            <div class="status-display">
+              <span class="status-item"
+                >Status: <span id="movement-status">Idle</span></span
+              >
+              <span class="status-item"
+                >Keys: <span id="active-keys">None</span></span
+              >
+            </div>
+          </div>
         </div>
       </div>
     </div>

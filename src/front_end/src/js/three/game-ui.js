@@ -1,6 +1,10 @@
 import { getCurrentHeight, getHeightLimits, getDirection } from "./player.js";
 import { debounce } from "../utils/helper.js";
 import { initMusicPlayer, syncMusicPlayer } from "./music-player-ui.js";
+import {
+  initGameControlsUI,
+  cleanupGameControlsUI,
+} from "./game-controls-ui.js";
 
 // Constants
 const UI_CONFIG = {
@@ -389,6 +393,12 @@ export const initGameUI = (elements) => {
   // Add styles
   createStyles();
 
+  // Initialize game controls UI
+  initGameControlsUI();
+
+  // Store cleanup function for game controls
+  cleanupFunctions.push(() => cleanupGameControlsUI());
+
   // Initialize media player
   const mediaPlayerCleanup = initMusicPlayer(container, [
     "/audio/Little Jack (Nasrad, Ixa'taka, Valua).mp3",
@@ -404,16 +414,21 @@ export const initGameUI = (elements) => {
   );
   window.addEventListener("resize", debouncedResize, { passive: true });
 
+  // Store resize cleanup
+  cleanupFunctions.push(() =>
+    window.removeEventListener("resize", debouncedResize)
+  );
+
   // Return cleanup function
   return () => {
-    window.removeEventListener("resize", debouncedResize);
+    // Clean up all stored cleanup functions
+    cleanupFunctions.forEach((cleanup) => cleanup());
+    cleanupFunctions = [];
+
+    // Remove UI elements
     Object.values(ui).forEach((el) => el.remove());
     altitudeText.remove();
     compassText.remove();
-
-    // Clean up media player
-    cleanupFunctions.forEach((cleanup) => cleanup());
-    cleanupFunctions = [];
   };
 };
 
@@ -455,6 +470,11 @@ export const updateGameUI = (playerState) => {
 };
 
 export const disposeGameUI = () => {
+  // Clean up all stored cleanup functions first
+  cleanupFunctions.forEach((cleanup) => cleanup());
+  cleanupFunctions = [];
+
+  // Remove UI elements
   ["altitude-meter", "compass-rose", "altitude-text", "compass-text"].forEach(
     (id) => {
       const el = document.getElementById(id);
@@ -464,8 +484,4 @@ export const disposeGameUI = () => {
 
   const styles = document.getElementById("game-ui-styles");
   if (styles) styles.remove();
-
-  // Clean up media player
-  cleanupFunctions.forEach((cleanup) => cleanup());
-  cleanupFunctions = [];
 };

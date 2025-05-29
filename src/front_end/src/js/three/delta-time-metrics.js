@@ -74,7 +74,7 @@ export function createDeltaTimeMetricsOverlay() {
 
   // Toggle visibility with F2
   function toggleVisibility(event) {
-    if (event && event.key === "F2") {
+    if (event?.key === "F2") {
       state.isVisible = !state.isVisible;
 
       container.style.opacity = state.isVisible ? "0.9" : "0";
@@ -91,7 +91,7 @@ export function createDeltaTimeMetricsOverlay() {
         }
       }
 
-      if (event) event.preventDefault();
+      event.preventDefault();
     }
   }
 

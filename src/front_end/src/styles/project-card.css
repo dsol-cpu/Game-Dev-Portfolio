@@ -13,8 +13,8 @@
 
 .project-card-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 2rem;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1rem;
 }
 
 .game-preview {
@@ -452,7 +452,11 @@ body.overflow-hidden {
 }
 
 /* Responsive adjustments */
-@media (max-width: 768px) {
+@media (max-width: 900px) {
+  .game-preview {
+    width: 100%;
+  }
+
   .game-preview.project-card.expanded.section-centered-card {
     width: 95%;
     max-width: 500px;

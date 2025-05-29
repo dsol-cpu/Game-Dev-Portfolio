@@ -1,0 +1,116 @@
+.game-ui-element {
+  pointer-events: none;
+  border-radius: 5px;
+  will-change: transform;
+}
+
+#altitude-meter {
+  transition: box-shadow 0.2s ease;
+  border: 1px solid rgba(155, 179, 205, 0.9);
+}
+
+#altitude-meter.at-limit {
+  box-shadow: 0 0 10px rgba(255, 180, 40, 0.6);
+}
+
+/* Enhanced Game Controls UI Styles */
+.game-controls-info {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  transition: opacity 0.3s ease-in-out;
+  backdrop-filter: blur(5px);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+  max-width: 280px;
+  width: auto;
+  z-index: 4;
+}
+
+.game-controls-info.collapsed .controls-content {
+  display: none;
+}
+
+.key {
+  transition: all 0.1s ease;
+  cursor: default;
+  user-select: none;
+  font-weight: bold;
+  font-size: 11px;
+}
+
+.key.active {
+  background-color: #c5a45c !important;
+  color: rgba(34, 51, 68, 0.9) !important;
+  transform: scale(0.95);
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+  border-color: #e5b668 !important;
+}
+
+.key:hover {
+  background-color: rgba(155, 179, 205, 0.3);
+  border-color: rgba(155, 179, 205, 0.7);
+}
+
+.control-group {
+  line-height: 1.4;
+}
+
+.status-display {
+  font-family: monospace;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 4px 6px;
+  border-radius: 3px;
+  border: 1px solid rgba(155, 179, 205, 0.2);
+}
+
+.close-btn:hover,
+.toggle-btn:hover {
+  background-color: rgba(197, 164, 92, 0.2) !important;
+  transform: scale(1.1);
+}
+
+.close-btn:active,
+.toggle-btn:active {
+  transform: scale(0.95);
+}
+
+/* Movement status indicator colors */
+#movement-status[data-status="moving"] {
+  color: #5b98bd;
+}
+
+#movement-status[data-status="sprinting"] {
+  color: #e5b668;
+  font-weight: bold;
+}
+
+#movement-status[data-status="idle"] {
+  color: rgba(225, 235, 245, 0.7);
+}
+
+/* Responsive design for smaller screens */
+@media (max-width: 800px) {
+  .game-controls-info {
+    position: absolute !important;
+    top: 10px !important;
+    left: 50% !important;
+    bottom: auto !important;
+    right: auto !important;
+    transform: translateX(-50%) !important;
+    font-size: 10px !important;
+    padding: 10px !important;
+    max-width: 250px !important;
+    width: auto !important;
+    z-index: 1000 !important;
+  }
+
+  .key {
+    padding: 1px 4px !important;
+    font-size: 9px !important;
+    min-width: 16px !important;
+  }
+
+  .control-group {
+    line-height: 1.2 !important;
+  }
+}

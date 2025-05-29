@@ -5,7 +5,6 @@ import {
   MeshStandardMaterial,
   PerspectiveCamera,
   SphereGeometry,
-  Vector3,
 } from "../extern/three/three.module.min.js";
 import { handleUserInteraction } from "../user-interaction.js";
 import { debounce } from "../utils/helper.js";
@@ -27,6 +26,24 @@ import {
   handleVisibilityChange,
   dispose as disposeAudio,
 } from "./audio.js";
+import {
+  isKeyPressed,
+  areKeysPressed,
+  isAnyKeyPressed,
+  getMovementVector,
+  isMovementActive,
+  isHorizontalMovementActive,
+  isVerticalMovementActive,
+  isAscending,
+  isDescending,
+  bindKey,
+  unbindKey,
+  setEnabled,
+  getInputState,
+  dispose as disposeInputManager,
+} from "./input-manager.js";
+// Import the enhanced game controls UI
+import { logDebugInfo, updateAllKeyStates } from "./game-controls-ui.js";
 
 const COLORS = {
   clouds: 0xffffff,
@@ -323,6 +340,12 @@ export function toggleGameView(elements) {
       // Initialize game UI here
       initGameUI(elements);
 
+      // Enable input manager for game view
+      setEnabled(true);
+
+      // Update all key states for immediate visual feedback
+      setTimeout(() => updateAllKeyStates(), 200);
+
       // Properly restore audio state when entering game view
       if (isAudioEnabled()) {
         restoreAudioState(true);
@@ -338,6 +361,9 @@ export function toggleGameView(elements) {
   } else {
     gameViewContainer.style.transition = `opacity ${TRANSITION_DURATION}ms ease-out`;
     gameViewContainer.style.opacity = "0";
+
+    // Disable input manager when leaving game view
+    setEnabled(false);
 
     // Pause audio when leaving game view, but don't change enabled state
     if (isMusicPlaying()) {
@@ -362,12 +388,11 @@ export function toggleGameView(elements) {
 
 // Update page visibility handling for improved audio behavior
 document.addEventListener("visibilitychange", () => {
-  handleVisibilityChange(document.visibilityState === "visible", isGameView());
-});
+  const isVisible = document.visibilityState === "visible";
+  handleVisibilityChange(isVisible, isGameView());
 
-// Update page visibility handling for improved audio behavior
-document.addEventListener("visibilitychange", () => {
-  handleVisibilityChange(document.visibilityState === "visible", isGameView());
+  // Disable input when page is not visible using input manager
+  setEnabled(isVisible && isGameView());
 });
 
 export function updateGameViewSize(elements, width, height) {
@@ -393,57 +418,155 @@ export function updateGameViewSize(elements, width, height) {
   }
 }
 
-function initGameControlsPanel() {
-  // Wait for DOM to be ready
-  document.addEventListener("DOMContentLoaded", () => {
-    const controlsBox = document.querySelector(".game-controls-info");
-    const closeBtn = document.querySelector(".close-btn");
-    const toggleBtn = document.querySelector(".toggle-btn");
-    const allKeys = document.querySelectorAll(".key[data-key]");
-
-    if (!controlsBox || !closeBtn || !toggleBtn) return;
-
-    // Setup keyboard highlighting with Map for O(1) lookups
-    const keyMap = new Map();
-    allKeys.forEach((el) => keyMap.set(el.dataset.key, el));
-
-    // Set up event handlers
-    closeBtn.addEventListener("click", () => {
-      controlsBox.style.display = "none";
-    });
-
-    toggleBtn.addEventListener("click", () => {
-      const collapsed = controlsBox.classList.toggle("collapsed");
-      toggleBtn.textContent = collapsed ? "+" : "-";
-    });
-
-    // Create one handler for key events
-    const updateKeyHighlight = (event, isPressed) => {
-      let keyCode = event.code;
-      // Handle right shift same as left for consistency
-      if (keyCode === "ShiftRight" && keyMap.has("ShiftLeft")) {
-        keyCode = "ShiftLeft";
-      }
-
-      const keyEl = keyMap.get(keyCode);
-      if (keyEl) {
-        keyEl.classList.toggle("active", isPressed);
-      }
+// Enhanced utility function to get comprehensive player movement input
+export function getPlayerMovementInput() {
+  if (!isGameView()) {
+    return {
+      movement: { x: 0, y: 0, z: 0 },
+      isMoving: false,
+      isHorizontalMoving: false,
+      isVerticalMoving: false,
+      isAscending: false,
+      isDescending: false,
     };
+  }
 
-    // Add event listeners
-    document.addEventListener("keydown", (e) => updateKeyHighlight(e, true));
-    document.addEventListener("keyup", (e) => updateKeyHighlight(e, false));
+  const movement = getMovementVector();
+  const isMoving = isMovementActive();
+  const isHorizontalMoving = isHorizontalMovementActive();
+  const isVerticalMoving = isVerticalMovementActive();
+  const ascending = isAscending();
+  const descending = isDescending();
 
-    // Slight delay for smooth animations
-    setTimeout(() => (controlsBox.style.opacity = 1), 100);
+  return {
+    movement,
+    isMoving,
+    isHorizontalMoving,
+    isVerticalMoving,
+    isAscending: ascending,
+    isDescending: descending,
+  };
+}
+
+// Enhanced game-specific input bindings using the input manager
+function initGameInputBindings() {
+  // Clear any existing bindings first
+  const keysToUnbind = ["Escape", "KeyC", "KeyT", "KeyR", "KeyI"];
+  keysToUnbind.forEach((key) => unbindKey(key));
+
+  // Toggle back to scroll view on Escape
+  bindKey("Escape", {
+    onPress: () => {
+      if (isGameView()) {
+        const elements = {
+          body: document.body,
+          viewToggleBtn: document.getElementById("view-toggle-btn"),
+          gameViewContainer: document.getElementById("game-view-container"),
+          sidebar: document.querySelector(".sidebar"),
+        };
+        toggleGameView(elements);
+      }
+    },
+    preventDefault: true,
   });
+
+  // Camera follow toggle
+  bindKey("KeyC", {
+    onPress: () => {
+      if (isGameView()) {
+        cameraFollowActive = !cameraFollowActive;
+        console.log(
+          "Camera follow:",
+          cameraFollowActive ? "enabled" : "disabled"
+        );
+      }
+    },
+  });
+
+  // Enhanced movement and input state debugging
+  bindKey("KeyT", {
+    onPress: () => {
+      if (isGameView()) {
+        const inputState = getInputState();
+        const movementInput = getPlayerMovementInput();
+
+        console.log("=== Input Debug Info ===");
+        console.log("Input State:", inputState);
+        console.log("Movement Input:", movementInput);
+        console.log("Pressed Keys:", inputState.pressedKeys);
+        console.log(
+          "WASD Check:",
+          areKeysPressed("KeyW", "KeyA", "KeyS", "KeyD")
+        );
+        console.log(
+          "Any WASD:",
+          isAnyKeyPressed("KeyW", "KeyA", "KeyS", "KeyD")
+        );
+        console.log(
+          "Arrow Keys:",
+          isAnyKeyPressed("ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight")
+        );
+        console.log(
+          "Vertical Movement - Shift:",
+          isKeyPressed("ShiftLeft"),
+          "Space:",
+          isKeyPressed("Space")
+        );
+        console.log("Movement Vector:", movementInput.movement);
+        console.log("========================");
+      }
+    },
+  });
+
+  // Reset player position
+  bindKey("KeyR", {
+    onPress: () => {
+      if (isGameView() && playerEntity) {
+        const homeIsland = ISLAND_DATA.find(
+          ({ section }) => section === "home"
+        );
+        if (homeIsland) {
+          playerEntity.position.set(
+            homeIsland.position.x,
+            homeIsland.position.y + 2,
+            homeIsland.position.z
+          );
+          console.log("Player position reset to home island");
+        }
+      }
+    },
+  });
+
+  // Input state information display
+  bindKey("KeyI", {
+    onPress: () => {
+      if (isGameView()) {
+        const inputState = getInputState();
+        console.log("Input Manager State:", inputState);
+
+        // Log detailed movement state
+        const movement = getPlayerMovementInput();
+        console.log("Detailed Movement State:", {
+          vector: movement.movement,
+          isMoving: movement.isMoving,
+          horizontal: movement.isHorizontalMoving,
+          vertical: movement.isVerticalMoving,
+          ascending: movement.isAscending,
+          descending: movement.isDescending,
+        });
+      }
+    },
+  });
+
+  console.log(
+    "Game input bindings initialized with enhanced movement controls"
+  );
 }
 
 export async function initGame() {
   if (gameState.isInitialized) return;
 
-  initGameControlsPanel();
+  initGameInputBindings();
 
   // Get all required DOM elements at once
   const elements = {
@@ -490,6 +613,9 @@ export async function initGame() {
   // Set initial view size
   updateGameViewSize(elements);
 
+  // Initially disable input manager (enable when entering game view)
+  setEnabled(false);
+
   // Debounce resize handler for performance
   window.addEventListener(
     "resize",
@@ -503,7 +629,9 @@ export async function initGame() {
   // Clean up resources on page unload
   window.addEventListener("beforeunload", () => {
     disposeAudio();
+    disposeInputManager();
   });
 
   gameState.isInitialized = true;
+  console.log("Game initialized with enhanced input-manager integration");
 }

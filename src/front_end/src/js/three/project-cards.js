@@ -2,21 +2,24 @@ import {
   PerspectiveCamera,
   Raycaster,
   Vector3,
+  SpotLight,
+  Object3D,
 } from "../extern/three/three.module.min.js";
 import { isLowPoweredDevice } from "../utils/device.js";
 import { calculateGridPositions, loadModel } from "./model.js";
 import { getScene, registerCamera } from "./threejs-manager.js";
 import { PROJECT_CARD_DATA } from "../data/projects.js";
 
-// Single cache object and global state
+// Global state
 const state = {
   models: new Map(),
+  spotlights: new Map(),
   positions: new Map(),
   scene: null,
   camera: null,
   canvas: null,
   dragging: { active: false, model: null, lastX: 0 },
-  isTransitioning: false, // Track transition state
+  isTransitioning: false,
 };
 
 // Utility functions
@@ -33,7 +36,94 @@ const el = (tag, cls, attrs = {}) => {
 
 const easeOut = (t) => 1 - Math.pow(1 - t, 3);
 
-// Consolidated button creation
+// Responsive scaling functions
+const getResponsiveBaseScale = () => {
+  const width = window.innerWidth;
+  if (width <= 480) return 0.08;
+  if (width <= 768) return 0.1;
+  if (width <= 1024) return 0.12;
+  if (width <= 1440) return 0.15;
+  return 0.18;
+};
+
+const getExpandedScaleMultiplier = () => {
+  const width = window.innerWidth;
+  if (width <= 480) return 0.6;
+  if (width <= 768) return 0.7;
+  if (width <= 1024) return 0.8;
+  if (width <= 1440) return 0.9;
+  return 1;
+};
+
+// Spotlight creation and management
+const createSpotlight = (modelName) => {
+  const spotlight = new SpotLight(0xffffff, 2, 15, Math.PI / 6, 0.3, 1);
+  spotlight.castShadow = true;
+  spotlight.shadow.mapSize.width = 1024;
+  spotlight.shadow.mapSize.height = 1024;
+  spotlight.shadow.camera.near = 0.5;
+  spotlight.shadow.camera.far = 15;
+
+  // Create a container to group spotlight with its target
+  const lightContainer = new Object3D();
+  lightContainer.add(spotlight);
+  lightContainer.add(spotlight.target);
+
+  state.scene.add(lightContainer);
+  state.spotlights.set(modelName, { spotlight, container: lightContainer });
+
+  return { spotlight, container: lightContainer };
+};
+
+const updateSpotlightPosition = (
+  modelName,
+  modelPosition,
+  expanded = false
+) => {
+  const lights = state.spotlights.get(modelName);
+  if (!lights) return;
+
+  const { spotlight, container } = lights;
+
+  // Position spotlight above and slightly in front of the model
+  const lightOffset = expanded ? new Vector3(0, 3, 4) : new Vector3(0, 2, 3);
+  const lightPosition = modelPosition.clone().add(lightOffset);
+
+  spotlight.position.copy(lightPosition);
+  spotlight.target.position.copy(modelPosition);
+
+  // Adjust intensity based on expansion state
+  spotlight.intensity = expanded ? 3 : 2;
+  spotlight.distance = expanded ? 20 : 15;
+
+  // Update the container position (though individual components are positioned)
+  container.position.copy(modelPosition);
+};
+
+const updateSpotlightVisibility = (modelName, visible) => {
+  const lights = state.spotlights.get(modelName);
+  if (!lights) return;
+
+  lights.spotlight.visible = visible;
+  lights.container.visible = visible;
+};
+
+// Update all model scales when screen size changes
+const updateModelScales = () => {
+  const baseScale = getResponsiveBaseScale();
+  const expandedMultiplier = getExpandedScaleMultiplier();
+
+  state.models.forEach((model, name) => {
+    const card = document.querySelector(`[data-model="${name}"]`);
+    const isExpanded = card?.classList.contains("expanded");
+
+    model.baseScale = baseScale;
+    const targetScale = baseScale * (isExpanded ? expandedMultiplier : 1);
+    model.scale.setScalar(targetScale);
+  });
+};
+
+// Button creation
 const createButtons = (project, type, id) => {
   const frag = document.createDocumentFragment();
 
@@ -47,7 +137,6 @@ const createButtons = (project, type, id) => {
   if (type !== "action") return frag;
 
   const btnWrapper = el("div", "action-buttons");
-
   const buttons = [];
 
   if (project.demoUrl) {
@@ -85,9 +174,7 @@ const createButtons = (project, type, id) => {
     btnWrapper.appendChild(btn);
   });
 
-  const close = el("button", "btn btn-secondary", {
-    textContent: "Close",
-  });
+  const close = el("button", "btn btn-secondary", { textContent: "Close" });
   close.onclick = (e) => toggleExpand(e, id);
   btnWrapper.appendChild(close);
 
@@ -95,6 +182,7 @@ const createButtons = (project, type, id) => {
   return frag;
 };
 
+// Card creation
 const createCard = (project) => {
   if (!project?.id) return null;
 
@@ -104,7 +192,7 @@ const createCard = (project) => {
     "data-model": project.modelName || "",
   });
 
-  // Image container with conditional content
+  // Image container
   const container = el("div", "game-image-container portfolio-canvas");
 
   if (isLowPoweredDevice() && project.imageUrl) {
@@ -168,18 +256,24 @@ const createCard = (project) => {
   return card;
 };
 
-// Simplified animation with instant positioning option
+// Animation function
 const animate = (model, toPos, toScale, duration = 400, instant = false) => {
   if (!model) return;
 
-  // Stop any existing animation
-  if (model.animating) {
-    model.animating = false;
-  }
+  model.animating = false; // Stop any existing animation
 
   if (instant) {
     model.position.copy(toPos);
     model.scale.setScalar(toScale);
+    // Update spotlight position immediately
+    const modelName = [...state.models.entries()].find(
+      ([, m]) => m === model
+    )?.[0];
+    if (modelName) {
+      const card = document.querySelector(`[data-model="${modelName}"]`);
+      const expanded = card?.classList.contains("expanded");
+      updateSpotlightPosition(modelName, toPos, expanded);
+    }
     return;
   }
 
@@ -195,12 +289,23 @@ const animate = (model, toPos, toScale, duration = 400, instant = false) => {
     model.position.lerpVectors(startPos, toPos, ease);
     model.scale.setScalar(startScale + (toScale - startScale) * ease);
 
+    // Update spotlight position during animation
+    const modelName = [...state.models.entries()].find(
+      ([, m]) => m === model
+    )?.[0];
+    if (modelName) {
+      const card = document.querySelector(`[data-model="${modelName}"]`);
+      const expanded = card?.classList.contains("expanded");
+      updateSpotlightPosition(modelName, model.position, expanded);
+    }
+
     if (t < 1) requestAnimationFrame(tick);
     else model.animating = false;
   };
   requestAnimationFrame(tick);
 };
 
+// Model position calculation - FIXED CENTERING ISSUE
 const getModelPos = (modelName, expanded = false) => {
   if (!state.canvas || !state.camera) return new Vector3(0, 0, 10);
 
@@ -213,21 +318,30 @@ const getModelPos = (modelName, expanded = false) => {
       const containerRect = container.getBoundingClientRect();
 
       if (containerRect.width > 0 && containerRect.height > 0) {
-        const centerX =
-          containerRect.left + containerRect.width / 2 - canvasRect.left;
-        const centerY =
-          containerRect.top + containerRect.height / 2 - canvasRect.top;
-        const ndcX = (centerX / canvasRect.width) * 2 - 1;
-        const ndcY = -((centerY / canvasRect.height) * 2 - 1);
+        // Calculate the exact center of the container relative to canvas
+        // Apply a small offset correction to account for any systematic bias
+        const centerX = Math.round(
+          containerRect.left + containerRect.width * 0.5 - canvasRect.left - 1 // Subtract 1px to compensate for right bias
+        );
+        const centerY = Math.round(
+          containerRect.top + containerRect.height * 0.5 - canvasRect.top
+        );
 
-        const raycaster = new Raycaster();
-        raycaster.setFromCamera(new Vector3(ndcX, ndcY, 0), state.camera);
-        return raycaster.ray.origin
+        // Convert to normalized device coordinates (-1 to 1)
+        const ndcX = (centerX / canvasRect.width) * 2.0 - 1.0;
+        const ndcY = -((centerY / canvasRect.height) * 2.0 - 1.0);
+
+        // Use direct unprojection with precise positioning
+        const targetZ = 6;
+        const vector = new Vector3(ndcX, ndcY, 0.5);
+        vector.unproject(state.camera);
+
+        const direction = vector.sub(state.camera.position).normalize();
+        return state.camera.position
           .clone()
-          .add(raycaster.ray.direction.multiplyScalar(6));
+          .add(direction.multiplyScalar(targetZ));
       }
     }
-    return new Vector3(0, 0, 6);
   }
 
   const pos = state.positions.get(modelName);
@@ -243,14 +357,7 @@ const getModelPos = (modelName, expanded = false) => {
   return vec;
 };
 
-export const resetExpandedCards = () => {
-  const expandedCard = document.querySelector(".project-card.expanded");
-  if (expandedCard) {
-    toggleExpand(null, expandedCard.id);
-  }
-};
-
-// Consolidated position update
+// Position update - PRESERVED ORIGINAL LOGIC
 const updatePositions = () => {
   if (!state.canvas || state.isTransitioning) return;
 
@@ -286,37 +393,42 @@ const updatePositions = () => {
     const card = document.querySelector(`[data-model="${name}"]`);
     const shouldBeVisible = card && card.style.display !== "none";
 
-    // Set Three.js visibility - respect expanded state
+    // Set visibility
     if (isAnyCardExpanded) {
-      // When any card is expanded, only show the expanded model
       model.visible = name === expandedModelName;
+      updateSpotlightVisibility(name, name === expandedModelName);
     } else {
-      // When no card is expanded, show all visible models
       model.visible = shouldBeVisible;
+      updateSpotlightVisibility(name, shouldBeVisible);
     }
 
     if (!model.visible) return;
 
     const expanded = card.classList.contains("expanded");
     const targetPos = getModelPos(name, expanded);
-    const targetScale = (model.baseScale || 0.15) * (expanded ? 1.4 : 1);
+    const expandedMultiplier = getExpandedScaleMultiplier();
+    const targetScale =
+      (model.baseScale || getResponsiveBaseScale()) *
+      (expanded ? expandedMultiplier : 1);
 
     if (
       model.position.distanceTo(targetPos) > 0.1 ||
       Math.abs(model.scale.x - targetScale) > 0.01
     ) {
-      // Stop current animation and start new one
       model.animating = false;
       animate(model, targetPos, targetScale, expanded ? 600 : 400);
+    } else {
+      // Update spotlight position even when not animating
+      updateSpotlightPosition(name, targetPos, expanded);
     }
   });
 };
 
-// Wait for DOM layout to be completely settled
+// Wait for layout completion
 const waitForLayoutComplete = (expanding, modelName) => {
   return new Promise((resolve) => {
     let attempts = 0;
-    const maxAttempts = 100; // Prevent infinite loop
+    const maxAttempts = 100;
 
     const checkLayout = () => {
       attempts++;
@@ -328,9 +440,7 @@ const waitForLayoutComplete = (expanding, modelName) => {
         const container = card?.querySelector(".game-image-container");
         const rect = container?.getBoundingClientRect();
 
-        // Wait for expanded container to have stable, large dimensions
         if (rect && rect.width > 200 && rect.height > 200) {
-          // Additional check - make sure dimensions are stable
           setTimeout(() => {
             const newRect = container.getBoundingClientRect();
             if (
@@ -341,16 +451,15 @@ const waitForLayoutComplete = (expanding, modelName) => {
             } else if (attempts < maxAttempts) {
               requestAnimationFrame(checkLayout);
             } else {
-              resolve(); // Fallback
+              resolve();
             }
           }, 50);
         } else if (attempts < maxAttempts) {
           requestAnimationFrame(checkLayout);
         } else {
-          resolve(); // Fallback
+          resolve();
         }
       } else {
-        // For collapsing, wait for all cards to settle into grid positions
         const cards = document.querySelectorAll(
           ".project-card:not(.hidden-card)"
         );
@@ -378,6 +487,7 @@ const waitForLayoutComplete = (expanding, modelName) => {
   });
 };
 
+// Toggle expand function - PRESERVED ORIGINAL LOGIC
 const toggleExpand = async (e, id) => {
   e?.preventDefault();
   e?.stopPropagation();
@@ -388,12 +498,12 @@ const toggleExpand = async (e, id) => {
   const expanding = !card.classList.contains("expanded");
   const modelName = card.dataset.model;
 
-  // Set transition flag to prevent intermediate updates
   state.isTransitioning = true;
 
-  // Hide all models immediately to prevent intermediate animations
-  state.models.forEach((model) => {
+  // Hide all models and spotlights immediately
+  state.models.forEach((model, name) => {
     model.visible = false;
+    updateSpotlightVisibility(name, false);
   });
 
   // Toggle card states
@@ -408,13 +518,11 @@ const toggleExpand = async (e, id) => {
 
   document.body.classList.toggle("overflow-hidden", expanding);
 
-  // Wait for CSS transitions and DOM layout to be completely stable
+  // Wait for layout
   await waitForLayoutComplete(expanding, modelName);
-
-  // Add extra delay to ensure everything is settled
   await new Promise((resolve) => setTimeout(resolve, 100));
 
-  // Now calculate final positions and animate models directly to them
+  // Update model positions and visibility
   const expandedCard = document.querySelector(".project-card.expanded");
   const isAnyCardExpanded = !!expandedCard;
   const expandedModelName = expandedCard?.dataset.model;
@@ -423,30 +531,30 @@ const toggleExpand = async (e, id) => {
     const modelCard = document.querySelector(`[data-model="${name}"]`);
     const shouldBeVisible = modelCard && modelCard.style.display !== "none";
 
-    // Set final visibility
     if (isAnyCardExpanded) {
       model.visible = name === expandedModelName;
+      updateSpotlightVisibility(name, name === expandedModelName);
     } else {
       model.visible = shouldBeVisible;
+      updateSpotlightVisibility(name, shouldBeVisible);
     }
 
     if (!model.visible) return;
 
-    // Calculate final position
     const expanded = modelCard.classList.contains("expanded");
     const targetPos = getModelPos(name, expanded);
-    const targetScale = (model.baseScale || 0.1) * (expanded ? 1.4 : 1);
+    const expandedMultiplier = getExpandedScaleMultiplier();
+    const targetScale =
+      (model.baseScale || getResponsiveBaseScale()) *
+      (expanded ? expandedMultiplier : 1);
 
-    // Animate directly to final position
     animate(model, targetPos, targetScale, expanding ? 600 : 400);
   });
 
-  // Clear transition flag after animation starts
   setTimeout(() => {
     state.isTransitioning = false;
   }, 100);
 
-  // Handle scroll for expanded cards
   if (expanding) {
     setTimeout(() => {
       card.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -454,7 +562,7 @@ const toggleExpand = async (e, id) => {
   }
 };
 
-// Consolidated interaction setup
+// Interaction setup
 const setupInteraction = () => {
   const handleMove = (x, y) => {
     if (!state.dragging.active || !state.dragging.model) return;
@@ -477,7 +585,7 @@ const setupInteraction = () => {
     document.body.style.cursor = "";
   };
 
-  // Mouse events
+  // Event listeners
   document.addEventListener("mousedown", (e) => {
     if (!e.button && startDrag(e.target, e.clientX)) e.preventDefault();
   });
@@ -486,7 +594,6 @@ const setupInteraction = () => {
   );
   document.addEventListener("mouseup", endDrag);
 
-  // Touch events
   document.addEventListener(
     "touchstart",
     (e) => {
@@ -504,7 +611,7 @@ const setupInteraction = () => {
   );
   document.addEventListener("touchend", endDrag, { passive: true });
 
-  // Wheel zoom in expanded cards
+  // Wheel zoom
   document.addEventListener(
     "wheel",
     (e) => {
@@ -539,6 +646,8 @@ const setupInteraction = () => {
     state.canvas.height = state.canvas.clientHeight;
     state.camera.aspect = state.canvas.width / state.canvas.height;
     state.camera.updateProjectionMatrix();
+
+    updateModelScales();
     updatePositions();
   };
 
@@ -564,14 +673,20 @@ const setupInteraction = () => {
   });
 };
 
-// Simplified model loading
+// Model loading
 const loadProjectModel = async (name) => {
   if (!name) return null;
   try {
     const model = await loadModel(name);
     state.scene.add(model);
-    model.baseScale = 0.15;
-    model.scale.setScalar(0.15);
+
+    const baseScale = getResponsiveBaseScale();
+    model.baseScale = baseScale;
+    model.scale.setScalar(baseScale);
+
+    // Create spotlight for this model
+    createSpotlight(name);
+
     return model;
   } catch (err) {
     console.error(`Failed to load model ${name}:`, err);
@@ -579,7 +694,14 @@ const loadProjectModel = async (name) => {
   }
 };
 
-// Main initialization functions
+// Export functions
+export const resetExpandedCards = () => {
+  const expandedCard = document.querySelector(".project-card.expanded");
+  if (expandedCard) {
+    toggleExpand(null, expandedCard.id);
+  }
+};
+
 export const initProjectCards = () => {
   const grid = document.querySelector(".project-card-grid");
   if (!Array.isArray(PROJECT_CARD_DATA) || !grid) return;

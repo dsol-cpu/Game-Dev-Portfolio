@@ -1,28 +1,37 @@
 /**
- * @fileoverview Enhanced navigation system that handles both scroll view and game view
- * Integrates with ship navigation for seamless island hopping in game mode
+ * @fileoverview Enhanced navigation system with extensive debugging
+ * Debug version to identify why ship navigation isn't being called
  */
 
-import { navigateShipToSection } from "./three/ship-navigation.js";
+import {
+  navigateShipToSection,
+  initShipNavigation,
+} from "./three/ship-navigation.js";
 
 // Constants and cached DOM queries
 const ACTIVE_CLASS = "active";
 let navLinks;
 let sections;
-let shipNavigation; // Will hold the ship navigation module when loaded
+let shipNavigationAPI;
 
 /**
  * Scroll to section and update active navigation state (scroll view only)
  * @param {string} sectionId - ID of the section to scroll to
  */
 export function scrollToSection(sectionId) {
+  console.log("📜 scrollToSection called for:", sectionId);
+
   // Make sure we have our DOM elements
   if (!navLinks) {
     navLinks = document.querySelectorAll(".nav-link");
+    console.log("🔍 Re-cached nav links, found:", navLinks.length);
   }
 
   const targetSection = document.getElementById(sectionId);
-  if (!targetSection) return;
+  if (!targetSection) {
+    console.warn("⚠️ Target section not found:", sectionId);
+    return;
+  }
 
   // Smooth scroll to section
   targetSection.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -39,15 +48,24 @@ export function scrollToSection(sectionId) {
  * @param {string} sectionId - ID of the active section
  */
 function updateActiveNavLink(sectionId) {
+  console.log("🎯 updateActiveNavLink called for:", sectionId);
+
   if (!navLinks) {
     navLinks = document.querySelectorAll(".nav-link");
+    console.log(
+      "🔍 Re-cached nav links in updateActiveNavLink, found:",
+      navLinks.length
+    );
   }
 
   navLinks.forEach((link) => {
-    link.classList.toggle(
-      ACTIVE_CLASS,
-      link.getAttribute("data-target") === sectionId
-    );
+    const target = link.getAttribute("data-target");
+    const shouldBeActive = target === sectionId;
+    link.classList.toggle(ACTIVE_CLASS, shouldBeActive);
+
+    if (shouldBeActive) {
+      console.log("✅ Activated nav link for:", target);
+    }
   });
 }
 
@@ -57,44 +75,109 @@ function updateActiveNavLink(sectionId) {
  * @param {Event} event - Click event (for prevention)
  */
 async function handleNavigation(sectionId, event) {
-  event.preventDefault();
+  console.log("🧭 === NAVIGATION DEBUG START ===");
+  console.log("🧭 handleNavigation called with:", {
+    sectionId,
+    eventType: event?.type,
+  });
 
-  // Check if we're in game view
-  const isGameView = window.isGameView?.();
+  event?.preventDefault();
+
+  // Debug: Check if window.isGameView exists and what it returns
+  console.log("🔍 Checking window.isGameView function:");
+  console.log("  - Function exists:", typeof window.isGameView === "function");
+  console.log(
+    "  - Window object keys containing 'game':",
+    Object.keys(window).filter((k) => k.toLowerCase().includes("game"))
+  );
+
+  let isGameView = false;
+  if (typeof window.isGameView === "function") {
+    try {
+      isGameView = window.isGameView();
+      console.log("🎮 window.isGameView() returned:", isGameView);
+    } catch (error) {
+      console.error("❌ Error calling window.isGameView():", error);
+    }
+  } else {
+    console.warn(
+      "⚠️ window.isGameView is not a function, type:",
+      typeof window.isGameView
+    );
+
+    // Fallback: check for game-related DOM elements or classes
+    const gameCanvas = document.getElementById("main-game-canvas");
+    const gameContainer = document.getElementById("game-view-container");
+    const bodyHasGameClass = document.body.classList.contains("game-view");
+
+    console.log("🔍 Fallback game view detection:");
+    console.log("  - Game canvas exists:", !!gameCanvas);
+    console.log(
+      "  - Game canvas visible:",
+      gameCanvas ? getComputedStyle(gameCanvas).display !== "none" : false
+    );
+    console.log("  - Game container exists:", !!gameContainer);
+    console.log("  - Body has game-view class:", bodyHasGameClass);
+
+    // Use fallback detection
+    isGameView =
+      bodyHasGameClass ||
+      (gameCanvas && getComputedStyle(gameCanvas).display !== "none");
+  }
+
+  console.log("🎮 Final isGameView determination:", isGameView);
 
   if (isGameView) {
-    // Game view: Use ship navigation
-    try {
-      if (!shipNavigation) {
-        // Get required DOM elements for ship navigation
-        const elements = {
-          viewToggleBtn: document.getElementById("view-toggle-btn"),
-          mainGameCanvas: document.getElementById("main-game-canvas"),
-          gameViewContainer: document.getElementById("game-view-container"),
-          sidebar: document.querySelector(".sidebar"),
-          body: document.body,
-        };
+    console.log("🚢 === SHIP NAVIGATION PATH ===");
 
-        // Initialize ship navigation with elements
-        shipNavigation = {
-          navigateToSection: (id) => navigateShipToSection(id, elements),
-        };
-      }
+    try {
+      // Debug: Check if ship navigation functions are available
+      console.log("🔍 Checking ship navigation availability:");
+      console.log(
+        "  - navigateShipToSection type:",
+        typeof navigateShipToSection
+      );
+      console.log("  - shipNavigationAPI:", shipNavigationAPI);
+
+      // Get required DOM elements for ship navigation
+      const elements = {
+        viewToggleBtn: document.getElementById("view-toggle-btn"),
+        mainGameCanvas: document.getElementById("main-game-canvas"),
+        gameViewContainer: document.getElementById("game-view-container"),
+        sidebar: document.querySelector(".sidebar"),
+        body: document.body,
+      };
+
+      // Debug: Log element availability
+      console.log("🔍 Required elements check:");
+      Object.entries(elements).forEach(([key, element]) => {
+        console.log(`  - ${key}:`, element ? "✅ Found" : "❌ Missing");
+      });
+
+      console.log("🚢 Calling navigateShipToSection with:", sectionId);
 
       // Immediately update active nav link for visual feedback
       updateActiveNavLink(sectionId);
 
       // Start ship navigation to the target island
-      await shipNavigation.navigateToSection(sectionId);
+      const result = await navigateShipToSection(sectionId, elements);
+
+      console.log("✅ Ship navigation completed successfully, result:", result);
     } catch (error) {
-      console.error("Ship navigation failed:", error);
+      console.error("❌ Ship navigation failed with error:", error);
+      console.error("❌ Error stack:", error.stack);
+
       // Fallback to scroll navigation if ship nav fails
+      console.log("🔄 Falling back to scroll navigation");
       scrollToSection(sectionId);
     }
   } else {
-    // Scroll view: Use standard scroll navigation
+    console.log("📜 === SCROLL NAVIGATION PATH ===");
+    console.log("📜 Using scroll navigation for:", sectionId);
     scrollToSection(sectionId);
   }
+
+  console.log("🧭 === NAVIGATION DEBUG END ===");
 }
 
 /**
@@ -102,17 +185,67 @@ async function handleNavigation(sectionId, event) {
  * @returns {Object} Navigation API with exported functions
  */
 export function initNavigation() {
+  console.log("🚀 === NAVIGATION INIT DEBUG START ===");
+
+  // Initialize ship navigation first
+  try {
+    shipNavigationAPI = initShipNavigation();
+    console.log("⚓ Ship navigation API initialized:", shipNavigationAPI);
+  } catch (error) {
+    console.error("❌ Failed to initialize ship navigation:", error);
+  }
+
   // Cache DOM elements
   navLinks = document.querySelectorAll(".nav-link");
   sections = document.querySelectorAll("section");
 
+  console.log(
+    `📍 Found ${navLinks.length} navigation links and ${sections.length} sections`
+  );
+
+  // Debug: Log all nav links and their data-target attributes
+  navLinks.forEach((link, index) => {
+    const target = link.getAttribute("data-target");
+    const text = link.textContent.trim();
+    console.log(`  Nav link ${index}: "${text}" -> target: "${target}"`);
+  });
+
   // Handle navigation link clicks with event delegation
   document.addEventListener("click", (e) => {
+    console.log("🖱️ Click event detected on:", e.target);
+
     const link = e.target.closest(".nav-link");
     if (link) {
       const sectionId = link.getAttribute("data-target");
+      console.log("🖱️ Navigation link clicked:", {
+        element: link,
+        sectionId: sectionId,
+        text: link.textContent.trim(),
+      });
+
       if (sectionId) {
         handleNavigation(sectionId, e);
+      } else {
+        console.warn("⚠️ Navigation link missing data-target attribute");
+      }
+    } else {
+      // Debug: Check if click was on a potential nav element
+      const potentialNavElement =
+        e.target.closest("[data-target]") ||
+        e.target.closest(".sidebar a") ||
+        e.target.closest("nav a");
+      if (potentialNavElement) {
+        console.log(
+          "🔍 Click detected on potential nav element:",
+          potentialNavElement
+        );
+        console.log("  - Classes:", potentialNavElement.className);
+        console.log(
+          "  - Data attributes:",
+          Array.from(potentialNavElement.attributes).filter((attr) =>
+            attr.name.startsWith("data-")
+          )
+        );
       }
     }
   });
@@ -121,11 +254,17 @@ export function initNavigation() {
   const observer = new IntersectionObserver(
     (entries) => {
       // Only update nav links if we're in scroll view
-      if (window.isGameView?.()) return;
+      if (window.isGameView?.()) {
+        console.log(
+          "👁️ Intersection observer: skipping update (game view active)"
+        );
+        return;
+      }
 
       const visibleEntry = entries.find((entry) => entry.isIntersecting);
       if (visibleEntry) {
         const sectionId = visibleEntry.target.id;
+        console.log("👁️ Section became visible:", sectionId);
         updateActiveNavLink(sectionId);
       }
     },
@@ -133,15 +272,26 @@ export function initNavigation() {
   );
 
   // Observe all sections
-  sections.forEach((section) => observer.observe(section));
+  sections.forEach((section) => {
+    observer.observe(section);
+    console.log("👁️ Observing section:", section.id);
+  });
 
   // Handle initial section based on URL hash (scroll view only)
   const handleInitialSection = () => {
+    console.log("🏠 handleInitialSection called");
+
     // Don't auto-scroll if we're in game view
-    if (window.isGameView?.()) return;
+    if (window.isGameView?.()) {
+      console.log("🏠 Skipping initial section (game view active)");
+      return;
+    }
 
     const hash = window.location.hash.substring(1);
+    console.log("🏠 URL hash:", hash);
+
     if (hash && document.getElementById(hash)) {
+      console.log("🏠 Scrolling to initial section:", hash);
       requestAnimationFrame(() => scrollToSection(hash));
     }
   };
@@ -172,13 +322,18 @@ export function initNavigation() {
     const sectionId = keyMap[e.code];
     if (sectionId) {
       e.preventDefault();
+      console.log("⌨️ Keyboard shortcut triggered for:", sectionId);
       handleNavigation(sectionId, e);
     }
   });
+
+  console.log("✅ Navigation system fully initialized");
+  console.log("🚀 === NAVIGATION INIT DEBUG END ===");
 
   return {
     scrollToSection,
     handleNavigation,
     updateActiveNavLink,
+    shipNavigationAPI,
   };
 }

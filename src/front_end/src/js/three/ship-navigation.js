@@ -4,7 +4,6 @@
  */
 
 import { ISLAND_DATA } from "../data/islands.js";
-import { isGameView, toggleGameView } from "./game.js";
 import { Vector3, Quaternion } from "../extern/three/three.module.min.js";
 import { scrollToSection } from "../navigation.js";
 import {
@@ -17,8 +16,7 @@ import { random } from "../utils/random.js";
 // Constants
 const SHIP_TRAVEL_SPEED = 15; // Speed for automated ship travel
 const ARRIVAL_DISTANCE = 4; // Distance to consider "arrived" at destination
-const AUTO_PILOT_TURN_RATE = 0.03; // Turn rate for auto navigation
-const AUTO_PILOT_VERTICAL_SPEED = 8; // Vertical speed during auto navigation
+const AUTO_PILOT_TURN_RATE = 2.0; // Turn rate for auto navigation (increased)
 
 // Ship navigation state
 const shipNavState = {
@@ -29,14 +27,15 @@ const shipNavState = {
   travelStartTime: 0,
   animationProgress: 0,
   onArrivalCallback: null,
-  elements: null,
   updateInterval: null,
 };
 
 // Create a mapping between section IDs and island data
 const sectionToIslandMap = {};
+console.log("🗺️ Building section to island mapping...");
 ISLAND_DATA.forEach((island) => {
   sectionToIslandMap[island.section] = island;
+  console.log(`  📍 ${island.section} -> ${island.name} at`, island.position);
 });
 
 /**
@@ -56,41 +55,33 @@ export function getNavigationProgress() {
 }
 
 /**
- * Navigates the ship to the specified island and triggers section scroll
+ * Navigates the ship to the specified island
  * @param {string} sectionId - Target section ID
- * @param {Object} elements - Required DOM elements
  * @returns {Promise} Resolves when ship arrives at destination
  */
-export function navigateShipToSection(sectionId, elements) {
+export function navigateShipToSection(sectionId) {
   console.log("🚢 Ship navigation called for section:", sectionId);
-
-  // Save elements for later use
-  shipNavState.elements = elements;
 
   // Check if target section exists as an island
   const targetIsland = sectionToIslandMap[sectionId];
   if (!targetIsland) {
-    console.warn(`❌ No island found for section: ${sectionId}`);
-    return Promise.resolve();
+    console.error(`❌ No island found for section: ${sectionId}`);
+    console.log("Available sections:", Object.keys(sectionToIslandMap));
+    return Promise.reject(
+      new Error(`No island found for section: ${sectionId}`)
+    );
   }
 
-  console.log("🏝️ Target island found:", targetIsland);
+  console.log(
+    "🏝️ Target island found:",
+    targetIsland.name,
+    "at position:",
+    targetIsland.position
+  );
 
-  // If not in game view, switch to it first
-  let viewSwitchPromise = Promise.resolve();
-  if (!isGameView()) {
-    console.log("🔄 Switching to game view first");
-    viewSwitchPromise = new Promise((resolve) => {
-      toggleGameView(elements);
-      setTimeout(resolve, 700); // Give more time for view transition
-    });
-  }
-
-  // Start ship navigation after view switch
-  return viewSwitchPromise.then(() => {
-    console.log("⚓ Starting autopilot to:", targetIsland.name);
-    return startShipAutoPilot(targetIsland, sectionId);
-  });
+  // Start ship navigation directly
+  console.log("⚓ Starting autopilot to:", targetIsland.name);
+  return startShipAutoPilot(targetIsland, sectionId);
 }
 
 /**
@@ -100,17 +91,24 @@ export function navigateShipToSection(sectionId, elements) {
  * @returns {Promise} Resolves when ship arrives
  */
 async function startShipAutoPilot(targetIsland, sectionId) {
+  console.log("🎯 Starting autopilot sequence...");
+
   // Get current player position and state
   const playerShip = getPlayerModel();
   if (!playerShip) {
-    console.error("❌ Player ship not found");
+    console.error("❌ Player ship not found - cannot start autopilot");
     return Promise.reject(new Error("Player ship not found"));
   }
 
-  console.log("✅ Player ship found at position:", playerShip.position);
+  console.log("✅ Player ship found at position:", {
+    x: playerShip.position.x.toFixed(2),
+    y: playerShip.position.y.toFixed(2),
+    z: playerShip.position.z.toFixed(2),
+  });
 
   // Cancel any existing navigation
   if (shipNavState.isAutoPiloting) {
+    console.log("🛑 Cancelling existing navigation");
     cancelShipNavigation();
   }
 
@@ -123,25 +121,54 @@ async function startShipAutoPilot(targetIsland, sectionId) {
   shipNavState.travelStartTime = performance.now();
   shipNavState.animationProgress = 0;
 
+  const distance = shipNavState.initialPosition.distanceTo(
+    shipNavState.destination
+  );
+
   console.log("🎯 Autopilot configured:");
-  console.log("  From:", shipNavState.initialPosition);
-  console.log("  To:", shipNavState.destination);
+  console.log("  From:", {
+    x: shipNavState.initialPosition.x.toFixed(2),
+    y: shipNavState.initialPosition.y.toFixed(2),
+    z: shipNavState.initialPosition.z.toFixed(2),
+  });
+  console.log("  To:", {
+    x: shipNavState.destination.x.toFixed(2),
+    y: shipNavState.destination.y.toFixed(2),
+    z: shipNavState.destination.z.toFixed(2),
+  });
+  console.log("  Distance:", distance.toFixed(2), "units");
   console.log(
-    "  Distance:",
-    shipNavState.initialPosition.distanceTo(shipNavState.destination)
+    "  Estimated time:",
+    (distance / SHIP_TRAVEL_SPEED).toFixed(1),
+    "seconds"
   );
 
   // Notify player system that we're taking control
-  if (typeof setPlayerAutoPilot === "function") {
-    setPlayerAutoPilot(true);
+  try {
+    if (typeof setPlayerAutoPilot === "function") {
+      setPlayerAutoPilot(true);
+      console.log("✅ Player autopilot enabled");
+    } else {
+      console.warn("⚠️ setPlayerAutoPilot function not available");
+    }
+  } catch (error) {
+    console.error("❌ Failed to set player autopilot:", error);
   }
 
   // Start the update loop
   startAutoPilotLoop();
 
   // Create a promise that resolves when we arrive
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     shipNavState.onArrivalCallback = resolve;
+
+    // Add a timeout as safety net
+    setTimeout(() => {
+      if (shipNavState.isAutoPiloting) {
+        console.warn("⏰ Autopilot timeout - forcing completion");
+        completeShipNavigation();
+      }
+    }, 30000); // 30 second timeout
   });
 }
 
@@ -149,15 +176,26 @@ async function startShipAutoPilot(targetIsland, sectionId) {
  * Start the autopilot update loop using requestAnimationFrame
  */
 function startAutoPilotLoop() {
+  console.log("🔄 Starting autopilot update loop");
   let lastTime = performance.now();
+  let frameCount = 0;
 
   const autopilotLoop = (currentTime) => {
     if (!shipNavState.isAutoPiloting) {
+      console.log("🛑 Autopilot loop stopped - not piloting");
       return; // Stop the loop if autopilot is disabled
     }
 
     const deltaTime = (currentTime - lastTime) / 1000; // Convert to seconds
     lastTime = currentTime;
+    frameCount++;
+
+    // Log every 60 frames (roughly once per second at 60fps)
+    if (frameCount % 60 === 0) {
+      console.log(
+        `🔄 Autopilot frame ${frameCount}, deltaTime: ${deltaTime.toFixed(3)}s`
+      );
+    }
 
     updateShipAutoPilot(deltaTime);
 
@@ -188,7 +226,10 @@ function updateShipAutoPilot(deltaTime) {
 
   // Check if we've arrived
   if (distanceToTarget <= ARRIVAL_DISTANCE) {
-    console.log("🎉 Arrived at destination! Distance:", distanceToTarget);
+    console.log(
+      "🎉 Arrived at destination! Distance:",
+      distanceToTarget.toFixed(2)
+    );
     completeShipNavigation();
     return;
   }
@@ -198,31 +239,34 @@ function updateShipAutoPilot(deltaTime) {
     .subVectors(shipNavState.destination, playerShip.position)
     .normalize();
 
-  // Rotate ship to face target (only horizontal rotation)
+  // Move the ship position during autopilot
+  const moveSpeed = SHIP_TRAVEL_SPEED * deltaTime;
+  const movement = directionToTarget.clone().multiplyScalar(moveSpeed);
+
+  // Apply movement directly to ship position
+  playerShip.position.add(movement);
+
+  // Rotate ship to face target direction
   const targetDirection = directionToTarget.clone();
-  targetDirection.y = 0; // Keep rotation level
+  targetDirection.y = 0; // Keep rotation level for smoother movement
   targetDirection.normalize();
 
   if (targetDirection.length() > 0.1) {
-    const shipForward = new Vector3(0, 0, -1);
-    const targetQuaternion = new Quaternion().setFromUnitVectors(
-      shipForward,
-      targetDirection
+    // Calculate the angle from the current forward direction to target
+    const angle = Math.atan2(targetDirection.x, -targetDirection.z);
+
+    // Create target quaternion
+    const targetQuaternion = new Quaternion().setFromAxisAngle(
+      new Vector3(0, 1, 0),
+      angle
     );
 
-    // Smooth rotation
+    // Smoothly rotate towards target
     playerShip.quaternion.slerp(
       targetQuaternion,
-      AUTO_PILOT_TURN_RATE * deltaTime * 60
+      AUTO_PILOT_TURN_RATE * deltaTime
     );
   }
-
-  // Move ship towards target
-  const moveSpeed = SHIP_TRAVEL_SPEED * deltaTime;
-  const movement = directionToTarget.multiplyScalar(moveSpeed);
-
-  // Apply movement
-  playerShip.position.add(movement);
 
   // Update animation progress
   const initialDistance = shipNavState.initialPosition.distanceTo(
@@ -238,17 +282,21 @@ function updateShipAutoPilot(deltaTime) {
 
   // Debug logging (less frequent)
   if (random() < 0.01) {
-    // Only log ~1% of frames
     console.log(
       `🚢 Autopilot progress: ${Math.round(
         shipNavState.animationProgress * 100
       )}% (${distanceToTarget.toFixed(1)} units remaining)`
     );
+    console.log("Ship position:", {
+      x: playerShip.position.x.toFixed(2),
+      y: playerShip.position.y.toFixed(2),
+      z: playerShip.position.z.toFixed(2),
+    });
   }
 }
 
 /**
- * Complete the navigation and scroll to the target section
+ * Complete the navigation
  */
 function completeShipNavigation() {
   console.log("🏁 Completing ship navigation");
@@ -257,11 +305,17 @@ function completeShipNavigation() {
   if (shipNavState.updateInterval) {
     cancelAnimationFrame(shipNavState.updateInterval);
     shipNavState.updateInterval = null;
+    console.log("✅ Update loop stopped");
   }
 
   // Notify player system that we're releasing control
-  if (typeof clearPlayerAutoPilot === "function") {
-    clearPlayerAutoPilot();
+  try {
+    if (typeof clearPlayerAutoPilot === "function") {
+      clearPlayerAutoPilot();
+      console.log("✅ Player autopilot disabled");
+    }
+  } catch (error) {
+    console.error("❌ Failed to clear player autopilot:", error);
   }
 
   // Reset state
@@ -271,32 +325,26 @@ function completeShipNavigation() {
   // Update UI one final time
   updateNavigationUI(1.0);
 
-  // Wait a short moment then scroll to the associated section
+  // Optional: Scroll to the associated section after a brief pause
   setTimeout(() => {
-    console.log("🔄 Switching back to scroll view");
-    // Switch back to scroll view
-    if (isGameView() && shipNavState.elements) {
-      toggleGameView(shipNavState.elements);
-
-      // After view transition, scroll to section
-      setTimeout(() => {
-        console.log("📜 Scrolling to section:", shipNavState.targetSection);
-        scrollToSection(shipNavState.targetSection);
-
-        // Resolve the navigation promise
-        if (shipNavState.onArrivalCallback) {
-          shipNavState.onArrivalCallback();
-          shipNavState.onArrivalCallback = null;
-        }
-
-        // Reset progress after completion
-        setTimeout(() => {
-          shipNavState.animationProgress = 0;
-          updateNavigationUI(0);
-        }, 1000);
-      }, 600);
+    if (shipNavState.targetSection) {
+      console.log("📜 Scrolling to section:", shipNavState.targetSection);
+      scrollToSection(shipNavState.targetSection);
     }
-  }, 1000); // Longer pause to enjoy arrival
+
+    // Resolve the navigation promise
+    if (shipNavState.onArrivalCallback) {
+      shipNavState.onArrivalCallback();
+      shipNavState.onArrivalCallback = null;
+      console.log("✅ Navigation promise resolved");
+    }
+
+    // Reset progress after completion
+    setTimeout(() => {
+      shipNavState.animationProgress = 0;
+      updateNavigationUI(0);
+    }, 1000);
+  }, 1000);
 }
 
 /**
@@ -355,8 +403,12 @@ export function cancelShipNavigation() {
     }
 
     // Notify player system that we're releasing control
-    if (typeof clearPlayerAutoPilot === "function") {
-      clearPlayerAutoPilot();
+    try {
+      if (typeof clearPlayerAutoPilot === "function") {
+        clearPlayerAutoPilot();
+      }
+    } catch (error) {
+      console.error("❌ Failed to clear autopilot:", error);
     }
 
     shipNavState.isAutoPiloting = false;
@@ -377,11 +429,13 @@ export function cancelShipNavigation() {
  */
 export function initShipNavigation() {
   console.log("⚓ Initializing ship navigation system");
+  console.log("🗺️ Available islands:", Object.keys(sectionToIslandMap));
 
   // Add keyboard shortcut to cancel navigation
   document.addEventListener("keydown", (e) => {
     if (e.code === "Escape" && shipNavState.isAutoPiloting) {
       e.preventDefault();
+      console.log("⌨️ ESC pressed - cancelling navigation");
       cancelShipNavigation();
     }
   });
@@ -437,6 +491,8 @@ export function initShipNavigation() {
       }
     }
   });
+
+  console.log("✅ Ship navigation system initialized");
 
   return {
     navigateShipToSection,

@@ -6,6 +6,18 @@ import {
   MeshPhongMaterial,
 } from "../extern/three/three.module.min.js";
 import { loadModel } from "./model.js";
+import {
+  isKeyPressed,
+  areKeysPressed,
+  isAnyKeyPressed,
+  getMovementVector,
+  isMovementActive,
+  isHorizontalMovementActive,
+  isVerticalMovementActive,
+  isAscending,
+  isDescending,
+  getInputState,
+} from "./input-manager.js";
 
 // Reused objects for performance
 const _v3 = new Vector3();
@@ -51,25 +63,6 @@ const CAMERA = {
   LOOK_AHEAD: 3, // How far ahead to look
 };
 
-// Key mappings for input handling
-const KEY = {
-  FORWARD: 1,
-  BACKWARD: 2,
-  LEFT: 4,
-  RIGHT: 8,
-  TILT_UP: 16,
-  TILT_DOWN: 32,
-};
-
-const KEYS = new Map([
-  ...["ArrowUp", "KeyW"].map((k) => [k, KEY.FORWARD]),
-  ...["ArrowDown", "KeyS"].map((k) => [k, KEY.BACKWARD]),
-  ...["ArrowLeft", "KeyA"].map((k) => [k, KEY.LEFT]),
-  ...["ArrowRight", "KeyD"].map((k) => [k, KEY.RIGHT]),
-  ...["Space"].map((k) => [k, KEY.TILT_UP]),
-  ...["ShiftLeft", "ShiftRight"].map((k) => [k, KEY.TILT_DOWN]),
-]);
-
 // Direction lookup for compass display
 const DIRS = Array.from(
   { length: 360 },
@@ -105,7 +98,6 @@ const player = {
   model: null,
   velocity_x: 0, // Forward/backward velocity
   velocity_y: 0, // Up/down velocity
-  keys: 0, // Bitfield of currently pressed keys
   dir: "N", // Current compass direction
   pos: new Vector3(), // Current position
   quat: new Quaternion(), // Current rotation quaternion
@@ -115,10 +107,13 @@ const player = {
   clamped: false, // Whether vertical movement is clamped by height limits
 };
 
-// UI and input handling state
+// UI state for key indicators (separate from input processing)
 let keyEls = {};
 let keyUpdates = new Map();
 let updateScheduled = false;
+
+// Autopilot state flag
+let isAutoPilotActive = false;
 
 // Convert rotation to compass direction
 export const getDirection = (rotation) =>
@@ -147,10 +142,13 @@ export const createPlayerModel = async () => {
   return ship;
 };
 
-// Schedule UI updates for key press indicators
-const scheduleKeys = () => {
+// Schedule UI updates for key press indicators (visual feedback only)
+const scheduleKeyVisualUpdate = (keyCode, isPressed) => {
+  keyUpdates.set(keyCode, isPressed);
+
   if (updateScheduled) return;
   updateScheduled = true;
+
   requestAnimationFrame(() => {
     keyUpdates.forEach((active, key) => {
       const el = keyEls[key];
@@ -161,43 +159,77 @@ const scheduleKeys = () => {
   });
 };
 
-// Handle keyboard input
-const handleKey = (e, pressed) => {
-  const bit = KEYS.get(e.code);
-  const hasValidKey = bit !== undefined;
+const getCurrentInputState = () => {
+  if (isAutoPilotActive) {
+    return {
+      forward: false,
+      backward: false,
+      left: false,
+      right: false,
+      up: false,
+      down: false,
+    };
+  }
 
-  e.preventDefault();
-  e.stopPropagation();
-  player.keys = pressed ? player.keys | bit : player.keys & ~bit;
-  keyUpdates.set(e.code, pressed);
-  scheduleKeys();
+  const inputState = getInputState();
+  const pressedKeys = inputState.pressedKeys || []; // Keep as array
 
-  return hasValidKey;
+  return {
+    forward: pressedKeys.includes("KeyW") || pressedKeys.includes("ArrowUp"),
+    backward: pressedKeys.includes("KeyS") || pressedKeys.includes("ArrowDown"),
+    left: pressedKeys.includes("KeyA") || pressedKeys.includes("ArrowLeft"),
+    right: pressedKeys.includes("KeyD") || pressedKeys.includes("ArrowRight"),
+    up: pressedKeys.includes("Space"),
+    down:
+      pressedKeys.includes("ShiftLeft") || pressedKeys.includes("ShiftRight"),
+  };
 };
 
-// Initialize player controls and event listeners
+// Update visual key indicators based on current input state
+const updateKeyVisuals = () => {
+  const inputState = getCurrentInputState();
+
+  // Map input states to visual key codes
+  const keyMappings = {
+    KeyW: inputState.forward,
+    KeyS: inputState.backward,
+    KeyA: inputState.left,
+    KeyD: inputState.right,
+    Space: inputState.up,
+    ShiftLeft: inputState.down,
+    ArrowUp: inputState.forward,
+    ArrowDown: inputState.backward,
+    ArrowLeft: inputState.left,
+    ArrowRight: inputState.right,
+  };
+
+  // Update visuals for all mapped keys
+  Object.entries(keyMappings).forEach(([keyCode, isActive]) => {
+    scheduleKeyVisualUpdate(keyCode, isActive);
+  });
+};
+
+// Initialize player controls - now uses input manager integration
 export const initPlayerControls = () => {
-  const keyDown = (e) => handleKey(e, true);
-  const keyUp = (e) => handleKey(e, false);
-
-  window.addEventListener("keydown", keyDown, { passive: false });
-  window.addEventListener("keyup", keyUp, { passive: false });
-
   // Cache UI elements for key indicators
   document.querySelectorAll(".key[data-key]").forEach((el) => {
     keyEls[el.dataset.key] = el;
   });
 
-  // Make canvas focusable for keyboard input
+  // Make canvas focusable for keyboard input (still useful for focus management)
   const canvas = document.getElementById("main-game-canvas");
-  canvas &&
-    ((canvas.tabIndex = 1),
-    canvas.addEventListener("click", () => canvas.focus()));
+  if (canvas) {
+    canvas.tabIndex = 1;
+    canvas.addEventListener("click", () => canvas.focus());
+  }
 
-  // Return cleanup function
+  console.log("Player controls initialized with input manager integration");
+
+  // Return cleanup function (now minimal since input manager handles events)
   return () => {
-    window.removeEventListener("keydown", keyDown);
-    window.removeEventListener("keyup", keyUp);
+    keyEls = {};
+    keyUpdates.clear();
+    console.log("Player controls cleaned up");
   };
 };
 
@@ -209,6 +241,9 @@ export const updatePlayer = (deltaTime) => {
   // Cap deltaTime to prevent large jumps
   deltaTime = Math.min(deltaTime, 0.1);
 
+  // Update visual key indicators
+  updateKeyVisuals();
+
   if (player.reset) {
     updateReset(deltaTime, ship);
     return;
@@ -218,15 +253,14 @@ export const updatePlayer = (deltaTime) => {
   player.pos.copy(ship.position);
 };
 
-// Update ship movement based on input
+// Update ship movement based on input manager state
 const updateMovement = (deltaTime, ship) => {
-  const { keys } = player;
+  const inputState = getCurrentInputState();
   const currentHeight = ship.position.y;
 
   // Update horizontal velocity
-  const forwardAccel = (keys & KEY.FORWARD) * MOVEMENT.ACCELERATION * deltaTime;
-  const backwardAccel =
-    (keys & KEY.BACKWARD) * MOVEMENT.ACCELERATION * deltaTime;
+  const forwardAccel = inputState.forward * MOVEMENT.ACCELERATION * deltaTime;
+  const backwardAccel = inputState.backward * MOVEMENT.ACCELERATION * deltaTime;
   const deceleration = MOVEMENT.DECELERATION * deltaTime;
 
   player.velocity_x += forwardAccel - backwardAccel;
@@ -246,8 +280,8 @@ const updateMovement = (deltaTime, ship) => {
   // Update vertical velocity with height constraints
   const atMaxHeight = currentHeight >= HEIGHT.MAX;
   const atMinHeight = currentHeight <= HEIGHT.MIN;
-  const canGoUp = !atMaxHeight && keys & KEY.TILT_UP;
-  const canGoDown = !atMinHeight && keys & KEY.TILT_DOWN;
+  const canGoUp = !atMaxHeight && inputState.up;
+  const canGoDown = !atMinHeight && inputState.down;
 
   const upAccel = canGoUp * VERTICAL.ACCELERATION * deltaTime;
   const downAccel = canGoDown * VERTICAL.ACCELERATION * deltaTime;
@@ -271,20 +305,19 @@ const updateMovement = (deltaTime, ship) => {
   player.clamped = hitCeiling || hitFloor;
 
   // Handle turning
-  const turnLeft = !!(keys & KEY.LEFT);
-  const turnRight = !!(keys & KEY.RIGHT);
-  const turnAmount = (turnLeft - turnRight) * MOVEMENT.TURN_SPEED * deltaTime;
+  const turnAmount =
+    (inputState.left - inputState.right) * MOVEMENT.TURN_SPEED * deltaTime;
 
   _quat.setFromAxisAngle(_axisY, turnAmount);
   player.quat.premultiply(_quat);
 
-  // Calculate pitch based on movement state (flattened logic)
-  const forward = keys & KEY.FORWARD || player.velocity_x > 0;
-  const backward = keys & KEY.BACKWARD || player.velocity_x < 0;
-  const up = keys & KEY.TILT_UP && !player.clamped;
-  const down = keys & KEY.TILT_DOWN && !player.clamped;
+  // Calculate pitch based on movement state
+  const forward = inputState.forward || player.velocity_x > 0;
+  const backward = inputState.backward || player.velocity_x < 0;
+  const up = inputState.up && !player.clamped;
+  const down = inputState.down && !player.clamped;
 
-  // Pitch lookup table approach
+  // Pitch calculation
   const pitchMultiplier =
     forward && down
       ? -1
@@ -385,26 +418,21 @@ export const getHeightLimits = () => ({
 
 export const disposePlayerControls = initPlayerControls;
 
-// Autopilot state flag
-let isAutoPilotActive = false;
-
 /**
  * Enable or disable autopilot mode for the player ship.
- * This typically disables manual input and lets navigation take over.
+ * This disables manual input and lets navigation take over.
  * @param {boolean} isEnabled - Whether to enable autopilot
  */
 export function setPlayerAutoPilot(isEnabled) {
   isAutoPilotActive = isEnabled;
 
-  // Example: Disable user inputs if autopilot is on
   if (isEnabled) {
     console.log("🧭 Autopilot engaged – manual controls disabled");
-    // You might want to disable input listeners or lock movement updates here
-    // e.g., inputManager.disable(), movementEnabled = false, etc.
+    // Clear any current velocities when autopilot engages
+    player.velocity_x = 0;
+    player.velocity_y = 0;
   } else {
-    console.log(
-      "🧭 Autopilot flag set, but not fully cleared (call clearPlayerAutoPilot)"
-    );
+    console.log("🧭 Autopilot disabled – manual controls available");
   }
 }
 
@@ -413,15 +441,41 @@ export function setPlayerAutoPilot(isEnabled) {
  */
 export function clearPlayerAutoPilot() {
   isAutoPilotActive = false;
+  player.velocity_x = 0;
+  player.velocity_y = 0;
   console.log("🕹️ Autopilot disengaged – manual controls re-enabled");
-  // Re-enable any user input systems here
-  // e.g., inputManager.enable(), movementEnabled = true, etc.
 }
 
 /**
- * Optionally expose autopilot state if needed by other systems
+ * Check if autopilot is currently active
  * @returns {boolean}
  */
 export function isPlayerAutoPiloting() {
   return isAutoPilotActive;
+}
+
+/**
+ * Get current player input state (useful for debugging and external systems)
+ * @returns {Object} Current input state with movement flags
+ */
+export function getPlayerInputState() {
+  return getCurrentInputState();
+}
+
+/**
+ * Get detailed player state for UI and debugging
+ * @returns {Object} Comprehensive player state
+ */
+export function getPlayerState() {
+  return {
+    position: player.pos.clone(),
+    direction: player.dir,
+    velocity: { x: player.velocity_x, y: player.velocity_y },
+    height: getCurrentHeight(),
+    heightLimits: getHeightLimits(),
+    isAutoPiloting: isAutoPilotActive,
+    isClamped: player.clamped,
+    isResetting: player.reset,
+    inputState: getCurrentInputState(),
+  };
 }
