@@ -1,365 +1,270 @@
-// Streamlined key code mapping for essential controls only
-const KEY_MAP = new Map([
-  // Movement keys
-  ["KeyW", 0],
-  ["KeyS", 1],
-  ["KeyA", 2],
-  ["KeyD", 3],
-  ["ArrowUp", 4],
-  ["ArrowDown", 5],
-  ["ArrowLeft", 6],
-  ["ArrowRight", 7],
-  // Action keys
-  ["ShiftLeft", 8],
-  ["ShiftRight", 8], // Normalize shift keys
-  ["Space", 9],
-  ["Escape", 10],
-  ["KeyR", 11],
-]);
-
-// Global state using BigInt for efficient bit operations
-let keyState = 0n;
-let isEnabled = true;
-let keyBindings = null; // Only create when needed
-let callbacks = null; // Only create when needed
-
-// Pre-computed movement vectors for 3D airship movement
-const MOVEMENT_VECTORS = {
-  w: { x: 0, z: -1 },
-  s: { x: 0, z: 1 },
-  a: { x: -1, z: 0 },
-  d: { x: 1, z: 0 },
-  up: { x: 0, z: -1 },
-  down: { x: 0, z: 1 },
-  left: { x: -1, z: 0 },
-  right: { x: 1, z: 0 },
+// Ultra-optimized input handler with flattened conditionals
+const K = new Uint8Array(256); // Direct key code mapping
+const keyLookup = {
+  KeyW: 0,
+  KeyS: 1,
+  KeyA: 2,
+  KeyD: 3,
+  ArrowUp: 4,
+  ArrowDown: 5,
+  ArrowLeft: 6,
+  ArrowRight: 7,
+  ShiftLeft: 8,
+  ShiftRight: 8,
+  Space: 9,
+  Escape: 10,
+  KeyR: 11,
 };
 
-// Constants for bit operations
-const HORIZONTAL_MOVEMENT_MASK = 0b11111111n; // First 8 bits for horizontal movement
-const VERTICAL_UP_MASK = 1n << 8n; // Bit 8 for ascend (shift)
-const VERTICAL_DOWN_MASK = 1n << 9n; // Bit 9 for descend (space)
+// Bit masks for ultra-fast operations
+const WASD_FWD = 1,
+  WASD_BCK = 2,
+  WASD_LFT = 4,
+  WASD_RGT = 8;
+const ARR_FWD = 16,
+  ARR_BCK = 32,
+  ARR_LFT = 64,
+  ARR_RGT = 128;
+const SHIFT = 256,
+  SPACE = 512;
+const H_MASK = 255,
+  V_MASK = 768; // Horizontal/Vertical masks
 
-// Core bit manipulation functions
-const setBit = (state, bit) => state | (1n << BigInt(bit));
-const clearBit = (state, bit) => state & ~(1n << BigInt(bit));
-const testBit = (state, bit) => Boolean(state & (1n << BigInt(bit)));
+let state = 0; // Single integer for all key states
+let enabled = 1;
+let bindings, callbacks;
 
-// Key state management
-const setKeyPressed = (keyCode, pressed) => {
-  const bit = KEY_MAP.get(keyCode);
-  if (bit !== undefined) {
-    keyState = pressed ? setBit(keyState, bit) : clearBit(keyState, bit);
-    return true;
-  }
-  return false;
-};
+// Conflict resolution lookup (flattened)
+const conflicts = new Uint16Array(12);
+conflicts[0] = WASD_BCK;
+conflicts[1] = WASD_FWD; // W conflicts with S
+conflicts[2] = WASD_RGT;
+conflicts[3] = WASD_LFT; // A conflicts with D
+conflicts[4] = ARR_BCK;
+conflicts[5] = ARR_FWD; // Up conflicts with Down
+conflicts[6] = ARR_RGT;
+conflicts[7] = ARR_LFT; // Left conflicts with Right
+conflicts[8] = SPACE;
+conflicts[9] = SHIFT; // Shift conflicts with Space
 
-const isKeyPressed = (keyCode) => {
-  const bit = KEY_MAP.get(keyCode);
-  return bit !== undefined ? testBit(keyState, bit) : false;
-};
+// Movement vector lookup table (flattened for direct access)
+const moveX = new Float32Array(256);
+const moveZ = new Float32Array(256);
+const moveY = new Float32Array(4); // Only 4 combinations for Y
+moveY[1] = 1;
+moveY[2] = -1; // Up only, Down only
 
-// Optimized multi-key checks using bit operations
-const areKeysPressed = (...keyCodes) => {
-  let mask = 0n;
-  for (let i = 0; i < keyCodes.length; i++) {
-    const bit = KEY_MAP.get(keyCodes[i]);
-    if (bit === undefined) return false;
-    mask |= 1n << BigInt(bit);
-  }
-  return (keyState & mask) === mask;
-};
-
-const isAnyKeyPressed = (...keyCodes) => {
-  let mask = 0n;
-  for (let i = 0; i < keyCodes.length; i++) {
-    const bit = KEY_MAP.get(keyCodes[i]);
-    if (bit !== undefined) {
-      mask |= 1n << BigInt(bit);
-    }
-  }
-  return Boolean(keyState & mask);
-};
-
-// Event handling functions
-const handleKeyDown = (event) => {
-  if (!isEnabled) return;
-
-  const keyCode = event.code;
-  const bit = KEY_MAP.get(keyCode);
-
-  if (bit === undefined) return;
-
-  // Prevent repeat events
-  if (testBit(keyState, bit)) return;
-
-  keyState = setBit(keyState, bit);
-
-  // Trigger callbacks efficiently
-  if (callbacks?.keydown) {
-    const callbackList = callbacks.keydown;
-    for (let i = 0; i < callbackList.length; i++) {
-      try {
-        callbackList[i](keyCode, event);
-      } catch (error) {
-        console.error("Input callback error:", error);
-      }
-    }
-  }
-
-  // Handle bindings
-  if (keyBindings?.has(keyCode)) {
-    const binding = keyBindings.get(keyCode);
-    if (binding.onPress) {
-      binding.onPress(event);
-    }
-    if (binding.preventDefault) {
-      event.preventDefault();
-    }
-  }
-};
-
-const handleKeyUp = (event) => {
-  if (!isEnabled) return;
-
-  const keyCode = event.code;
-  const bit = KEY_MAP.get(keyCode);
-
-  if (bit === undefined) return;
-
-  keyState = clearBit(keyState, bit);
-
-  // Trigger callbacks efficiently
-  if (callbacks?.keyup) {
-    const callbackList = callbacks.keyup;
-    for (let i = 0; i < callbackList.length; i++) {
-      try {
-        callbackList[i](keyCode, event);
-      } catch (error) {
-        console.error("Input callback error:", error);
-      }
-    }
-  }
-
-  // Handle bindings
-  if (keyBindings?.has(keyCode)) {
-    const binding = keyBindings.get(keyCode);
-    if (binding.onRelease) {
-      binding.onRelease(event);
-    }
-  }
-};
-
-const resetAllKeys = () => {
-  // Get list of pressed keys before clearing
-  const pressedKeys = [];
-  for (const [keyCode, bit] of KEY_MAP) {
-    if (testBit(keyState, bit)) {
-      pressedKeys.push(keyCode);
-    }
-  }
-
-  // Clear all keys
-  keyState = 0n;
-
-  // Trigger release callbacks for previously pressed keys
-  if (callbacks?.keyup) {
-    const callbackList = callbacks.keyup;
-    for (let i = 0; i < pressedKeys.length; i++) {
-      for (let j = 0; j < callbackList.length; j++) {
-        try {
-          callbackList[j](pressedKeys[i], null);
-        } catch (error) {
-          console.error("Input callback error:", error);
-        }
-      }
-    }
-  }
-
-  // Handle bindings
-  if (keyBindings) {
-    for (let i = 0; i < pressedKeys.length; i++) {
-      const binding = keyBindings.get(pressedKeys[i]);
-      if (binding?.onRelease) {
-        binding.onRelease(null);
-      }
-    }
-  }
-};
-
-const handleFocus = () => {
-  if (document.hidden) {
-    resetAllKeys();
-  }
-};
-
-// Movement functions optimized for 3D airship control
-const getMovementVector = () => {
+// Pre-compute all 256 possible horizontal movement combinations
+const inv = 0.7071067811865476; // 1/sqrt(2)
+for (let i = 0; i < 256; i++) {
   let x = 0,
-    z = 0,
-    y = 0;
+    z = 0;
+  const hasWASD = i & 15;
+  const hasArrow = i & 240;
 
-  // Use bit operations for fast checks
-  const horizontalState = keyState & HORIZONTAL_MOVEMENT_MASK;
+  // Use WASD if both present, otherwise use whichever is active
+  const activeSet = hasWASD && hasArrow ? i & 15 : i;
 
-  // WASD horizontal movement
-  if (horizontalState & 1n) z -= 1; // KeyW
-  if (horizontalState & 2n) z += 1; // KeyS
-  if (horizontalState & 4n) x -= 1; // KeyA
-  if (horizontalState & 8n) x += 1; // KeyD
+  // Extract movement (flattened conditional logic)
+  x += activeSet & 4 && !(activeSet & 8) ? -1 : 0; // Left
+  x += activeSet & 8 && !(activeSet & 4) ? 1 : 0; // Right
+  x += activeSet & 64 && !(activeSet & 128) && !hasWASD ? -1 : 0; // Arrow left
+  x += activeSet & 128 && !(activeSet & 64) && !hasWASD ? 1 : 0; // Arrow right
 
-  // Arrow keys horizontal movement
-  if (horizontalState & 16n) z -= 1; // ArrowUp
-  if (horizontalState & 32n) z += 1; // ArrowDown
-  if (horizontalState & 64n) x -= 1; // ArrowLeft
-  if (horizontalState & 128n) x += 1; // ArrowRight
+  z += activeSet & 1 && !(activeSet & 2) ? -1 : 0; // Forward
+  z += activeSet & 2 && !(activeSet & 1) ? 1 : 0; // Backward
+  z += activeSet & 16 && !(activeSet & 32) && !hasWASD ? -1 : 0; // Arrow up
+  z += activeSet & 32 && !(activeSet & 16) && !hasWASD ? 1 : 0; // Arrow down
 
-  // Vertical movement
-  if (keyState & VERTICAL_UP_MASK) y += 1; // Shift - ascend
-  if (keyState & VERTICAL_DOWN_MASK) y -= 1; // Space - descend
+  // Normalize diagonal movement
+  const isDiagonal = x !== 0 && z !== 0;
+  moveX[i] = isDiagonal ? x * inv : x;
+  moveZ[i] = isDiagonal ? z * inv : z;
+}
 
-  // Normalize diagonal horizontal movement
-  if (x !== 0 && z !== 0) {
-    const inv = 0.7071067811865476; // 1/sqrt(2) precomputed
-    x *= inv;
-    z *= inv;
-  }
+// Core functions (minimal branching)
+const setBit = (bit) => (state |= 1 << bit);
+const clearBit = (bit) => (state &= ~(1 << bit));
+const testBit = (bit) => state & (1 << bit);
 
-  return { x, y, z };
+const handleKeyDown = (e) => {
+  const bit = keyLookup[e.code];
+  const isValid = bit !== undefined && enabled;
+  const isNew = isValid && !testBit(bit);
+  const hasConflict = isValid && isNew && state & conflicts[bit];
+
+  // Flattened execution path
+  isValid && isNew && !hasConflict && setBit(bit);
+  isValid &&
+    isNew &&
+    !hasConflict &&
+    bindings &&
+    bindings.get(e.code)?.onPress?.(e);
+  isValid &&
+    isNew &&
+    !hasConflict &&
+    callbacks?.keydown?.forEach((cb) => cb(e.code, e));
+
+  const binding = isValid && bindings?.get(e.code);
+  binding?.preventDefault && e.preventDefault();
 };
 
-const isMovementActive = () =>
-  Boolean(
-    keyState &
-      (HORIZONTAL_MOVEMENT_MASK | VERTICAL_UP_MASK | VERTICAL_DOWN_MASK)
-  );
-const isHorizontalMovementActive = () =>
-  Boolean(keyState & HORIZONTAL_MOVEMENT_MASK);
-const isVerticalMovementActive = () =>
-  Boolean(keyState & (VERTICAL_UP_MASK | VERTICAL_DOWN_MASK));
-const isAscending = () => Boolean(keyState & VERTICAL_UP_MASK);
-const isDescending = () => Boolean(keyState & VERTICAL_DOWN_MASK);
+const handleKeyUp = (e) => {
+  const bit = keyLookup[e.code];
+  const isValid = bit !== undefined && enabled;
 
-// Binding management (lazy initialization)
-const bindKey = (keyCode, options = {}) => {
-  if (!keyBindings) keyBindings = new Map();
-  keyBindings.set(keyCode, {
-    onPress: options.onPress,
-    onRelease: options.onRelease,
-    preventDefault: options.preventDefault || false,
-  });
+  isValid && testBit(bit) && clearBit(bit);
+  isValid && bindings?.get(e.code)?.onRelease?.(e);
+  isValid && callbacks?.keyup?.forEach((cb) => cb(e.code, e));
 };
 
-const unbindKey = (keyCode) => {
-  keyBindings?.delete(keyCode);
-};
-
-// Callback management (lazy initialization)
-const addCallback = (eventType, callback) => {
-  if (!callbacks) callbacks = {};
-  if (!callbacks[eventType]) callbacks[eventType] = [];
-  callbacks[eventType].push(callback);
-};
-
-const removeCallback = (eventType, callback) => {
-  if (!callbacks?.[eventType]) return;
-  const index = callbacks[eventType].indexOf(callback);
-  if (index > -1) {
-    callbacks[eventType].splice(index, 1);
-  }
-};
-
-// Utility functions
-const setEnabled = (enabled) => {
-  isEnabled = enabled;
-  if (!enabled) {
-    resetAllKeys();
-  }
-};
-
-const getInputState = () => {
-  const pressedKeys = [];
-  for (const [keyCode, bit] of KEY_MAP) {
-    if (testBit(keyState, bit)) {
-      pressedKeys.push(keyCode);
-    }
-  }
+// Movement calculation (single lookup)
+const getMovementVector = () => {
+  const h = state & H_MASK;
+  const v = state & V_MASK;
+  const yIdx = (v === SHIFT ? 1 : 0) | (v === SPACE ? 2 : 0);
 
   return {
-    pressedKeys,
-    totalKeys: KEY_MAP.size,
-    bindings: keyBindings ? Array.from(keyBindings.keys()) : [],
-    enabled: isEnabled,
-    keyState: keyState.toString(2), // Binary representation for debugging
+    x: moveX[h],
+    y: moveY[yIdx],
+    z: moveZ[h],
   };
 };
 
+// Optimized state checks (single bit operations)
+const isKeyPressed = (code) => testBit(keyLookup[code] || 255);
+const isMovementActive = () => state & (H_MASK | V_MASK);
+const isHorizontalMovementActive = () => state & H_MASK;
+const isVerticalMovementActive = () => state & V_MASK;
+const isAscending = () => state & SHIFT;
+const isDescending = () => state & SPACE;
+
+// Multi-key checks (optimized)
+const areKeysPressed = (...codes) => {
+  let mask = 0;
+  codes.forEach((code) => (mask |= 1 << (keyLookup[code] || 255)));
+  return (state & mask) === mask;
+};
+
+const isAnyKeyPressed = (...codes) => {
+  let mask = 0;
+  codes.forEach((code) => (mask |= 1 << (keyLookup[code] || 255)));
+  return state & mask;
+};
+
+// Reset with efficient callback handling
+const resetAllKeys = () => {
+  const oldState = state;
+  state = 0;
+
+  // Trigger callbacks only for previously pressed keys
+  callbacks?.keyup &&
+    Object.entries(keyLookup).forEach(([code, bit]) => {
+      oldState & (1 << bit) && callbacks.keyup.forEach((cb) => cb(code, null));
+    });
+
+  // Handle bindings
+  bindings &&
+    Object.entries(keyLookup).forEach(([code, bit]) => {
+      oldState & (1 << bit) && bindings.get(code)?.onRelease?.(null);
+    });
+};
+
+// Lazy initialization helpers
+const ensureBindings = () => bindings || (bindings = new Map());
+const ensureCallbacks = () => callbacks || (callbacks = {});
+
+// Binding management
+const bindKey = (code, opts = {}) => {
+  ensureBindings().set(code, {
+    onPress: opts.onPress,
+    onRelease: opts.onRelease,
+    preventDefault: opts.preventDefault,
+  });
+};
+
+const unbindKey = (code) => bindings?.delete(code);
+
+// Callback management
+const addCallback = (type, cb) => {
+  const cbs = ensureCallbacks();
+  (cbs[type] || (cbs[type] = [])).push(cb);
+};
+
+const removeCallback = (type, cb) => {
+  const list = callbacks?.[type];
+  const idx = list?.indexOf(cb);
+  idx > -1 && list.splice(idx, 1);
+};
+
+// Control functions
+const setEnabled = (en) => {
+  enabled = en ? 1 : 0;
+  enabled || resetAllKeys();
+};
+
+const getInputState = () => ({
+  pressedKeys: Object.entries(keyLookup)
+    .filter(([, bit]) => testBit(bit))
+    .map(([code]) => code),
+  totalKeys: Object.keys(keyLookup).length,
+  bindings: bindings ? Array.from(bindings.keys()) : [],
+  enabled: Boolean(enabled),
+  keyState: state.toString(2),
+});
+
 // Event listener management
-let listenersAttached = false;
+let attached = 0;
 
 const attachListeners = () => {
-  if (listenersAttached) return;
-
-  document.addEventListener("keydown", handleKeyDown, { passive: false });
-  document.addEventListener("keyup", handleKeyUp, { passive: true });
-  window.addEventListener("blur", resetAllKeys, { passive: true });
-  document.addEventListener("visibilitychange", handleFocus, { passive: true });
-
-  listenersAttached = true;
+  attached ||
+    (document.addEventListener("keydown", handleKeyDown),
+    document.addEventListener("keyup", handleKeyUp),
+    window.addEventListener("blur", resetAllKeys),
+    document.addEventListener(
+      "visibilitychange",
+      () => document.hidden && resetAllKeys()
+    ),
+    (attached = 1));
 };
 
 const detachListeners = () => {
-  if (!listenersAttached) return;
-
-  document.removeEventListener("keydown", handleKeyDown);
-  document.removeEventListener("keyup", handleKeyUp);
-  window.removeEventListener("blur", resetAllKeys);
-  document.removeEventListener("visibilitychange", handleFocus);
-
-  listenersAttached = false;
+  attached &&
+    (document.removeEventListener("keydown", handleKeyDown),
+    document.removeEventListener("keyup", handleKeyUp),
+    window.removeEventListener("blur", resetAllKeys),
+    document.removeEventListener("visibilitychange", resetAllKeys),
+    (attached = 0));
 };
 
 const dispose = () => {
   detachListeners();
-  keyState = 0n;
-  keyBindings = null;
-  callbacks = null;
-  isEnabled = true;
+  state = 0;
+  bindings = callbacks = null;
+  enabled = 1;
 };
 
-// Initialize on import
+// Auto-initialize
 attachListeners();
 
-// Public API
+// Exports
 export {
-  // Key state
   isKeyPressed,
   areKeysPressed,
   isAnyKeyPressed,
-
-  // Movement
   getMovementVector,
   isMovementActive,
   isHorizontalMovementActive,
   isVerticalMovementActive,
   isAscending,
   isDescending,
-
-  // Bindings
   bindKey,
   unbindKey,
-
-  // Callbacks
   addCallback,
   removeCallback,
-
-  // Control
   setEnabled,
   dispose,
   getInputState,
-
-  // Event management
   attachListeners,
   detachListeners,
 };

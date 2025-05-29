@@ -5,7 +5,6 @@
 
 import { ISLAND_DATA } from "../data/islands.js";
 import { Vector3, Quaternion } from "../extern/three/three.module.min.js";
-import { scrollToSection } from "../navigation.js";
 import {
   getPlayerModel,
   setPlayerAutoPilot,
@@ -87,7 +86,7 @@ export function navigateShipToSection(sectionId) {
 /**
  * Start auto-pilot journey to target island
  * @param {Object} targetIsland - Island data object
- * @param {string} sectionId - Section ID for scrolling after arrival
+ * @param {string} sectionId - Section ID for reference
  * @returns {Promise} Resolves when ship arrives
  */
 async function startShipAutoPilot(targetIsland, sectionId) {
@@ -325,14 +324,8 @@ function completeShipNavigation() {
   // Update UI one final time
   updateNavigationUI(1.0);
 
-  // Optional: Scroll to the associated section after a brief pause
+  // Resolve the navigation promise after a brief pause
   setTimeout(() => {
-    if (shipNavState.targetSection) {
-      console.log("📜 Scrolling to section:", shipNavState.targetSection);
-      scrollToSection(shipNavState.targetSection);
-    }
-
-    // Resolve the navigation promise
     if (shipNavState.onArrivalCallback) {
       shipNavState.onArrivalCallback();
       shipNavState.onArrivalCallback = null;
