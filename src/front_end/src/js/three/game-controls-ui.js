@@ -122,7 +122,6 @@ const setupControlsInteraction = (controlsBox) => {
     const altitudeStatusEl = controlsBox.querySelector("#altitude-status");
 
     if (movementStatusEl) {
-      const isMoving = isMovementActive();
       const isHorizontalMoving = isHorizontalMovementActive();
       const isVerticalMoving = isVerticalMovementActive();
 

@@ -296,6 +296,7 @@ export function toggleGameView(elements) {
 
   // Determine new view mode
   const newViewMode = isGameView() ? VIEW_MODES.SCROLL : VIEW_MODES.GAME;
+  console.log("THE GAME MODE IS ", isGameView());
   const switchingToGameView = newViewMode === VIEW_MODES.GAME;
 
   // Reset any expanded cards when switching to game view

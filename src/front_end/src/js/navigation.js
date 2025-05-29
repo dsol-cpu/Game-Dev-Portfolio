@@ -8,6 +8,8 @@ import {
   initShipNavigation,
 } from "./three/ship-navigation.js";
 
+import { isGameView } from "./three/game.js";
+
 // Constants and cached DOM queries
 const ACTIVE_CLASS = "active";
 let navLinks;
@@ -83,51 +85,11 @@ async function handleNavigation(sectionId, event) {
 
   event?.preventDefault();
 
-  // Debug: Check if window.isGameView exists and what it returns
-  console.log("🔍 Checking window.isGameView function:");
-  console.log("  - Function exists:", typeof window.isGameView === "function");
-  console.log(
-    "  - Window object keys containing 'game':",
-    Object.keys(window).filter((k) => k.toLowerCase().includes("game"))
-  );
+  // Check current view mode using imported variable
+  const gameViewActive = () => isGameView();
+  console.log("🎮 isGameView:", gameViewActive);
 
-  let isGameView = false;
-  if (typeof window.isGameView === "function") {
-    try {
-      isGameView = window.isGameView();
-      console.log("🎮 window.isGameView() returned:", isGameView);
-    } catch (error) {
-      console.error("❌ Error calling window.isGameView():", error);
-    }
-  } else {
-    console.warn(
-      "⚠️ window.isGameView is not a function, type:",
-      typeof window.isGameView
-    );
-
-    // Fallback: check for game-related DOM elements or classes
-    const gameCanvas = document.getElementById("main-game-canvas");
-    const gameContainer = document.getElementById("game-view-container");
-    const bodyHasGameClass = document.body.classList.contains("game-view");
-
-    console.log("🔍 Fallback game view detection:");
-    console.log("  - Game canvas exists:", !!gameCanvas);
-    console.log(
-      "  - Game canvas visible:",
-      gameCanvas ? getComputedStyle(gameCanvas).display !== "none" : false
-    );
-    console.log("  - Game container exists:", !!gameContainer);
-    console.log("  - Body has game-view class:", bodyHasGameClass);
-
-    // Use fallback detection
-    isGameView =
-      bodyHasGameClass ||
-      (gameCanvas && getComputedStyle(gameCanvas).display !== "none");
-  }
-
-  console.log("🎮 Final isGameView determination:", isGameView);
-
-  if (isGameView) {
+  if (gameViewActive) {
     console.log("🚢 === SHIP NAVIGATION PATH ===");
 
     try {
@@ -254,7 +216,7 @@ export function initNavigation() {
   const observer = new IntersectionObserver(
     (entries) => {
       // Only update nav links if we're in scroll view
-      if (window.isGameView?.()) {
+      if (isGameView()) {
         console.log(
           "👁️ Intersection observer: skipping update (game view active)"
         );
@@ -282,7 +244,7 @@ export function initNavigation() {
     console.log("🏠 handleInitialSection called");
 
     // Don't auto-scroll if we're in game view
-    if (window.isGameView?.()) {
+    if (isGameView()) {
       console.log("🏠 Skipping initial section (game view active)");
       return;
     }
@@ -304,7 +266,7 @@ export function initNavigation() {
   document.addEventListener("keydown", (e) => {
     // Only handle shortcuts in game view when not typing
     if (
-      !window.isGameView?.() ||
+      !isGameView() ||
       e.target.tagName === "INPUT" ||
       e.target.tagName === "TEXTAREA"
     ) {

@@ -56,21 +56,4 @@ export const PROJECT_CARD_DATA = [
       "This was a submission for the game jam for charity: Mini Code for a Cause.",
     ],
   },
-  {
-    id: "geospatial-visualizer-4",
-    category: PortfolioCategory.UNITY,
-    title: "Geospatial Visualizer",
-    tags: [TechTags.UNITY, TechTags.CSHARP],
-    shortDescription: "A visualization of geospatial information.",
-    demoUrl: "https://dsol-cpu.github.io/GeospatialDataVisualization-Aug2024/",
-    sourceUrl:
-      "https://github.com/dsol-cpu/GeospatialDataVisualization-Aug2024",
-    modelName: "babyTurtle",
-    imageUrl: "/images/me.png",
-    imageAlt: "Geospatial Visualizer",
-    fullDescription: [
-      "A detailed visualization of geospatial information using Unity and C#.",
-      "This project demonstrates advanced features for visualizing complex map data.",
-    ],
-  },
 ];
