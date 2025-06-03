@@ -95,11 +95,7 @@ const handleKeyDown = (e) => {
 
   // Flattened execution path
   isValid && isNew && !hasConflict && setBit(bit);
-  isValid &&
-    isNew &&
-    !hasConflict &&
-    bindings &&
-    bindings.get(e.code)?.onPress?.(e);
+  isValid && isNew && !hasConflict && bindings?.get(e.code)?.onPress?.(e);
   isValid &&
     isNew &&
     !hasConflict &&

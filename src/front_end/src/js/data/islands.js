@@ -8,23 +8,13 @@ export const ISLAND_DATA = [
     section: "about",
   },
   {
-    name: "Experience Island",
+    name: "Portfolio Island",
     position: new Vector3(30, 10, 1030),
-    section: "experience",
-  },
-  {
-    name: "Projects Island",
-    position: new Vector3(-20, -15, 975),
-    section: "projects",
+    section: "portfolio",
   },
   {
     name: "Blog Island",
     position: new Vector3(40, -25, 1010),
     section: "blog",
-  },
-  {
-    name: "Resume Island",
-    position: new Vector3(10, 25, 990),
-    section: "resume",
   },
 ];
