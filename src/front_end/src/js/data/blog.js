@@ -10,21 +10,6 @@ const BlogTag = Object.freeze({
 // Blog post data
 export const blogPostsData = [
   {
-    date: "05/26/2025",
-    tags: [BlogTag.GENERAL],
-    title: "I am Lorem",
-    description:
-      "Of the ipsumums.  Of all the love and the glory and the heaven and the forever and yeah and um and so um yeah thanks for coming to my um hmmmm i forgor skull emoji.",
-    thumbnail: cupil,
-  },
-  {
-    date: "05/26/2025",
-    tags: [BlogTag.REAL],
-    title: "Chiikawa Motivational Poster",
-    description: "You can do it.",
-    thumbnail: fallback,
-  },
-  {
     tags: [BlogTag.REAL],
     date: "05/26/2025",
     title: "Mini Code for a Cause Game Jam: My Experience",

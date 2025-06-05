@@ -1,5 +1,4 @@
-// Ultra-optimized input handler with flattened conditionals
-const K = new Uint8Array(256); // Direct key code mapping
+const KEYMAP = new Uint8Array(256); // Direct key code mapping
 const keyLookup = {
   KeyW: 0,
   KeyS: 1,
@@ -33,19 +32,6 @@ const H_MASK = 255,
 let state = 0; // Single integer for all key states
 let enabled = 1;
 let bindings, callbacks;
-
-// Conflict resolution lookup (flattened)
-const conflicts = new Uint16Array(12);
-conflicts[0] = WASD_BCK;
-conflicts[1] = WASD_FWD; // W conflicts with S
-conflicts[2] = WASD_RGT;
-conflicts[3] = WASD_LFT; // A conflicts with D
-conflicts[4] = ARR_BCK;
-conflicts[5] = ARR_FWD; // Up conflicts with Down
-conflicts[6] = ARR_RGT;
-conflicts[7] = ARR_LFT; // Left conflicts with Right
-conflicts[8] = SPACE;
-conflicts[9] = SHIFT; // Shift conflicts with Space
 
 // Movement vector lookup table (flattened for direct access)
 const moveX = new Float32Array(256);
@@ -91,15 +77,10 @@ const handleKeyDown = (e) => {
   const bit = keyLookup[e.code];
   const isValid = bit !== undefined && enabled;
   const isNew = isValid && !testBit(bit);
-  const hasConflict = isValid && isNew && state & conflicts[bit];
 
-  // Flattened execution path
-  isValid && isNew && !hasConflict && setBit(bit);
-  isValid && isNew && !hasConflict && bindings?.get(e.code)?.onPress?.(e);
-  isValid &&
-    isNew &&
-    !hasConflict &&
-    callbacks?.keydown?.forEach((cb) => cb(e.code, e));
+  isValid && isNew && setBit(bit);
+  isValid && isNew && bindings?.get(e.code)?.onPress?.(e);
+  isValid && isNew && callbacks?.keydown?.forEach((cb) => cb(e.code, e));
 
   const binding = isValid && bindings?.get(e.code);
   binding?.preventDefault && e.preventDefault();

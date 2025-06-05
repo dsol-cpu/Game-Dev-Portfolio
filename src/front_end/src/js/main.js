@@ -6,13 +6,9 @@ import { initBlogPosts } from "./blog.js";
 import { initNavigation } from "./navigation.js";
 import { initPortfolioFilters } from "./portfolio-filters.js";
 
+import { PerspectiveCamera } from "./extern/three/three.core.min.js";
 import { createDeltaTimeMetricsOverlay } from "./three/delta-time-metrics.js";
-import {
-  initGame,
-  isGameView,
-  updateGameLoop,
-  updateIslandBobbing,
-} from "./three/game.js";
+import { initGame, isGameView, updateGameLoop } from "./three/game.js";
 import { preloadModels } from "./three/model.js";
 import {
   initProjectCardScene,
@@ -23,7 +19,6 @@ import {
   initThreeJSManager,
   renderFrame,
 } from "./three/threejs-manager.js";
-import { PerspectiveCamera } from "./extern/three/three.core.min.js";
 import {
   getDeltaTime,
   startFrameCappedLoop,

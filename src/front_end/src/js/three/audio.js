@@ -6,7 +6,7 @@ let audioState = {
   // Core audio system
   context: null,
   enabled: true,
-  volume: 0.7,
+  volume: 0.5,
   initialized: false,
   userInteracted: false,
 

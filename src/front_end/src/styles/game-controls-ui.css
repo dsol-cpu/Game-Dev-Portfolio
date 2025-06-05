@@ -89,7 +89,7 @@
 }
 
 /* Responsive design for smaller screens */
-@media (max-width: 800px) {
+@media (max-width: 900px) {
   .game-controls-info {
     position: absolute !important;
     top: 10px !important;

@@ -1,6 +1,6 @@
 /**
  * @fileoverview Ship navigation and autopilot controls
- * Handles automated ship travel to destinations
+ * Handles automated ship travel to destinations with arrival popup integration
  */
 
 import { ISLAND_DATA } from "../data/islands.js";
@@ -11,6 +11,7 @@ import {
   clearPlayerAutoPilot,
 } from "./player.js";
 import { random } from "../utils/random.js";
+import { showArrivalPopup, clearAllArrivalPopups } from "./island-popup.js";
 
 // Constants
 const SHIP_TRAVEL_SPEED = 15; // Speed for automated ship travel
@@ -22,11 +23,14 @@ const shipNavState = {
   isAutoPiloting: false,
   destination: null,
   targetSection: null,
+  targetIsland: null, // Store the full island data
   initialPosition: null,
   travelStartTime: 0,
   animationProgress: 0,
   onArrivalCallback: null,
   updateInterval: null,
+  isLeavingIsland: false, // Track if we're departing from an island
+  departureSection: null, // Track which island we're leaving
 };
 
 // Create a mapping between section IDs and island data
@@ -54,11 +58,30 @@ export function getNavigationProgress() {
 }
 
 /**
+ * Get current destination section
+ * @returns {string|null} Target section ID or null
+ */
+export function getCurrentDestination() {
+  return shipNavState.targetSection;
+}
+
+/**
+ * Check if we're currently leaving an island
+ * @returns {boolean} True if departing from an island
+ */
+export function isLeavingIsland() {
+  return shipNavState.isLeavingIsland;
+}
+
+/**
  * Navigates the ship to the specified island
  * @param {string} sectionId - Target section ID
+ * @param {Object} options - Navigation options
+ * @param {string} options.fromSection - Section we're departing from (optional)
+ * @param {boolean} options.showDepartureMessage - Show departure message (default: true)
  * @returns {Promise} Resolves when ship arrives at destination
  */
-export function navigateShipToSection(sectionId) {
+export function navigateShipToSection(sectionId, options = {}) {
   console.log("🚢 Ship navigation called for section:", sectionId);
 
   // Check if target section exists as an island
@@ -78,18 +101,56 @@ export function navigateShipToSection(sectionId) {
     targetIsland.position
   );
 
+  // Handle departure from current island if specified
+  if (options.fromSection && options.showDepartureMessage !== false) {
+    handleIslandDeparture(options.fromSection);
+  }
+
   // Start ship navigation directly
   console.log("⚓ Starting autopilot to:", targetIsland.name);
-  return startShipAutoPilot(targetIsland, sectionId);
+  return startShipAutoPilot(targetIsland, sectionId, options);
+}
+
+/**
+ * Handle departure from an island
+ * @param {string} departureSection - Section ID we're leaving
+ */
+function handleIslandDeparture(departureSection) {
+  const departureIsland = sectionToIslandMap[departureSection];
+  if (!departureIsland) return;
+
+  console.log("🏃‍♂️ Departing from:", departureIsland.name);
+
+  // Set departure state
+  shipNavState.isLeavingIsland = true;
+  shipNavState.departureSection = departureSection;
+
+  // Clear any existing arrival popups since we're leaving
+  clearAllArrivalPopups();
+
+  // Dispatch departure event for other systems to listen to
+  document.dispatchEvent(
+    new CustomEvent("shipDeparture", {
+      detail: {
+        island: departureIsland,
+        section: departureSection,
+        destination: shipNavState.targetSection,
+      },
+    })
+  );
+
+  // You could add a departure popup here if desired
+  // showDeparturePopup(departureIsland);
 }
 
 /**
  * Start auto-pilot journey to target island
  * @param {Object} targetIsland - Island data object
  * @param {string} sectionId - Section ID for reference
+ * @param {Object} options - Navigation options
  * @returns {Promise} Resolves when ship arrives
  */
-async function startShipAutoPilot(targetIsland, sectionId) {
+async function startShipAutoPilot(targetIsland, sectionId, options = {}) {
   console.log("🎯 Starting autopilot sequence...");
 
   // Get current player position and state
@@ -116,6 +177,7 @@ async function startShipAutoPilot(targetIsland, sectionId) {
   shipNavState.destination = new Vector3().copy(targetIsland.position);
   shipNavState.destination.y += 2.5; // Hover above the island
   shipNavState.targetSection = sectionId;
+  shipNavState.targetIsland = targetIsland; // Store full island data
   shipNavState.initialPosition = new Vector3().copy(playerShip.position);
   shipNavState.travelStartTime = performance.now();
   shipNavState.animationProgress = 0;
@@ -295,7 +357,7 @@ function updateShipAutoPilot(deltaTime) {
 }
 
 /**
- * Complete the navigation
+ * Complete the navigation and show arrival popup
  */
 function completeShipNavigation() {
   console.log("🏁 Completing ship navigation");
@@ -317,17 +379,52 @@ function completeShipNavigation() {
     console.error("❌ Failed to clear player autopilot:", error);
   }
 
-  // Reset state
+  // Reset navigation state
+  const arrivedSection = shipNavState.targetSection;
+  const arrivedIsland = shipNavState.targetIsland;
   shipNavState.isAutoPiloting = false;
   shipNavState.animationProgress = 1.0;
+  shipNavState.isLeavingIsland = false; // No longer leaving
+  shipNavState.departureSection = null;
 
   // Update UI one final time
   updateNavigationUI(1.0);
 
-  // Resolve the navigation promise after a brief pause
+  // Show arrival popup after a brief pause for the ship to settle
   setTimeout(() => {
+    if (arrivedSection && arrivedIsland) {
+      console.log("🎉 Showing arrival popup for:", arrivedIsland.name);
+
+      // Show the arrival popup with custom callbacks
+      showArrivalPopup(arrivedSection, {
+        onExplore: (island) => {
+          console.log("🏝️ Player chose to explore:", island.name);
+          // Dispatch event for other systems to handle exploration
+          document.dispatchEvent(
+            new CustomEvent("startIslandExploration", {
+              detail: { island, section: island.section },
+            })
+          );
+        },
+        onContinue: (island) => {
+          console.log("⏭️ Player chose to continue later at:", island.name);
+          // Player stays at the island but doesn't explore immediately
+          document.dispatchEvent(
+            new CustomEvent("arrivalAcknowledged", {
+              detail: { island, section: island.section },
+            })
+          );
+        },
+      });
+    }
+
+    // Resolve the navigation promise
     if (shipNavState.onArrivalCallback) {
-      shipNavState.onArrivalCallback();
+      shipNavState.onArrivalCallback({
+        success: true,
+        section: arrivedSection,
+        island: arrivedIsland,
+      });
       shipNavState.onArrivalCallback = null;
       console.log("✅ Navigation promise resolved");
     }
@@ -362,9 +459,12 @@ function updateNavigationUI(progress) {
     if (progress === 0 && !shipNavState.isAutoPiloting) {
       element.textContent = "Ready to sail";
     } else if (progress < 1 && shipNavState.isAutoPiloting) {
-      element.textContent = `Sailing to ${
-        shipNavState.targetSection
-      }... ${Math.round(progress * 100)}%`;
+      const targetName = shipNavState.targetIsland
+        ? shipNavState.targetIsland.name
+        : shipNavState.targetSection;
+      element.textContent = `Sailing to ${targetName}... ${Math.round(
+        progress * 100
+      )}%`;
     } else if (progress >= 1) {
       element.textContent = "Arrived at destination";
     }
@@ -377,6 +477,9 @@ function updateNavigationUI(progress) {
         progress,
         isAutoPiloting: shipNavState.isAutoPiloting,
         targetSection: shipNavState.targetSection,
+        targetIsland: shipNavState.targetIsland,
+        isLeavingIsland: shipNavState.isLeavingIsland,
+        departureSection: shipNavState.departureSection,
       },
     })
   );
@@ -404,15 +507,33 @@ export function cancelShipNavigation() {
       console.error("❌ Failed to clear autopilot:", error);
     }
 
+    // Clear any popups that might be showing
+    clearAllArrivalPopups();
+
     shipNavState.isAutoPiloting = false;
     shipNavState.animationProgress = 0;
+    shipNavState.isLeavingIsland = false;
+    shipNavState.departureSection = null;
 
     if (shipNavState.onArrivalCallback) {
-      shipNavState.onArrivalCallback();
+      shipNavState.onArrivalCallback({
+        success: false,
+        cancelled: true,
+      });
       shipNavState.onArrivalCallback = null;
     }
 
     updateNavigationUI(0);
+
+    // Dispatch cancellation event
+    document.dispatchEvent(
+      new CustomEvent("shipNavigationCancelled", {
+        detail: {
+          targetSection: shipNavState.targetSection,
+          progress: shipNavState.animationProgress,
+        },
+      })
+    );
   }
 }
 
@@ -435,7 +556,13 @@ export function initShipNavigation() {
 
   // Listen for ship navigation progress events to update any UI
   document.addEventListener("shipNavigationProgress", (e) => {
-    const { progress, isAutoPiloting, targetSection } = e.detail;
+    const {
+      progress,
+      isAutoPiloting,
+      targetSection,
+      targetIsland,
+      isLeavingIsland,
+    } = e.detail;
 
     // Update any game UI elements that show navigation status
     const gameUI =
@@ -464,8 +591,12 @@ export function initShipNavigation() {
         gameUI.appendChild(statusElement);
       }
 
+      const targetName = targetIsland ? targetIsland.name : targetSection;
+      const statusIcon = isLeavingIsland ? "🏃‍♂️" : "⚓";
+      const statusText = isLeavingIsland ? "Departing..." : "Sailing to";
+
       statusElement.innerHTML = `
-        <div style="margin-bottom: 5px;">⚓ Sailing to: <strong>${targetSection}</strong></div>
+        <div style="margin-bottom: 5px;">${statusIcon} ${statusText}: <strong>${targetName}</strong></div>
         <div style="margin-bottom: 8px;">Progress: ${Math.round(
           progress * 100
         )}%</div>
@@ -491,6 +622,8 @@ export function initShipNavigation() {
     navigateShipToSection,
     isShipAutoPiloting,
     getNavigationProgress,
+    getCurrentDestination,
+    isLeavingIsland,
     cancelShipNavigation,
   };
 }
