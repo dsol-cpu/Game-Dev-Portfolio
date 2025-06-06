@@ -352,22 +352,11 @@ function processPopupQueue() {
 function getIslandDescription(island) {
   // You can customize these descriptions based on your island data
   const descriptions = {
-    port_royal:
+    about:
       "A bustling port town filled with merchants, sailors, and adventure. The perfect place to resupply and gather information.",
-    treasure_island:
+    portfolio:
       "A mysterious island shrouded in legends of buried treasure and ancient secrets waiting to be discovered.",
-    coral_reef:
-      "A vibrant underwater paradise teeming with marine life and hidden underwater caves to explore.",
-    volcanic_island:
-      "An active volcanic island with dramatic landscapes, hot springs, and rare mineral deposits.",
-    desert_island:
-      "A remote tropical paradise with pristine beaches and untouched natural beauty.",
-    storm_island:
-      "A weather-beaten island known for its fierce storms and the hardy souls who call it home.",
-    ice_island:
-      "A frozen wonderland with crystalline formations and unique cold-weather wildlife.",
-    jungle_island:
-      "A dense tropical jungle filled with exotic wildlife, ancient ruins, and hidden pathways.",
+    blog: "A vibrant underwater paradise teeming with marine life and hidden underwater caves to explore.",
   };
 
   return (
