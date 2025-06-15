@@ -26,7 +26,6 @@ import {
 } from "./three/time.js";
 import { initUserInteraction, isIdle } from "./user-interaction.js";
 import { isLowPoweredDevice } from "./utils/device.js";
-import { initAboutCanvas } from "./about.js";
 
 // Initialize on DOM load
 document.addEventListener("DOMContentLoaded", initializeApp);
@@ -48,7 +47,6 @@ async function initializeApp() {
   } else {
     await preloadModels(["babyTurtle", "portfolioShip", "globe"]);
     await initThreeJSManager();
-    initAboutCanvas();
     initProjectCardScene();
 
     await initGame();
