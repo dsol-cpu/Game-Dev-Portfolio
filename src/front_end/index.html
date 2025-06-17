@@ -54,6 +54,7 @@
 
     <!-- CSS files -->
     <link rel="stylesheet" href="src/styles/main.css" />
+    <link rel="stylesheet" href="src/styles/xp-window.css" />
     <link rel="stylesheet" href="src/styles/game.css" />
     <link rel="stylesheet" href="src/styles/game-controls-ui.css" />
     <link rel="stylesheet" href="src/styles/project-card.css" />
@@ -466,7 +467,8 @@
           @You need Javascript For this Website Lol
         </div>
         <div class="icon-attribution">
-          Most SVG Icons by Freepik and Devicons
+          SVG Icons by Freepik, Devicons, and Iconic Arts, ariefstudio, and Cap
+          Cool
         </div>
       </div>
     </div>
@@ -475,59 +477,85 @@
     <div class="main-content">
       <!-- About Section -->
       <section id="about">
-        <div class="container about-container">
-          <div class="about-canvas-container">
-            <canvas id="about-canvas" class="threejs-canvas"></canvas>
+        <!-- Main about content with image and text side by side -->
+        <div class="about-content-wrapper">
+          <div class="about-media">
+            <img src="/images/frisk-undertale.gif" alt="" />
           </div>
-          <img src="/images/frisk-undertale.gif" alt="" />
-
-          <div class="about-text">
-            <p>I'm a game developer.</p>
-            <br />
-            <p>
-              I have worked in Unity and Godot with a strong focus on gameplay
-              programming, procedural generation, and shader development. My
-              experience includes working as a software engineer in the
-              government and fintech space for the past 3–4 years.
-            </p>
-            <br />
-            <p>
-              When I'm not coding, I enjoy experimenting with 3D modeling,
-              learning about game design principles, and playing
-              <i>Fields of Mistria</i> or <i>Enshrouded</i> with my friends.
-            </p>
-            <br />
-            <p>I'm currently playing: <i>Oblivion Remastered</i>.</p>
+          <div class="xp-window">
+            <div class="xp-titlebar">
+              <div class="xp-icon"></div>
+              <div class="xp-title">about.txt</div>
+              <div class="xp-controls">
+                <div class="xp-button minimize"></div>
+                <div class="xp-button maximize"></div>
+                <div class="xp-button close"></div>
+              </div>
+            </div>
+            <div class="xp-content">
+              <div class="about-text">
+                <p>I'm a game developer.</p>
+                <p>
+                  I have worked in Unity and Godot with a strong focus on
+                  gameplay programming, procedural generation, and shader
+                  development. My experience includes working as a software
+                  engineer in the government and fintech space for the past 3–4
+                  years.
+                </p>
+                <p>
+                  When I'm not coding, I enjoy experimenting with 3D modeling,
+                  learning about game design principles, and playing
+                  <i>Fields of Mistria</i> or <i>Enshrouded</i> with my friends.
+                </p>
+                <p>I'm currently playing: <i>Dune: Awakening</i>.</p>
+              </div>
+            </div>
           </div>
+        </div>
 
-          <div class="about-images">
-            <div class="image-card">
-              <img
-                src="/images/you_can_do_it.jpeg"
-                alt="Unity project screenshot"
-                loading="lazy"
-              />
-            </div>
-            <div class="image-card">
-              <img
-                src="/images/you_can_do_it.jpeg"
-                alt="3D modeling artwork"
-                loading="lazy"
-              />
-            </div>
-            <div class="image-card">
-              <img
-                src="/images/you_can_do_it.jpeg"
-                alt="Gaming with friends"
-                loading="lazy"
-              />
-            </div>
+        <!-- Image gallery outside the XP window -->
+        <div class="about-images">
+          <div class="image-card">
+            <img
+              src="/images/you_can_do_it.jpeg"
+              alt="Unity project screenshot"
+              loading="lazy"
+            />
+            <p>Unity Project</p>
+          </div>
+          <div class="image-card">
+            <img
+              src="/images/you_can_do_it.jpeg"
+              alt="3D modeling artwork"
+              loading="lazy"
+            />
+            <p>3D Modeling</p>
+          </div>
+          <div class="image-card">
+            <img
+              src="/images/you_can_do_it.jpeg"
+              alt="Gaming with friends"
+              loading="lazy"
+            />
+            <p>Gaming Setup</p>
           </div>
         </div>
       </section>
 
       <!-- Portfolio Section -->
       <section id="portfolio">
+        <div class="xp-window">
+          <div class="xp-titlebar">
+            <div class="xp-icon"></div>
+            <div class="xp-title">portfolio.txt</div>
+            <div class="xp-controls">
+              <div class="xp-button minimize"></div>
+              <div class="xp-button maximize"></div>
+              <div class="xp-button close"></div>
+            </div>
+          </div>
+          <!-- <div class="xp-content"></div> -->
+        </div>
         <div class="container">
           <div class="filter-buttons">
             <button class="filter-button active" data-filter="all">All</button>
@@ -544,6 +572,17 @@
       </section>
 
       <section id="blog">
+        <div class="xp-window">
+          <div class="xp-titlebar">
+            <div class="xp-icon"></div>
+            <div class="xp-title">blog.txt</div>
+            <div class="xp-controls">
+              <div class="xp-button minimize"></div>
+              <div class="xp-button maximize"></div>
+              <div class="xp-button close"></div>
+            </div>
+          </div>
+        </div>
         <div class="container">
           <div class="blog-list"></div>
         </div>

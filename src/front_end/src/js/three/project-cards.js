@@ -1,6 +1,5 @@
 import {
   PerspectiveCamera,
-  Raycaster,
   Vector3,
   SpotLight,
   Object3D,

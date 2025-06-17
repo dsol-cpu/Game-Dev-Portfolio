@@ -1,11 +1,10 @@
-/* src/styles/about-section.css */
-
 /* Main container for the about section */
 #about {
   position: relative;
   min-height: 100vh;
   width: 100%;
   box-sizing: border-box;
+  padding: 20px;
 }
 
 /* Account for sidebar width - adjust based on your sidebar width */
@@ -15,118 +14,165 @@
   }
 }
 
-/* About content container */
-.about-container {
+/* Override XP content for reduced padding since it only contains text now */
+#about .xp-content {
+  padding: 16px;
+  background: #ece9d8;
+  min-height: 200px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #000;
+}
+
+/* Content wrapper for side-by-side layout */
+.about-content-wrapper {
   display: flex;
-  flex-direction: column;
-  gap: 2rem;
-  margin-bottom: 3rem;
-  background: var(--card-bg);
-  border-radius: 10px;
-  padding: 2rem;
-  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
-  position: relative;
-  overflow: hidden;
-  max-width: 100%;
-}
-
-/* Gradient border at the top */
-.about-container::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
+  align-items: flex-start;
+  gap: 20px;
   width: 100%;
-  height: 5px;
-  background: linear-gradient(
-    90deg,
-    var(--primary-color),
-    var(--secondary-color)
-  );
+  margin-bottom: 40px; /* More space before image gallery */
 }
 
-.about-container > img {
+/* Media container (image/canvas) - now outside XP window */
+.about-media {
+  flex-shrink: 0;
+  width: 160px;
+}
+
+.about-media img {
+  width: 100%;
+  height: auto;
   display: block;
-  position: relative;
-  width: 256;
-  border-radius: 10px;
-  overflow: hidden;
-  margin-bottom: 1.5rem;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  align-self: center;
+  border: 2px inset #ece9d8;
+  box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+  transform: rotate(-15deg);
 }
 
-/* Canvas element styling */
-.about-canvas {
-  width: 100% !important;
-  height: 100% !important;
-  display: block;
-  border-radius: 10px;
-}
-
-/* About text content */
-.about-text {
+/* XP window now contains only the text */
+#about .xp-window {
   flex: 1;
-  line-height: 1.6;
-  max-width: 700px;
-  margin: 0 auto;
+  min-width: 0; /* Prevents flex item from overflowing */
 }
 
-/* About image gallery */
+/* About text content inside XP window */
+.about-text {
+  line-height: 1.6;
+  font-size: 12px;
+}
+
+.about-text p {
+  margin: 0 0 12px 0;
+  color: #000;
+}
+
+.about-text p:last-child {
+  margin-bottom: 0;
+}
+
+/* About image gallery - now completely outside XP window */
 .about-images {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 1.5rem;
-  margin-top: 1rem;
+  gap: 16px;
+  margin-top: 20px;
 }
 
-/* Individual image cards */
+/* Individual image cards with enhanced styling since they're outside XP window */
 .image-card {
-  width: 200px;
-  background: var(--card-bg);
-  border-radius: 10px;
+  width: 180px;
+  background: #ece9d8;
+  border: 2px outset #ece9d8;
   overflow: hidden;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  transition: all 0.2s ease;
   text-align: center;
+  cursor: pointer;
+  box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.3);
 }
 
 .image-card:hover {
-  transform: translateY(-5px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+  border: 2px inset #ece9d8;
+  transform: translateY(-2px);
+  box-shadow: 3px 3px 8px rgba(0, 0, 0, 0.4);
+}
+
+.image-card:active {
+  border: 2px inset #ece9d8;
+  background: #d4d0c8;
+  transform: translateY(0);
+  box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 .image-card img {
   width: 100%;
-  height: auto;
+  height: 120px;
   display: block;
   object-fit: cover;
+  border-bottom: 1px solid #aca899;
 }
 
 .image-card p {
-  padding: 0.75rem;
-  font-size: 0.9rem;
-  color: var(--text-color);
+  padding: 8px 6px;
+  font-size: 12px;
+  color: #000;
+  background: #ece9d8;
+  margin: 0;
+  font-weight: bold;
 }
 
 /* Responsive adjustments */
 @media (max-width: 768px) {
-  .about-canvas-container {
-    height: 200px; /* Smaller height on mobile */
+  #about {
+    padding: 10px;
   }
 
-  .about-container {
-    padding: 1.5rem;
+  .about-content-wrapper {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 20px;
+    margin-bottom: 30px;
+  }
+
+  .about-media {
+    width: 140px;
+  }
+
+  .about-media canvas {
+    height: 140px !important;
+  }
+
+  #about .xp-window {
+    width: 100%;
+  }
+
+  .about-text {
+    text-align: left;
   }
 
   .image-card {
-    width: calc(50% - 1rem); /* Two cards per row on smaller screens */
+    width: calc(50% - 8px); /* Two cards per row on smaller screens */
   }
 }
 
 @media (max-width: 480px) {
+  .about-media {
+    width: 120px;
+  }
+
+  .about-media canvas {
+    height: 120px !important;
+  }
+
+  #about .xp-content {
+    padding: 12px;
+  }
+
   .image-card {
     width: 100%; /* Full width on very small screens */
+  }
+
+  .about-images {
+    gap: 12px;
   }
 }

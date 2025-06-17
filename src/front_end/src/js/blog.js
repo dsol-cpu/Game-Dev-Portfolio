@@ -8,6 +8,17 @@ function createBlogPost(item) {
   wrapper.className = "blog-post";
 
   wrapper.innerHTML = `
+  <div class="xp-window">
+    <div class="xp-titlebar">
+      <div class="xp-icon"></div>
+      <div class="xp-title">${item.headline}.txt</div>
+      <div class="xp-controls">
+        <div class="xp-button minimize"></div>
+        <div class="xp-button maximize"></div>
+        <div class="xp-button close"></div>
+      </div>
+    </div>
+    <div class="xp-content">
     <div class="blog-post-thumbnail">
       <img src="${item.thumbnail}" alt="${item.title}" />
     </div>
@@ -17,6 +28,8 @@ function createBlogPost(item) {
       <p class="blog-post-description">${item.description}</p>
       <p class="blog-date"><i>${item.date}</i></p>
     </div>
+    </div>
+  </div>
   `;
   return wrapper;
 }

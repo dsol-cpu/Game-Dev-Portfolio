@@ -10,9 +10,7 @@
   --card-bg: #fef4fa; /* Very light pink card background */
   --input-bg: #f5f8ff;
   --input-border: #d0ddf0;
-  --portfolio-title-color: #6a9be7;
-  --portfolio-text-color: #2e3a52;
-  --portfolio-category-color: #ffb88c;
+  --window-text-color: black;
 }
 
 /* Dark Theme - Night skies theme */
@@ -22,14 +20,11 @@
   --dark-color: #f2f9ff; /* Light text in dark mode */
   --light-color: #1a202c; /* Dark background */
   --accent-color: #ff8585; /* Brighter red accent */
-  --text-color: #f2f9ff; /* Light text */
+  --text-color: #f2f9ff; /*Light text*/
   --bg-color: #1a202c; /* Dark sky background */
   --card-bg: #2d3748; /* Dark card backgrounds */
   --input-bg: #2d3748;
   --input-border: #4a5568;
-  --portfolio-title-color: #a2ccff;
-  --portfolio-text-color: #e2e8f0;
-  --portfolio-category-color: #ffce54;
 }
 
 * {
