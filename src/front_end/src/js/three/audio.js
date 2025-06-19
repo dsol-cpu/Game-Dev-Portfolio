@@ -2,412 +2,303 @@ import { random } from "../utils/random";
 
 const MAX_PLAYLIST_LENGTH = 25;
 
-let audioState = {
-  // Core audio system
+let audio = {
   context: null,
   enabled: true,
   volume: 0.5,
   initialized: false,
   userInteracted: false,
 
-  // Music properties
-  musicGainNode: null,
-  musicPlaying: false,
-  musicStartTime: 0,
-  musicPausedAt: 0,
-  musicSource: null,
-  musicBuffer: null,
-  musicPlayList: [],
-  currentTrackIndex: 0,
+  musicGain: null,
+  sfxGain: null,
 
-  // SFX properties
-  sfxGainNode: null,
-  sfxMap: new Map(),
+  music: {
+    source: null,
+    buffer: null,
+    playing: false,
+    startTime: 0,
+    pausedAt: 0,
+    playlist: [],
+    currentIndex: 0,
+  },
 
-  // Visibility state
-  isVisible: true,
-  wasPlayingBeforeHidden: false,
+  sfx: new Map(),
+
+  visibility: {
+    isVisible: true,
+    wasPlayingBeforeHidden: false,
+  },
 };
 
-/**
- * Wait for user interaction before allowing audio
- * @returns {Promise<void>}
- */
-function waitForUserInteraction() {
-  return new Promise((resolve) => {
-    if (audioState.userInteracted) {
-      resolve();
-      return;
-    }
+// Utility functions
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+const isReady = () =>
+  audio.context &&
+  audio.enabled &&
+  audio.userInteracted &&
+  audio.visibility.isVisible;
 
+async function waitForUserInteraction() {
+  if (audio.userInteracted) return;
+
+  return new Promise((resolve) => {
     const handleInteraction = () => {
-      audioState.userInteracted = true;
-      document.removeEventListener("click", handleInteraction);
-      document.removeEventListener("keydown", handleInteraction);
-      document.removeEventListener("touchstart", handleInteraction);
+      audio.userInteracted = true;
+      ["click", "keydown", "touchstart"].forEach((event) =>
+        document.removeEventListener(event, handleInteraction)
+      );
       resolve();
     };
 
-    document.addEventListener("click", handleInteraction);
-    document.addEventListener("keydown", handleInteraction);
-    document.addEventListener("touchstart", handleInteraction);
+    ["click", "keydown", "touchstart"].forEach((event) =>
+      document.addEventListener(event, handleInteraction)
+    );
   });
 }
 
-/**
- * Resume audio context if suspended
- * @returns {Promise<void>}
- */
-async function resumeAudioContext() {
-  if (audioState.context && audioState.context.state === "suspended") {
+async function resumeContext() {
+  if (audio.context?.state === "suspended") {
     try {
-      await audioState.context.resume();
+      await audio.context.resume();
     } catch (error) {
       console.warn("Failed to resume audio context:", error);
     }
   }
 }
 
-/**
- * Initialize audio system
- * @param {string} [initialMusicUrl=null] - Optional initial music URL
- * @returns {Object} Current audio state
- */
+function setGainValue(gainNode, value, immediate = false, time = 0.1) {
+  if (!gainNode || !audio.context) return;
+
+  const currentTime = audio.context.currentTime;
+  if (immediate) {
+    gainNode.gain.setValueAtTime(value, currentTime);
+  } else {
+    gainNode.gain.setTargetAtTime(value, currentTime, time);
+  }
+}
+
+function stopSource(source) {
+  if (!source) return;
+  try {
+    source.stop();
+    source.disconnect();
+  } catch (e) {
+    // Source might already be stopped
+  }
+}
+
+function handleDocumentVisibilityChange() {
+  const wasVisible = audio.visibility.isVisible;
+  audio.visibility.isVisible = !document.hidden;
+
+  if (!wasVisible && audio.visibility.isVisible) {
+    // Page became visible
+    if (audio.visibility.wasPlayingBeforeHidden && isReady()) {
+      resumeContext().then(() => {
+        if (!audio.music.playing) {
+          playMusic(audio.music.pausedAt, true);
+        }
+      });
+    }
+  } else if (wasVisible && !audio.visibility.isVisible) {
+    // Page became hidden
+    audio.visibility.wasPlayingBeforeHidden = audio.music.playing;
+    if (audio.music.playing) {
+      pauseMusic(true);
+    }
+  }
+}
+
+// Main API functions
 export async function initAudio(initialMusicUrl = null) {
-  if (audioState.initialized) return audioState;
+  if (audio.initialized) return audio;
 
   try {
-    // Create audio context
-    audioState.context = new (window.AudioContext ||
-      window.webkitAudioContext)();
+    audio.context = new (window.AudioContext || window.webkitAudioContext)();
 
-    // Create and connect music gain node
-    audioState.musicGainNode = audioState.context.createGain();
-    audioState.musicGainNode.gain.value = audioState.volume;
-    audioState.musicGainNode.connect(audioState.context.destination);
+    // Create gain nodes
+    audio.musicGain = audio.context.createGain();
+    audio.sfxGain = audio.context.createGain();
 
-    // Create and connect SFX gain node
-    audioState.sfxGainNode = audioState.context.createGain();
-    audioState.sfxGainNode.gain.value = audioState.volume;
-    audioState.sfxGainNode.connect(audioState.context.destination);
+    // Connect to destination
+    audio.musicGain.connect(audio.context.destination);
+    audio.sfxGain.connect(audio.context.destination);
 
-    audioState.initialized = true;
+    // Set initial volume
+    setGainValue(audio.musicGain, audio.volume, true);
+    setGainValue(audio.sfxGain, audio.volume, true);
 
-    // Set up visibility change handling
+    audio.initialized = true;
     document.addEventListener(
       "visibilitychange",
-      handleVisibilityChangeInternal
+      handleDocumentVisibilityChange
     );
 
-    // Load initial music if provided (but don't play yet)
     if (initialMusicUrl) {
       await loadMusic(initialMusicUrl, false);
     }
 
-    return audioState;
+    return audio;
   } catch (error) {
-    console.error("Audio system initialization failed:", error);
-    return audioState;
+    console.error("Audio initialization failed:", error);
+    return audio;
   }
 }
 
-/**
- * Internal visibility change handler
- */
-function handleVisibilityChangeInternal() {
-  const wasVisible = audioState.isVisible;
-  audioState.isVisible = !document.hidden;
-
-  if (!wasVisible && audioState.isVisible) {
-    // Page became visible
-    if (
-      audioState.wasPlayingBeforeHidden &&
-      audioState.enabled &&
-      audioState.userInteracted
-    ) {
-      // Resume playback
-      resumeAudioContext().then(() => {
-        if (!audioState.musicPlaying) {
-          playMusic(audioState.musicPausedAt, true);
-        }
-      });
-    }
-  } else if (wasVisible && !audioState.isVisible) {
-    // Page became hidden
-    audioState.wasPlayingBeforeHidden = audioState.musicPlaying;
-    if (audioState.musicPlaying) {
-      pauseMusic(true); // Immediately pause when hidden
-    }
-  }
-}
-
-/**
- * Add a song to the music playlist
- * @param {string} musicUrl - URL of the music to add
- * @returns {boolean} Success status
- */
 export function addMusic(musicUrl) {
-  if (audioState.musicPlayList.length >= MAX_PLAYLIST_LENGTH) {
-    return false;
-  }
-
-  audioState.musicPlayList.push(musicUrl);
+  if (audio.music.playlist.length >= MAX_PLAYLIST_LENGTH) return false;
+  audio.music.playlist.push(musicUrl);
   return true;
 }
 
-/**
- * Add sound effect to the sfx map
- * @param {string} name - Identifier for the sound effect
- * @param {string} sfxUrl - URL of the sound effect file
- * @returns {boolean} Success status
- */
 export function addSFX(name, sfxUrl) {
-  audioState.sfxMap.set(name, sfxUrl);
+  audio.sfx.set(name, sfxUrl);
   return true;
 }
 
-/**
- * Load background music
- * @param {string} musicUrl - URL of the music file
- * @param {boolean} [autoPlay=false] - Whether to auto-play after loading
- * @returns {Promise<boolean>} Promise resolving to success status
- */
 export async function loadMusic(musicUrl, autoPlay = false) {
-  if (!audioState.context) {
-    return Promise.resolve(false);
-  }
+  if (!audio.context) return false;
 
   try {
     const response = await fetch(musicUrl);
-    if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+
     const arrayBuffer = await response.arrayBuffer();
-    const buffer = await audioState.context.decodeAudioData(arrayBuffer);
-    audioState.musicBuffer = buffer;
+    const buffer = await audio.context.decodeAudioData(arrayBuffer);
 
-    // Reset paused position when loading new track
-    audioState.musicPausedAt = 0;
+    audio.music.buffer = buffer;
+    audio.music.pausedAt = 0;
 
-    // Only auto-play if requested AND audio is enabled AND user has interacted AND page is visible
-    if (
-      autoPlay &&
-      audioState.enabled &&
-      audioState.userInteracted &&
-      audioState.isVisible
-    ) {
-      await resumeAudioContext();
+    if (autoPlay && isReady()) {
+      await resumeContext();
       playMusic();
     }
     return true;
   } catch (error) {
-    console.error("Error loading background music:", error);
+    console.error("Error loading music:", error);
     return false;
   }
 }
 
-/**
- * Load a sound effect
- * @param {string} name - Identifier for the sound effect
- * @returns {Promise<boolean>} Promise resolving to success status
- */
 export async function loadSFX(name) {
-  if (!audioState.context || !audioState.sfxMap.has(name)) {
-    return Promise.resolve(false);
-  }
+  if (!audio.context || !audio.sfx.has(name)) return false;
 
-  const sfxUrl = audioState.sfxMap.get(name);
+  const sfxUrl = audio.sfx.get(name);
+  if (sfxUrl instanceof AudioBuffer) return true; // Already loaded
 
   try {
     const response = await fetch(sfxUrl);
-    if (!response.ok) {
-      throw new Error(`HTTP error! Status: ${response.status}`);
-    }
+    if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+
     const arrayBuffer = await response.arrayBuffer();
-    const buffer = await audioState.context.decodeAudioData(arrayBuffer);
-    audioState.sfxMap.set(name, buffer);
+    const buffer = await audio.context.decodeAudioData(arrayBuffer);
+    audio.sfx.set(name, buffer);
     return true;
   } catch (error) {
-    console.error(`Error loading sound effect ${name}:`, error);
+    console.error(`Error loading SFX ${name}:`, error);
     return false;
   }
 }
 
-/**
- * Play a sound effect
- * @param {string} name - Identifier for the sound effect
- * @param {number} [volume=1] - Volume modifier for this sound (0-1)
- * @returns {Promise<boolean>} Success status
- */
 export async function playSFX(name, volume = 1) {
-  if (
-    !audioState.context ||
-    !audioState.enabled ||
-    !audioState.sfxMap.has(name) ||
-    !audioState.isVisible
-  ) {
-    return false;
-  }
+  if (!isReady() || !audio.sfx.has(name)) return false;
 
-  if (!audioState.userInteracted) {
-    await waitForUserInteraction();
-  }
+  if (!audio.userInteracted) await waitForUserInteraction();
+  await resumeContext();
 
-  await resumeAudioContext();
-
-  const buffer = audioState.sfxMap.get(name);
+  let buffer = audio.sfx.get(name);
 
   if (!(buffer instanceof AudioBuffer)) {
     await loadSFX(name);
-    return false;
+    buffer = audio.sfx.get(name);
+    if (!(buffer instanceof AudioBuffer)) return false;
   }
 
-  const source = audioState.context.createBufferSource();
+  const source = audio.context.createBufferSource();
+  const gain = audio.context.createGain();
+
   source.buffer = buffer;
+  gain.gain.value = audio.volume * volume;
 
-  const gainNode = audioState.context.createGain();
-  gainNode.gain.value = audioState.volume * volume;
-
-  source.connect(gainNode);
-  gainNode.connect(audioState.sfxGainNode);
-
+  source.connect(gain);
+  gain.connect(audio.sfxGain);
   source.start(0);
+
   return true;
 }
 
-/**
- * Play background music
- * @param {number} [resumeFromPosition=0] - Position to resume from
- * @param {boolean} [immediate=false] - Whether to start immediately without fade-in
- * @returns {Promise<boolean>} Success status
- */
 export async function playMusic(resumeFromPosition = 0, immediate = false) {
-  // Don't play if page is hidden
-  if (!audioState.isVisible) {
-    return false;
-  }
-
-  // Skip if not ready or already playing
   if (
-    !audioState.context ||
-    !audioState.musicBuffer ||
-    audioState.musicPlaying ||
-    !audioState.enabled
+    !audio.visibility.isVisible ||
+    !audio.context ||
+    !audio.music.buffer ||
+    audio.music.playing ||
+    !audio.enabled
   ) {
     return false;
   }
 
-  if (!audioState.userInteracted) {
-    await waitForUserInteraction();
+  if (!audio.userInteracted) await waitForUserInteraction();
+  await resumeContext();
+
+  // Stop existing source
+  if (audio.music.source) {
+    stopSource(audio.music.source);
+    audio.music.source = null;
   }
 
-  await resumeAudioContext();
-
-  // Stop any existing source
-  if (audioState.musicSource) {
-    try {
-      audioState.musicSource.stop();
-      audioState.musicSource.disconnect();
-    } catch (e) {
-      // Source might already be stopped
-    }
-    audioState.musicSource = null;
-  }
-
-  // Create and connect source node
-  const source = audioState.context.createBufferSource();
-  source.buffer = audioState.musicBuffer;
+  const source = audio.context.createBufferSource();
+  source.buffer = audio.music.buffer;
   source.loop = true;
-  source.connect(audioState.musicGainNode);
+  source.connect(audio.musicGain);
 
-  // Use the stored paused position if resumeFromPosition is 0
-  const startPosition = resumeFromPosition || audioState.musicPausedAt;
+  const startPosition = resumeFromPosition || audio.music.pausedAt;
 
-  if (immediate) {
-    audioState.musicGainNode.gain.setValueAtTime(
-      audioState.volume,
-      audioState.context.currentTime
-    );
-  } else {
-    audioState.musicGainNode.gain.setValueAtTime(
-      0,
-      audioState.context.currentTime
-    );
-    audioState.musicGainNode.gain.linearRampToValueAtTime(
-      audioState.volume,
-      audioState.context.currentTime + 1
-    );
+  // Handle volume fade
+  setGainValue(audio.musicGain, immediate ? audio.volume : 0, true);
+  if (!immediate) {
+    setGainValue(audio.musicGain, audio.volume, false, 1);
   }
 
-  // Start playback
   source.start(0, startPosition);
 
   // Handle track ending
   source.addEventListener("ended", () => {
-    if (audioState.musicSource === source) {
-      audioState.musicPlaying = false;
-      audioState.musicSource = null;
+    if (audio.music.source === source) {
+      audio.music.playing = false;
+      audio.music.source = null;
       playNextTrack();
     }
   });
 
-  // Update state
-  audioState.musicSource = source;
-  audioState.musicStartTime = audioState.context.currentTime - startPosition;
-  audioState.musicPlaying = true;
+  audio.music.source = source;
+  audio.music.startTime = audio.context.currentTime - startPosition;
+  audio.music.playing = true;
 
   return true;
 }
 
-/**
- * Pause background music (true pause, can be resumed)
- * @param {boolean} [immediate=false] - Whether to pause immediately without fade-out
- * @returns {boolean} Success status
- */
 export function pauseMusic(immediate = false) {
-  if (!audioState.musicSource || !audioState.musicPlaying) {
-    return false;
+  if (!audio.music.source || !audio.music.playing) return false;
+
+  // Store position
+  if (audio.context && audio.music.buffer) {
+    const elapsed = audio.context.currentTime - audio.music.startTime;
+    audio.music.pausedAt = elapsed % audio.music.buffer.duration;
   }
 
-  // Store current position
-  if (audioState.context && audioState.musicBuffer) {
-    const elapsed = audioState.context.currentTime - audioState.musicStartTime;
-    audioState.musicPausedAt = elapsed % audioState.musicBuffer.duration;
-  }
-
-  // Update state first
-  audioState.musicPlaying = false;
+  audio.music.playing = false;
 
   if (immediate) {
-    // Stop immediately
-    try {
-      audioState.musicSource.stop();
-      audioState.musicSource.disconnect();
-    } catch (e) {
-      // Source might already be stopped
-    }
-    audioState.musicSource = null;
+    stopSource(audio.music.source);
+    audio.music.source = null;
   } else {
-    // Fade out
-    audioState.musicGainNode.gain.setValueAtTime(
-      audioState.musicGainNode.gain.value,
-      audioState.context.currentTime
-    );
-    audioState.musicGainNode.gain.linearRampToValueAtTime(
-      0,
-      audioState.context.currentTime + 0.5
-    );
-
-    const currentSource = audioState.musicSource;
+    setGainValue(audio.musicGain, 0, false, 0.5);
+    const currentSource = audio.music.source;
     setTimeout(() => {
-      if (currentSource === audioState.musicSource) {
-        try {
-          currentSource.stop();
-          currentSource.disconnect();
-        } catch (e) {
-          // Source might already be stopped
-        }
-        audioState.musicSource = null;
+      if (currentSource === audio.music.source) {
+        stopSource(currentSource);
+        audio.music.source = null;
       }
     }, 500);
   }
@@ -415,48 +306,22 @@ export function pauseMusic(immediate = false) {
   return true;
 }
 
-/**
- * Stop background music completely
- * @param {boolean} [immediate=false] - Whether to stop immediately without fade-out
- * @returns {boolean} Success status
- */
 export function stopMusic(immediate = false) {
-  if (!audioState.musicSource) {
-    return false;
-  }
+  if (!audio.music.source) return false;
 
-  // Reset position
-  audioState.musicPausedAt = 0;
-  audioState.musicPlaying = false;
+  audio.music.pausedAt = 0;
+  audio.music.playing = false;
 
   if (immediate) {
-    try {
-      audioState.musicSource.stop();
-      audioState.musicSource.disconnect();
-    } catch (e) {
-      // Source might already be stopped
-    }
-    audioState.musicSource = null;
+    stopSource(audio.music.source);
+    audio.music.source = null;
   } else {
-    audioState.musicGainNode.gain.setValueAtTime(
-      audioState.musicGainNode.gain.value,
-      audioState.context.currentTime
-    );
-    audioState.musicGainNode.gain.linearRampToValueAtTime(
-      0,
-      audioState.context.currentTime + 0.5
-    );
-
-    const currentSource = audioState.musicSource;
+    setGainValue(audio.musicGain, 0, false, 0.5);
+    const currentSource = audio.music.source;
     setTimeout(() => {
-      if (currentSource === audioState.musicSource) {
-        try {
-          currentSource.stop();
-          currentSource.disconnect();
-        } catch (e) {
-          // Source might already be stopped
-        }
-        audioState.musicSource = null;
+      if (currentSource === audio.music.source) {
+        stopSource(currentSource);
+        audio.music.source = null;
       }
     }, 500);
   }
@@ -464,239 +329,86 @@ export function stopMusic(immediate = false) {
   return true;
 }
 
-/**
- * Toggle background music on/off
- * @param {boolean} [immediate=false] - Whether to toggle immediately without fades
- * @returns {Promise<boolean>} New audio enabled state
- */
 export async function toggleAudio(immediate = false) {
-  audioState.enabled = !audioState.enabled;
+  audio.enabled = !audio.enabled;
 
-  if (audioState.enabled) {
-    if (!audioState.initialized) {
+  if (audio.enabled) {
+    if (!audio.initialized) {
       await initAudio();
-      return audioState.enabled;
+      return audio.enabled;
     }
 
-    if (!audioState.userInteracted) {
-      await waitForUserInteraction();
-    }
-
-    await resumeAudioContext();
+    if (!audio.userInteracted) await waitForUserInteraction();
+    await resumeContext();
 
     // Update gain nodes
-    const targetVolume = audioState.volume;
-    if (audioState.musicGainNode) {
-      if (immediate) {
-        audioState.musicGainNode.gain.setValueAtTime(
-          targetVolume,
-          audioState.context.currentTime
-        );
-      } else {
-        audioState.musicGainNode.gain.setTargetAtTime(
-          targetVolume,
-          audioState.context.currentTime,
-          0.1
-        );
-      }
-    }
-
-    if (audioState.sfxGainNode) {
-      if (immediate) {
-        audioState.sfxGainNode.gain.setValueAtTime(
-          targetVolume,
-          audioState.context.currentTime
-        );
-      } else {
-        audioState.sfxGainNode.gain.setTargetAtTime(
-          targetVolume,
-          audioState.context.currentTime,
-          0.1
-        );
-      }
-    }
-  } else {
-    // Audio is now disabled - pause current playback
-    if (audioState.musicPlaying) {
-      pauseMusic(immediate);
-    }
+    setGainValue(audio.musicGain, audio.volume, immediate, 0.1);
+    setGainValue(audio.sfxGain, audio.volume, immediate, 0.1);
+  } else if (audio.music.playing) {
+    pauseMusic(immediate);
   }
 
-  return audioState.enabled;
+  return audio.enabled;
 }
 
-/**
- * Update audio volume
- * @param {number} volume - Volume level between 0 and 1
- * @param {boolean} [immediate=false] - Whether to change volume immediately
- * @returns {number} New volume level
- */
 export function setVolume(volume, immediate = false) {
-  // Clamp volume between 0 and 1
-  audioState.volume = Math.max(0, Math.min(1, volume));
+  audio.volume = clamp(volume, 0, 1);
 
-  if (!audioState.initialized || !audioState.enabled) {
-    return audioState.volume;
+  if (audio.initialized && audio.enabled) {
+    setGainValue(audio.musicGain, audio.volume, immediate, 0.1);
+    setGainValue(audio.sfxGain, audio.volume, immediate, 0.1);
   }
 
-  try {
-    const time = audioState.context.currentTime;
-
-    if (immediate) {
-      if (audioState.musicGainNode) {
-        audioState.musicGainNode.gain.setValueAtTime(audioState.volume, time);
-      }
-      if (audioState.sfxGainNode) {
-        audioState.sfxGainNode.gain.setValueAtTime(audioState.volume, time);
-      }
-    } else {
-      if (audioState.musicGainNode) {
-        audioState.musicGainNode.gain.setTargetAtTime(
-          audioState.volume,
-          time,
-          0.1
-        );
-      }
-      if (audioState.sfxGainNode) {
-        audioState.sfxGainNode.gain.setTargetAtTime(
-          audioState.volume,
-          time,
-          0.1
-        );
-      }
-    }
-  } catch (error) {
-    console.error("Error updating audio volume:", error);
-  }
-
-  return audioState.volume;
+  return audio.volume;
 }
 
-/**
- * Get the current volume level
- * @returns {number} Current volume (0-1)
- */
-export function getVolume() {
-  return audioState.volume;
-}
+// Simple getters
+export const getVolume = () => audio.volume;
+export const isAudioEnabled = () => audio.enabled;
+export const isMusicPlaying = () => audio.music.playing;
+export const hasUserInteracted = () => audio.userInteracted;
+export const getPlaylist = () => [...audio.music.playlist];
+export const getCurrentTrackIndex = () => audio.music.currentIndex;
 
-/**
- * Check if audio is enabled
- * @returns {boolean} True if audio is enabled
- */
-export function isAudioEnabled() {
-  return audioState.enabled;
-}
-
-/**
- * Check if music is currently playing
- * @returns {boolean} True if music is playing
- */
-export function isMusicPlaying() {
-  return audioState.musicPlaying;
-}
-
-/**
- * Check if user has interacted with the page
- * @returns {boolean} True if user has interacted
- */
-export function hasUserInteracted() {
-  return audioState.userInteracted;
-}
-
-/**
- * Manually set user interaction state
- * @param {boolean} interacted - Whether user has interacted
- */
 export function setUserInteracted(interacted) {
-  audioState.userInteracted = interacted;
+  audio.userInteracted = interacted;
 }
 
-/**
- * Handle visibility change events (deprecated - handled internally now)
- * @param {boolean} isVisible - Whether the page is visible
- * @param {boolean} isGameView - Whether game view is active
- * @returns {Promise<boolean>} Success status
- */
-export async function handleVisibilityChange(isVisible, isGameView) {
-  // This is now handled internally, but kept for compatibility
-  return true;
-}
-
-/**
- * Get the current playlist
- * @returns {Array<string>} Array of music URLs
- */
-export function getPlaylist() {
-  return [...audioState.musicPlayList];
-}
-
-/**
- * Get current track index
- * @returns {number} Current track index
- */
-export function getCurrentTrackIndex() {
-  return audioState.currentTrackIndex || 0;
-}
-
-/**
- * Set current track index
- * @param {number} index - Track index to set
- * @returns {boolean} Success status
- */
 export function setCurrentTrackIndex(index) {
-  if (index >= 0 && index < audioState.musicPlayList.length) {
-    audioState.currentTrackIndex = index;
+  if (index >= 0 && index < audio.music.playlist.length) {
+    audio.music.currentIndex = index;
     return true;
   }
   return false;
 }
 
-/**
- * Get current playback position in seconds
- * @returns {number} Current position in seconds
- */
 export function getCurrentPosition() {
-  if (!audioState.context || !audioState.musicBuffer) {
-    return audioState.musicPausedAt || 0;
+  if (!audio.context || !audio.music.buffer) {
+    return audio.music.pausedAt || 0;
   }
 
-  if (audioState.musicPlaying && audioState.musicSource) {
-    const elapsed = audioState.context.currentTime - audioState.musicStartTime;
-    return elapsed % audioState.musicBuffer.duration;
+  if (audio.music.playing && audio.music.source) {
+    const elapsed = audio.context.currentTime - audio.music.startTime;
+    return elapsed % audio.music.buffer.duration;
   }
 
-  return audioState.musicPausedAt || 0;
+  return audio.music.pausedAt || 0;
 }
 
-/**
- * Get track duration in seconds
- * @returns {number} Duration in seconds
- */
-export function getDuration() {
-  return audioState.musicBuffer ? audioState.musicBuffer.duration : 0;
-}
+export const getDuration = () => audio.music.buffer?.duration || 0;
 
-/**
- * Seek to specific position in current track
- * @param {number} position - Position in seconds
- * @returns {Promise<boolean>} Success status
- */
 export async function seekTo(position) {
   if (
-    !audioState.musicBuffer ||
+    !audio.music.buffer ||
     position < 0 ||
-    position > audioState.musicBuffer.duration
+    position > audio.music.buffer.duration
   ) {
     return false;
   }
 
-  const wasPlaying = audioState.musicPlaying;
+  const wasPlaying = audio.music.playing;
+  audio.music.pausedAt = position;
 
-  // Always update the paused position
-  audioState.musicPausedAt = position;
-
-  // If currently playing, restart from new position
   if (wasPlaying) {
     pauseMusic(true);
     await playMusic(position, true);
@@ -705,253 +417,182 @@ export async function seekTo(position) {
   return true;
 }
 
-/**
- * Load and play a specific track from the playlist
- * @param {number} index - Index of track to play
- * @returns {Promise<boolean>} Success status
- */
 export async function loadAndPlayTrack(index) {
-  if (index < 0 || index >= audioState.musicPlayList.length) {
-    return false;
-  }
+  if (index < 0 || index >= audio.music.playlist.length) return false;
 
-  // Stop current music
-  if (audioState.musicPlaying) {
-    stopMusic(true);
-  }
+  if (audio.music.playing) stopMusic(true);
 
-  // Set new track index
-  audioState.currentTrackIndex = index;
-  const trackUrl = audioState.musicPlayList[index];
+  audio.music.currentIndex = index;
+  const trackUrl = audio.music.playlist[index];
 
-  // Load new track
   const loaded = await loadMusic(trackUrl, false);
-  if (!loaded) {
-    return false;
-  }
+  if (!loaded) return false;
 
-  // Play if audio is enabled and user has interacted and page is visible
-  if (audioState.enabled && audioState.userInteracted && audioState.isVisible) {
-    await resumeAudioContext();
+  if (isReady()) {
+    await resumeContext();
     return await playMusic(0, true);
   }
 
   return true;
 }
 
-/**
- * Play next track in playlist
- * @returns {Promise<boolean>} Success status
- */
 export async function playNextTrack() {
-  const currentIndex = audioState.currentTrackIndex || 0;
   const nextIndex =
-    currentIndex < audioState.musicPlayList.length - 1 ? currentIndex + 1 : 0;
+    audio.music.currentIndex < audio.music.playlist.length - 1
+      ? audio.music.currentIndex + 1
+      : 0;
   return await loadAndPlayTrack(nextIndex);
 }
 
-/**
- * Play previous track in playlist
- * @returns {Promise<boolean>} Success status
- */
 export async function playPreviousTrack() {
-  const currentIndex = audioState.currentTrackIndex || 0;
   const prevIndex =
-    currentIndex > 0 ? currentIndex - 1 : audioState.musicPlayList.length - 1;
+    audio.music.currentIndex > 0
+      ? audio.music.currentIndex - 1
+      : audio.music.playlist.length - 1;
   return await loadAndPlayTrack(prevIndex);
 }
 
-/**
- * Clear the entire playlist
- * @returns {boolean} Success status
- */
 export function clearPlaylist() {
-  if (audioState.musicPlaying) {
-    stopMusic(true);
-  }
+  if (audio.music.playing) stopMusic(true);
 
-  audioState.musicPlayList = [];
-  audioState.currentTrackIndex = 0;
-  audioState.musicBuffer = null;
+  audio.music.playlist = [];
+  audio.music.currentIndex = 0;
+  audio.music.buffer = null;
 
   return true;
 }
 
-/**
- * Remove a track from the playlist
- * @param {number} index - Index of track to remove
- * @returns {boolean} Success status
- */
 export function removeFromPlaylist(index) {
-  if (index < 0 || index >= audioState.musicPlayList.length) {
-    return false;
-  }
+  if (index < 0 || index >= audio.music.playlist.length) return false;
 
-  const currentIndex = audioState.currentTrackIndex || 0;
+  const currentIndex = audio.music.currentIndex;
 
   if (index === currentIndex) {
     stopMusic(true);
-    audioState.musicBuffer = null;
+    audio.music.buffer = null;
   }
 
-  audioState.musicPlayList.splice(index, 1);
+  audio.music.playlist.splice(index, 1);
 
   if (index < currentIndex) {
-    audioState.currentTrackIndex = currentIndex - 1;
-  } else if (index === currentIndex && audioState.musicPlayList.length > 0) {
-    audioState.currentTrackIndex = Math.min(
+    audio.music.currentIndex = currentIndex - 1;
+  } else if (index === currentIndex && audio.music.playlist.length > 0) {
+    audio.music.currentIndex = Math.min(
       currentIndex,
-      audioState.musicPlayList.length - 1
+      audio.music.playlist.length - 1
     );
-  } else if (audioState.musicPlayList.length === 0) {
-    audioState.currentTrackIndex = 0;
+  } else if (audio.music.playlist.length === 0) {
+    audio.music.currentIndex = 0;
   }
 
   return true;
 }
 
-/**
- * Shuffle the playlist
- * @returns {boolean} Success status
- */
 export function shufflePlaylist() {
-  if (audioState.musicPlayList.length <= 1) {
-    return false;
-  }
+  if (audio.music.playlist.length <= 1) return false;
 
-  const currentTrack =
-    audioState.musicPlayList[audioState.currentTrackIndex || 0];
+  const currentTrack = audio.music.playlist[audio.music.currentIndex];
 
-  for (let i = audioState.musicPlayList.length - 1; i > 0; i--) {
+  for (let i = audio.music.playlist.length - 1; i > 0; i--) {
     const j = Math.floor(random() * (i + 1));
-    [audioState.musicPlayList[i], audioState.musicPlayList[j]] = [
-      audioState.musicPlayList[j],
-      audioState.musicPlayList[i],
+    [audio.music.playlist[i], audio.music.playlist[j]] = [
+      audio.music.playlist[j],
+      audio.music.playlist[i],
     ];
   }
 
-  audioState.currentTrackIndex = audioState.musicPlayList.indexOf(currentTrack);
-
+  audio.music.currentIndex = audio.music.playlist.indexOf(currentTrack);
   return true;
 }
 
-/**
- * Restore audio state after page visibility changes
- * @param {boolean} [immediate=true] - Whether to restore immediately without fades
- * @returns {Promise<boolean>} Success status
- */
 export async function restoreAudioState(immediate = true) {
-  if (!audioState.initialized || !audioState.isVisible) {
-    return false;
-  }
+  if (!audio.initialized || !audio.visibility.isVisible) return false;
 
-  if (audioState.enabled) {
-    if (!audioState.userInteracted) {
-      await waitForUserInteraction();
+  if (audio.enabled) {
+    if (!audio.userInteracted) await waitForUserInteraction();
+    await resumeContext();
+
+    if (!audio.music.playing && audio.music.buffer) {
+      await playMusic(audio.music.pausedAt, immediate);
     }
 
-    await resumeAudioContext();
-
-    if (!audioState.musicPlaying && audioState.musicBuffer) {
-      await playMusic(audioState.musicPausedAt, immediate);
-    }
-
-    const targetVolume = audioState.volume;
-    if (immediate) {
-      if (audioState.musicGainNode) {
-        audioState.musicGainNode.gain.setValueAtTime(
-          targetVolume,
-          audioState.context.currentTime
-        );
-      }
-      if (audioState.sfxGainNode) {
-        audioState.sfxGainNode.gain.setValueAtTime(
-          targetVolume,
-          audioState.context.currentTime
-        );
-      }
-    } else {
-      if (audioState.musicGainNode) {
-        audioState.musicGainNode.gain.setTargetAtTime(
-          targetVolume,
-          audioState.context.currentTime,
-          0.1
-        );
-      }
-      if (audioState.sfxGainNode) {
-        audioState.sfxGainNode.gain.setTargetAtTime(
-          targetVolume,
-          audioState.context.currentTime,
-          0.1
-        );
-      }
-    }
+    setGainValue(audio.musicGain, audio.volume, immediate, 0.1);
+    setGainValue(audio.sfxGain, audio.volume, immediate, 0.1);
   }
 
   return true;
 }
 
 export function dispose() {
-  // Remove visibility listener
   document.removeEventListener(
     "visibilitychange",
-    handleVisibilityChangeInternal
+    handleDocumentVisibilityChange
   );
 
-  // Stop audio
-  if (audioState.musicSource && audioState.musicPlaying) {
-    try {
-      audioState.musicSource.stop();
-      audioState.musicSource.disconnect();
-    } catch (e) {
-      // Source might already be stopped
-    }
+  if (audio.music.source && audio.music.playing) {
+    stopSource(audio.music.source);
   }
 
-  // Disconnect nodes
-  if (audioState.musicGainNode) {
-    audioState.musicGainNode.disconnect();
-  }
+  audio.musicGain?.disconnect();
+  audio.sfxGain?.disconnect();
+  audio.context?.close();
 
-  if (audioState.sfxGainNode) {
-    audioState.sfxGainNode.disconnect();
-  }
-
-  // Close context
-  if (audioState.context) {
-    audioState.context.close();
-  }
-
-  // Save settings
-  const wasEnabled = audioState.enabled;
-  const lastVolume = audioState.volume;
-  const hadInteraction = audioState.userInteracted;
-  const currentIndex = audioState.currentTrackIndex || 0;
-  const savedPlaylist = [...audioState.musicPlayList];
+  // Preserve settings
+  const settings = {
+    enabled: audio.enabled,
+    volume: audio.volume,
+    userInteracted: audio.userInteracted,
+    currentIndex: audio.music.currentIndex,
+    playlist: [...audio.music.playlist],
+  };
 
   // Reset state
-  audioState = {
+  Object.assign(audio, {
     context: null,
-    enabled: wasEnabled,
-    volume: lastVolume,
     initialized: false,
-    userInteracted: hadInteraction,
+    musicGain: null,
+    sfxGain: null,
+    music: {
+      source: null,
+      buffer: null,
+      playing: false,
+      startTime: 0,
+      pausedAt: 0,
+      playlist: settings.playlist,
+      currentIndex: settings.currentIndex,
+    },
+    sfx: new Map(),
+    visibility: {
+      isVisible: true,
+      wasPlayingBeforeHidden: false,
+    },
+    ...settings,
+  });
 
-    musicGainNode: null,
-    musicPlaying: false,
-    musicStartTime: 0,
-    musicPausedAt: 0,
-    musicSource: null,
-    musicBuffer: null,
-    musicPlayList: savedPlaylist,
-    currentTrackIndex: currentIndex,
+  return true;
+}
 
-    sfxGainNode: null,
-    sfxMap: new Map(),
+// Public API compatibility - other scripts may call this
+export async function handleVisibilityChange(isVisible, isGameView) {
+  // Update our internal visibility state to match what external scripts expect
+  const wasVisible = audio.visibility.isVisible;
+  audio.visibility.isVisible = isVisible;
 
-    isVisible: true,
-    wasPlayingBeforeHidden: false,
-  };
+  if (!wasVisible && isVisible) {
+    // Page/game became visible - restore audio if needed
+    if (audio.visibility.wasPlayingBeforeHidden && isReady()) {
+      await resumeContext();
+      if (!audio.music.playing) {
+        await playMusic(audio.music.pausedAt, true);
+      }
+    }
+  } else if (wasVisible && !isVisible) {
+    // Page/game became hidden - pause audio
+    audio.visibility.wasPlayingBeforeHidden = audio.music.playing;
+    if (audio.music.playing) {
+      pauseMusic(true);
+    }
+  }
 
   return true;
 }

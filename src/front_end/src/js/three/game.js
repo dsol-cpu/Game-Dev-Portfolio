@@ -5,9 +5,11 @@ import {
   MeshStandardMaterial,
   PerspectiveCamera,
   SphereGeometry,
+  InstancedMesh,
+  Matrix4,
+  Vector3,
 } from "../extern/three/three.module.min.js";
 import { handleUserInteraction } from "../user-interaction.js";
-import { debounce } from "../utils/helper.js";
 import { initCamController, updateCamera } from "./camera-follow.js";
 import { disposeGameUI, initGameUI, updateGameUI } from "./game-ui.js";
 import {
@@ -27,9 +29,6 @@ import {
   dispose as disposeAudio,
 } from "./audio.js";
 import {
-  isKeyPressed,
-  areKeysPressed,
-  isAnyKeyPressed,
   getMovementVector,
   isMovementActive,
   isHorizontalMovementActive,
@@ -42,30 +41,33 @@ import {
   getInputState,
   dispose as disposeInputManager,
 } from "./input-manager.js";
-// Import the enhanced game controls UI
-import { logDebugInfo, updateAllKeyStates } from "./game-controls-ui.js";
+import { updateAllKeyStates } from "./game-controls-ui.js";
+import { TWO_PI } from "../constants/constants.js";
+import { resetExpandedCards } from "./project-cards.js";
+import { ISLAND_DATA } from "../data/islands.js";
 
-const COLORS = {
+const COLORS = Object.freeze({
   clouds: 0xffffff,
   islandSide: 0x8b4513,
   islandTop: 0x228b22,
   shipBody: 0x3366cc,
   shipAccent: 0x66ccff,
-};
-import { TWO_PI } from "../constants/constants.js";
-import { resetExpandedCards } from "./project-cards.js";
-import { ISLAND_DATA } from "../data/islands.js";
+});
 
-const VIEW_MODES = { SCROLL: "scroll", GAME: "game" };
-const TRANSITION_DURATION = 500; // ms for view transition
+const VIEW_MODES = Object.freeze({ SCROLL: "scroll", GAME: "game" });
+const TRANSITION_DURATION = 500;
 
-// Game state and references - All consolidated for faster access
 const gameState = {
   viewMode: VIEW_MODES.SCROLL,
   totalTime: 0,
   isInitialized: false,
   isTransitioning: false,
+  lastFrameTime: 0,
+  frameCount: 0,
 };
+
+const tempMatrix = new Matrix4();
+const tempVector = new Vector3();
 
 // Game entities and references
 let thirdPersonCamera;
@@ -77,51 +79,85 @@ let cameraFollowActive = true;
 let gameWorker = null;
 let workerBusy = false;
 
+let sharedGeometries = null;
+let sharedMaterials = null;
+
+const objectPools = {
+  vectors: [],
+  matrices: [],
+};
+
+function getPooledVector() {
+  return objectPools.vectors.pop() || new Vector3();
+}
+
+function returnPooledVector(vector) {
+  vector.set(0, 0, 0);
+  objectPools.vectors.push(vector);
+}
+
+function getPooledMatrix() {
+  return objectPools.matrices.pop() || new Matrix4();
+}
+
+function returnPooledMatrix(matrix) {
+  matrix.identity();
+  objectPools.matrices.push(matrix);
+}
+
 export const isGameView = () => gameState.viewMode === VIEW_MODES.GAME;
 
 function initIslandBobbing(islands) {
-  // Pre-allocate animation data for all islands
-  islands.forEach(() =>
+  islandAnimationData.length = 0; // Clear existing data
+
+  for (let i = 0; i < islands.length; i++) {
+    const island = islands[i];
     islandAnimationData.push({
-      initialY: islands[islandAnimationData.length].position.y,
+      initialY: island.position.y,
       amplitude: 0.2 + random() * 0.15,
       frequency: 0.5 + random() * 0.3,
       offset: random() * TWO_PI,
-    })
-  );
-}
-
-const ANGLE_COUNT = 628;
-const sinCache = new Float32Array(ANGLE_COUNT); // Cache for 0 to 2π with 0.01 precision
-function initSinCache() {
-  for (let i = 0; i < ANGLE_COUNT; i++) {
-    sinCache[i] = Math.sin(i * 0.01);
+      currentY: island.position.y,
+      targetY: island.position.y,
+    });
   }
 }
 
-// Get sin value from cache with linear interpolation for smooth results
+const ANGLE_COUNT = 1256; // Double precision
+const sinCache = new Float32Array(ANGLE_COUNT);
+const cosCache = new Float32Array(ANGLE_COUNT);
+
+function initTrigCache() {
+  const step = TWO_PI / ANGLE_COUNT;
+  for (let i = 0; i < ANGLE_COUNT; i++) {
+    const angle = i * step;
+    sinCache[i] = Math.sin(angle);
+    cosCache[i] = Math.cos(angle);
+  }
+}
+
 function fastSin(x) {
-  const wrappedX = ((x % TWO_PI) + TWO_PI) % TWO_PI;
-  const index = wrappedX * 100;
+  const normalized = ((x % TWO_PI) + TWO_PI) % TWO_PI;
+  const index = (normalized / TWO_PI) * ANGLE_COUNT;
   const lowIndex = Math.floor(index) % ANGLE_COUNT;
   const highIndex = (lowIndex + 1) % ANGLE_COUNT;
   const fraction = index - Math.floor(index);
-  return sinCache[lowIndex] * (1 - fraction) + sinCache[highIndex] * fraction;
+
+  return (
+    sinCache[lowIndex] + (sinCache[highIndex] - sinCache[lowIndex]) * fraction
+  );
 }
 
 export function updateIslandBobbing(deltaTime) {
   gameState.totalTime += deltaTime;
 
-  // Always use worker when available
+  // Use worker when available and not busy
   if (gameWorker && !workerBusy) {
     workerBusy = true;
     gameWorker.postMessage({
       type: "calculateIslandAnimations",
       data: {
-        islands: islands.map((island, i) => ({
-          currentY: island.position.y,
-          animationData: islandAnimationData[i],
-        })),
+        animationData: islandAnimationData,
         totalTime: gameState.totalTime,
         deltaTime,
       },
@@ -129,10 +165,14 @@ export function updateIslandBobbing(deltaTime) {
     return;
   }
 
-  // Fallback to main thread calculation
-  const smoothingFactor = 0.05 * Math.min(1, deltaTime * 60);
+  const smoothingFactor = Math.min(0.1, 0.05 * deltaTime * 60);
 
-  for (let i = 0; i < islands.length; i++) {
+  // Process islands in chunks to avoid frame drops
+  const chunkSize = Math.ceil(islands.length / 3);
+  const startIndex = (gameState.frameCount % 3) * chunkSize;
+  const endIndex = Math.min(startIndex + chunkSize, islands.length);
+
+  for (let i = startIndex; i < endIndex; i++) {
     const island = islands[i];
     const data = islandAnimationData[i];
     if (!data) continue;
@@ -142,90 +182,125 @@ export function updateIslandBobbing(deltaTime) {
       fastSin(gameState.totalTime * data.frequency + data.offset) *
         data.amplitude;
 
+    // Use lerp for smoother animation
     island.position.y += (newY - island.position.y) * smoothingFactor;
   }
+
+  gameState.frameCount++;
+}
+
+function createSharedResources() {
+  if (sharedGeometries && sharedMaterials) return;
+
+  sharedGeometries = {
+    cloud: new SphereGeometry(1, 7, 7),
+    islandBase: new CylinderGeometry(2, 1.5, 2, 8),
+    islandTop: new CylinderGeometry(2, 2, 0.5, 8),
+  };
+
+  sharedMaterials = {
+    cloud: new MeshStandardMaterial({
+      color: COLORS.clouds,
+      flatShading: true,
+      transparent: true,
+      opacity: 0.9,
+    }),
+    islandBase: new MeshStandardMaterial({
+      color: COLORS.islandSide,
+      flatShading: true,
+    }),
+    islandTop: new MeshStandardMaterial({
+      color: COLORS.islandTop,
+      flatShading: true,
+    }),
+  };
 }
 
 export async function initGameScene() {
   gameState.totalTime = 0;
+  gameState.frameCount = 0;
   const gameScene = getScene();
 
-  // Create reusable geometries and materials for performance
-  const cloudGeometry = new SphereGeometry(1, 7, 7);
-  const cloudMaterial = new MeshStandardMaterial({
-    color: COLORS.clouds,
-    flatShading: true,
-    transparent: true,
-    opacity: 0.9,
-  });
+  createSharedResources();
 
-  const islandBaseGeometry = new CylinderGeometry(2, 1.5, 2, 8);
-  const islandBaseMaterial = new MeshStandardMaterial({
-    color: COLORS.islandSide,
-    flatShading: true,
-  });
+  const cloudCount = 8;
+  const cloudInstancedMesh = new InstancedMesh(
+    sharedGeometries.cloud,
+    sharedMaterials.cloud,
+    cloudCount
+  );
 
-  const islandTopGeometry = new CylinderGeometry(2, 2, 0.5, 8);
-  const islandTopMaterial = new MeshStandardMaterial({
-    color: COLORS.islandTop,
-    flatShading: true,
-  });
-
-  // Create islands - batch process for performance
-  for (let i = 0; i < ISLAND_DATA.length; i++) {
-    const { position, section, name } = ISLAND_DATA[i];
-    const islandGroup = new Group();
-    const baseSize = 2 + random() * 0.5;
-    const topSize = 2 + random() * 0.5;
-
-    // Create base and top meshes
-    const base = new Mesh(islandBaseGeometry.clone(), islandBaseMaterial);
-    const top = new Mesh(islandTopGeometry.clone(), islandTopMaterial);
-
-    // Configure meshes
-    base.scale.set(baseSize / 2, 1, baseSize / 2);
-    top.scale.set(topSize / 2, 1, topSize / 2);
-    top.position.y = 1;
-
-    // Assemble and position island
-    islandGroup.add(base, top);
-    islandGroup.position.copy(position);
-    islandGroup.userData = { type: section, name };
-
-    // Add to scene and tracking array
-    gameScene.add(islandGroup);
-    islands.push(islandGroup);
-  }
-
-  // Create clouds - batch process
-  for (let i = 0; i < 8; i++) {
-    const cloud = new Mesh(cloudGeometry.clone(), cloudMaterial);
+  // Position clouds using instanced rendering
+  for (let i = 0; i < cloudCount; i++) {
     const scale = 0.8 + random() * 1.5;
-
-    cloud.position.set(
-      random() * -0.5,
-      5 + random() * 8,
-      (random() * 1000 - 0.5) * 40
+    tempMatrix.compose(
+      tempVector.set(
+        random() * -0.5,
+        5 + random() * 8,
+        (random() * 1000 - 0.5) * 40
+      ),
+      { x: 0, y: 0, z: 0, w: 1 }, // quaternion
+      { x: scale, y: scale * 0.6, z: scale } // scale
     );
-    cloud.scale.set(scale, scale * 0.6, scale);
-    gameScene.add(cloud);
+    cloudInstancedMesh.setMatrixAt(i, tempMatrix);
   }
+  cloudInstancedMesh.instanceMatrix.needsUpdate = true;
+  gameScene.add(cloudInstancedMesh);
+
+  islands.length = 0; // Clear existing islands
+
+  const islandPromises = ISLAND_DATA.map(
+    async ({ position, section, name }) => {
+      const islandGroup = new Group();
+      const baseSize = 2 + random() * 0.5;
+      const topSize = 2 + random() * 0.5;
+
+      const base = new Mesh(
+        sharedGeometries.islandBase,
+        sharedMaterials.islandBase
+      );
+      const top = new Mesh(
+        sharedGeometries.islandTop,
+        sharedMaterials.islandTop
+      );
+
+      // Configure meshes
+      base.scale.set(baseSize / 2, 1, baseSize / 2);
+      top.scale.set(topSize / 2, 1, topSize / 2);
+      top.position.y = 1;
+
+      islandGroup.add(base, top);
+      islandGroup.position.copy(position);
+      islandGroup.userData = { type: section, name };
+
+      return islandGroup;
+    }
+  );
+
+  // Wait for all islands to be created, then add to scene
+  const createdIslands = await Promise.all(islandPromises);
+  createdIslands.forEach((island) => {
+    gameScene.add(island);
+    islands.push(island);
+  });
 
   // Create player entity
   playerEntity = await createPlayerModel();
 
   // Position player at home island
   const homeIsland = ISLAND_DATA.find(({ section }) => section === "home");
-  playerEntity.position.set(
-    homeIsland?.position.x || 0,
-    (homeIsland?.position.y || 0) + 2,
-    homeIsland?.position.z || 0
-  );
+  if (homeIsland) {
+    playerEntity.position.set(
+      homeIsland.position.x,
+      homeIsland.position.y + 2,
+      homeIsland.position.z
+    );
+  }
 
   gameScene.add(playerEntity);
 
   // Initialize systems
-  initSinCache();
+  initTrigCache();
   initIslandBobbing(islands);
   initPlayerControls();
 
@@ -247,9 +322,14 @@ export async function initGameScene() {
   cameraIndex = registerCamera(thirdPersonCamera, gameCanvasContext);
 }
 
+let lastPlayerUpdate = 0;
+const PLAYER_UPDATE_INTERVAL = 16; // ~60fps
+
 export function updateGameLoop(deltaTime) {
-  // Update player if exists
-  if (playerEntity) {
+  const now = performance.now();
+
+  // Update player at controlled intervals
+  if (playerEntity && now - lastPlayerUpdate > PLAYER_UPDATE_INTERVAL) {
     playerEntity.visible = true;
 
     runFixedUpdates((fixedDeltaTime) => {
@@ -257,15 +337,15 @@ export function updateGameLoop(deltaTime) {
       updateIslandBobbing(fixedDeltaTime);
     });
 
-    // Get current player state for UI update
+    // Cache player state to avoid recalculation
     const playerState = {
       position: playerEntity.position,
       direction: playerEntity.userData?.direction || "N",
       model: playerEntity,
     };
 
-    // Update game UI with player state
     updateGameUI(playerState);
+    lastPlayerUpdate = now;
   }
 
   // Update camera if following player
@@ -274,8 +354,30 @@ export function updateGameLoop(deltaTime) {
   }
 }
 
-export function toggleGameView(elements) {
-  const { body, viewToggleBtn, gameViewContainer, sidebar } = elements;
+let cachedElements = null;
+
+function getCachedElements() {
+  if (!cachedElements) {
+    cachedElements = {
+      body: document.body,
+      viewToggleBtn: document.getElementById("view-toggle-btn"),
+      gameViewContainer: document.getElementById("game-view-container"),
+      sidebar: document.querySelector(".sidebar"),
+      mainGameCanvas: document.getElementById("main-game-canvas"),
+      viewLabel: null, // Will be set when needed
+    };
+
+    if (cachedElements.viewToggleBtn) {
+      cachedElements.viewLabel =
+        cachedElements.viewToggleBtn.querySelector(".view-label");
+    }
+  }
+  return cachedElements;
+}
+
+export function toggleGameView(elements = null) {
+  const els = elements || getCachedElements();
+  const { body, viewToggleBtn, gameViewContainer, sidebar, viewLabel } = els;
 
   // Validate required elements
   if (!body || !viewToggleBtn || !gameViewContainer || !sidebar) {
@@ -283,7 +385,6 @@ export function toggleGameView(elements) {
     return false;
   }
 
-  const viewLabel = viewToggleBtn.querySelector(".view-label");
   if (!viewLabel) {
     console.error("Toggle game view failed: view-label not found");
     return false;
@@ -293,15 +394,11 @@ export function toggleGameView(elements) {
   if (gameState.isTransitioning) return isGameView();
 
   gameState.isTransitioning = true;
-
-  // Determine new view mode
   const newViewMode = isGameView() ? VIEW_MODES.SCROLL : VIEW_MODES.GAME;
-  console.log("THE GAME MODE IS ", isGameView());
   const switchingToGameView = newViewMode === VIEW_MODES.GAME;
 
   // Reset any expanded cards when switching to game view
   if (switchingToGameView) {
-    // Reset expanded cards before switching views
     resetExpandedCards();
   }
 
@@ -309,11 +406,8 @@ export function toggleGameView(elements) {
   viewLabel.textContent = switchingToGameView ? "Scroll View" : "Game View";
 
   if (switchingToGameView) {
-    // Calculate sidebar width
     const sidebarWidth = sidebar.offsetWidth;
-
-    // Apply all styles at once for better performance
-    Object.assign(gameViewContainer.style, {
+    const styleUpdates = {
       position: "fixed",
       top: "0",
       left: sidebarWidth + "px",
@@ -321,13 +415,14 @@ export function toggleGameView(elements) {
       height: "100%",
       zIndex: "100",
       display: "block",
-      opacity: "0", // Start transparent
-    });
+      opacity: "0",
+    };
 
-    updateGameViewSize(elements);
+    Object.assign(gameViewContainer.style, styleUpdates);
+    updateGameViewSize(els);
 
-    // Use setTimeout to batch DOM operations
-    setTimeout(() => {
+    // Use requestAnimationFrame for smoother transitions
+    requestAnimationFrame(() => {
       gameViewContainer.style.transition = `opacity ${TRANSITION_DURATION}ms ease-in-out`;
       gameViewContainer.style.opacity = "1";
       body.classList.add("game-mode");
@@ -337,41 +432,30 @@ export function toggleGameView(elements) {
       }
 
       cameraFollowActive = true;
-
-      // Initialize game UI here
-      initGameUI(elements);
-
-      // Enable input manager for game view
+      initGameUI(els);
       setEnabled(true);
 
-      // Update all key states for immediate visual feedback
       setTimeout(() => updateAllKeyStates(), 200);
 
-      // Properly restore audio state when entering game view
       if (isAudioEnabled()) {
         restoreAudioState(true);
       }
 
-      // Complete transition after animation finishes
       setTimeout(() => {
         gameState.viewMode = newViewMode;
         gameState.isTransitioning = false;
         gameViewContainer.style.transition = "";
       }, TRANSITION_DURATION);
-    }, 50);
+    });
   } else {
     gameViewContainer.style.transition = `opacity ${TRANSITION_DURATION}ms ease-out`;
     gameViewContainer.style.opacity = "0";
-
-    // Disable input manager when leaving game view
     setEnabled(false);
 
-    // Pause audio when leaving game view, but don't change enabled state
     if (isMusicPlaying()) {
       pauseMusic(true);
     }
 
-    // Complete transition after fade out
     setTimeout(() => {
       gameViewContainer.style.display = "none";
       gameViewContainer.style.transition = "";
@@ -387,20 +471,26 @@ export function toggleGameView(elements) {
   return switchingToGameView;
 }
 
-// Update page visibility handling for improved audio behavior
-document.addEventListener("visibilitychange", () => {
-  const isVisible = document.visibilityState === "visible";
-  handleVisibilityChange(isVisible, isGameView());
+let visibilityTimeout = null;
 
-  // Disable input when page is not visible using input manager
-  setEnabled(isVisible && isGameView());
+document.addEventListener("visibilitychange", () => {
+  if (visibilityTimeout) {
+    clearTimeout(visibilityTimeout);
+  }
+
+  visibilityTimeout = setTimeout(() => {
+    const isVisible = document.visibilityState === "visible";
+    handleVisibilityChange(isVisible, isGameView());
+    setEnabled(isVisible && isGameView());
+  }, 100);
 });
+
+let resizeRAF = null;
 
 export function updateGameViewSize(elements, width, height) {
   const canvas = elements?.mainGameCanvas;
   if (!canvas) return;
 
-  // Calculate dimensions if not provided
   if (!width || !height) {
     const sidebarWidth = elements?.sidebar?.offsetWidth || 0;
     width = window.innerWidth - sidebarWidth || 1;
@@ -419,7 +509,10 @@ export function updateGameViewSize(elements, width, height) {
   }
 }
 
-// Enhanced utility function to get comprehensive player movement input
+// Cache movement input to avoid recalculation
+let cachedMovementInput = null;
+let lastMovementUpdate = 0;
+
 export function getPlayerMovementInput() {
   if (!isGameView()) {
     return {
@@ -432,136 +525,115 @@ export function getPlayerMovementInput() {
     };
   }
 
-  const movement = getMovementVector();
-  const isMoving = isMovementActive();
-  const isHorizontalMoving = isHorizontalMovementActive();
-  const isVerticalMoving = isVerticalMovementActive();
-  const ascending = isAscending();
-  const descending = isDescending();
+  const now = performance.now();
 
-  return {
-    movement,
-    isMoving,
-    isHorizontalMoving,
-    isVerticalMoving,
-    isAscending: ascending,
-    isDescending: descending,
-  };
+  // Cache movement input for performance
+  if (!cachedMovementInput || now - lastMovementUpdate > 16) {
+    const movement = getMovementVector();
+    const isMoving = isMovementActive();
+    const isHorizontalMoving = isHorizontalMovementActive();
+    const isVerticalMoving = isVerticalMovementActive();
+    const ascending = isAscending();
+    const descending = isDescending();
+
+    cachedMovementInput = {
+      movement,
+      isMoving,
+      isHorizontalMoving,
+      isVerticalMoving,
+      isAscending: ascending,
+      isDescending: descending,
+    };
+
+    lastMovementUpdate = now;
+  }
+
+  return cachedMovementInput;
 }
 
-// Enhanced game-specific input bindings using the input manager
+let inputBindingsInitialized = false;
+
 function initGameInputBindings() {
-  // Clear any existing bindings first
+  if (inputBindingsInitialized) return;
+
   const keysToUnbind = ["Escape", "KeyC", "KeyT", "KeyR", "KeyI"];
   keysToUnbind.forEach((key) => unbindKey(key));
 
-  // Toggle back to scroll view on Escape
-  bindKey("Escape", {
-    onPress: () => {
-      if (isGameView()) {
-        const elements = {
-          body: document.body,
-          viewToggleBtn: document.getElementById("view-toggle-btn"),
-          gameViewContainer: document.getElementById("game-view-container"),
-          sidebar: document.querySelector(".sidebar"),
-        };
-        toggleGameView(elements);
-      }
-    },
-    preventDefault: true,
-  });
-
-  // Camera follow toggle
-  bindKey("KeyC", {
-    onPress: () => {
-      if (isGameView()) {
-        cameraFollowActive = !cameraFollowActive;
-        console.log(
-          "Camera follow:",
-          cameraFollowActive ? "enabled" : "disabled"
-        );
-      }
-    },
-  });
-
-  // Enhanced movement and input state debugging
-  bindKey("KeyT", {
-    onPress: () => {
-      if (isGameView()) {
-        const inputState = getInputState();
-        const movementInput = getPlayerMovementInput();
-
-        console.log("=== Input Debug Info ===");
-        console.log("Input State:", inputState);
-        console.log("Movement Input:", movementInput);
-        console.log("Pressed Keys:", inputState.pressedKeys);
-        console.log(
-          "WASD Check:",
-          areKeysPressed("KeyW", "KeyA", "KeyS", "KeyD")
-        );
-        console.log(
-          "Any WASD:",
-          isAnyKeyPressed("KeyW", "KeyA", "KeyS", "KeyD")
-        );
-        console.log(
-          "Arrow Keys:",
-          isAnyKeyPressed("ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight")
-        );
-        console.log(
-          "Vertical Movement - Shift:",
-          isKeyPressed("ShiftLeft"),
-          "Space:",
-          isKeyPressed("Space")
-        );
-        console.log("Movement Vector:", movementInput.movement);
-        console.log("========================");
-      }
-    },
-  });
-
-  // Reset player position
-  bindKey("KeyR", {
-    onPress: () => {
-      if (isGameView() && playerEntity) {
-        const homeIsland = ISLAND_DATA.find(
-          ({ section }) => section === "home"
-        );
-        if (homeIsland) {
-          playerEntity.position.set(
-            homeIsland.position.x,
-            homeIsland.position.y + 2,
-            homeIsland.position.z
-          );
-          console.log("Player position reset to home island");
+  const bindingConfigs = [
+    {
+      key: "Escape",
+      action: () => {
+        if (isGameView()) {
+          toggleGameView();
         }
-      }
+      },
+      preventDefault: true,
     },
+    {
+      key: "KeyC",
+      action: () => {
+        if (isGameView()) {
+          cameraFollowActive = !cameraFollowActive;
+          console.log(
+            "Camera follow:",
+            cameraFollowActive ? "enabled" : "disabled"
+          );
+        }
+      },
+    },
+    {
+      key: "KeyT",
+      action: () => {
+        if (isGameView()) {
+          const inputState = getInputState();
+          const movementInput = getPlayerMovementInput();
+          console.log("=== Input Debug Info ===");
+          console.log("Input State:", inputState);
+          console.log("Movement Input:", movementInput);
+          console.log("========================");
+        }
+      },
+    },
+    {
+      key: "KeyR",
+      action: () => {
+        if (isGameView() && playerEntity) {
+          const homeIsland = ISLAND_DATA.find(
+            ({ section }) => section === "home"
+          );
+          if (homeIsland) {
+            playerEntity.position.set(
+              homeIsland.position.x,
+              homeIsland.position.y + 2,
+              homeIsland.position.z
+            );
+            console.log("Player position reset to home island");
+          }
+        }
+      },
+    },
+    {
+      key: "KeyI",
+      action: () => {
+        if (isGameView()) {
+          const inputState = getInputState();
+          console.log("Input Manager State:", inputState);
+          const movement = getPlayerMovementInput();
+          console.log("Detailed Movement State:", movement);
+        }
+      },
+    },
+  ];
+
+  bindingConfigs.forEach(({ key, action, preventDefault }) => {
+    bindKey(key, {
+      onPress: action,
+      preventDefault: preventDefault || false,
+    });
   });
 
-  // Input state information display
-  bindKey("KeyI", {
-    onPress: () => {
-      if (isGameView()) {
-        const inputState = getInputState();
-        console.log("Input Manager State:", inputState);
-
-        // Log detailed movement state
-        const movement = getPlayerMovementInput();
-        console.log("Detailed Movement State:", {
-          vector: movement.movement,
-          isMoving: movement.isMoving,
-          horizontal: movement.isHorizontalMoving,
-          vertical: movement.isVerticalMoving,
-          ascending: movement.isAscending,
-          descending: movement.isDescending,
-        });
-      }
-    },
-  });
-
-  console.log(
-    "Game input bindings initialized with enhanced movement controls"
-  );
+  inputBindingsInitialized = true;
+  console.log("Game input bindings initialized (optimized)");
 }
 
 export async function initGame() {
@@ -569,70 +641,85 @@ export async function initGame() {
 
   initGameInputBindings();
 
-  // Get all required DOM elements at once
-  const elements = {
-    viewToggleBtn: document.getElementById("view-toggle-btn"),
-    mainGameCanvas: document.getElementById("main-game-canvas"),
-    gameViewContainer: document.getElementById("game-view-container"),
-    sidebar: document.querySelector(".sidebar"),
-    body: document.body,
+  const elements = getCachedElements();
+
+  // Validate required elements with proper checking
+  const requiredElements = {
+    viewToggleBtn: elements.viewToggleBtn,
+    mainGameCanvas: elements.mainGameCanvas,
+    gameViewContainer: elements.gameViewContainer,
+    sidebar: elements.sidebar,
   };
 
-  // Validate required elements
-  if (
-    !elements.viewToggleBtn ||
-    !elements.mainGameCanvas ||
-    !elements.gameViewContainer ||
-    !elements.sidebar
-  ) {
+  const missing = Object.entries(requiredElements)
+    .filter(([key, element]) => !element)
+    .map(([key]) => key);
+
+  if (missing.length > 0) {
     console.error(
-      "Game initialization failed: Required DOM elements not found"
+      `Game initialization failed: Missing elements: ${missing.join(", ")}`
     );
+    console.log("Available elements:", {
+      viewToggleBtn: !!elements.viewToggleBtn,
+      mainGameCanvas: !!elements.mainGameCanvas,
+      gameViewContainer: !!elements.gameViewContainer,
+      sidebar: !!elements.sidebar,
+    });
     return;
   }
 
-  const style = document.createElement("style");
-  style.textContent = `
-    #game-view-container {
-      transition: opacity 0.5s ease-in-out;
-    }
-    .game-mode-transition {
-      transition: all 0.5s ease-in-out;
-    }
-  `;
-  document.head.appendChild(style);
+  // Add styles only once
+  if (!document.getElementById("game-styles")) {
+    const style = document.createElement("style");
+    style.id = "game-styles";
+    style.textContent = `
+      #game-view-container {
+        transition: opacity 0.5s ease-in-out;
+      }
+      .game-mode-transition {
+        transition: all 0.5s ease-in-out;
+      }
+    `;
+    document.head.appendChild(style);
+  }
 
-  // Initialize game scene
   await initGameScene();
   elements.gameViewContainer.style.display = "none";
 
-  // Set up view toggle
   elements.viewToggleBtn.addEventListener("click", () => {
     toggleGameView(elements);
   });
 
-  // Set initial view size
   updateGameViewSize(elements);
-
-  // Initially disable input manager (enable when entering game view)
   setEnabled(false);
 
-  // Debounce resize handler for performance
-  window.addEventListener(
-    "resize",
-    debounce(() => {
+  // Optimized resize handler
+  window.addEventListener("resize", () => {
+    if (resizeRAF) {
+      cancelAnimationFrame(resizeRAF);
+    }
+
+    resizeRAF = requestAnimationFrame(() => {
       if (isGameView()) {
         updateGameViewSize(elements);
       }
-    }, 200)
-  );
+    });
+  });
 
   // Clean up resources on page unload
   window.addEventListener("beforeunload", () => {
     disposeAudio();
     disposeInputManager();
+
+    // Clean up object pools
+    objectPools.vectors.length = 0;
+    objectPools.matrices.length = 0;
+
+    // Clear caches
+    cachedElements = null;
+    cachedMovementInput = null;
   });
 
   gameState.isInitialized = true;
-  console.log("Game initialized with enhanced input-manager integration");
+  console.log("Game initialized with comprehensive optimizations");
 }

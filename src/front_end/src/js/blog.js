@@ -24,10 +24,13 @@ function createBlogPost(item) {
     </div>
     <div class="blog-post-content">
       <h3 class="blog-post-title">${item.title}</h3>
-      <p class="blog-post-tags">${item.tags.join(", ")}</p>
+      <div class="xp-sub-window">
       <p class="blog-post-description">${item.description}</p>
       <p class="blog-date"><i>${item.date}</i></p>
     </div>
+    </div>
+          <p class="blog-post-tags">${item.tags.join(", ")}</p>
+
     </div>
   </div>
   `;

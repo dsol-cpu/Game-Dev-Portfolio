@@ -33,118 +33,175 @@ let state = 0; // Single integer for all key states
 let enabled = 1;
 let bindings, callbacks;
 
-// Movement vector lookup table (flattened for direct access)
+// Movement vector lookup table (optimized pre-computation)
 const moveX = new Float32Array(256);
 const moveZ = new Float32Array(256);
 const moveY = new Float32Array(4); // Only 4 combinations for Y
 moveY[1] = 1;
 moveY[2] = -1; // Up only, Down only
 
-// Pre-compute all 256 possible horizontal movement combinations
+// Pre-compute all 256 possible horizontal movement combinations (optimized)
 const inv = 0.7071067811865476; // 1/sqrt(2)
 for (let i = 0; i < 256; i++) {
   let x = 0,
     z = 0;
-  const hasWASD = i & 15;
-  const hasArrow = i & 240;
 
-  // Use WASD if both present, otherwise use whichever is active
-  const activeSet = hasWASD && hasArrow ? i & 15 : i;
+  // Optimized bit extraction using lookup tables
+  const wasdBits = i & 15;
+  const arrowBits = (i >> 4) & 15;
 
-  // Extract movement (flattened conditional logic)
-  x += activeSet & 4 && !(activeSet & 8) ? -1 : 0; // Left
-  x += activeSet & 8 && !(activeSet & 4) ? 1 : 0; // Right
-  x += activeSet & 64 && !(activeSet & 128) && !hasWASD ? -1 : 0; // Arrow left
-  x += activeSet & 128 && !(activeSet & 64) && !hasWASD ? 1 : 0; // Arrow right
+  // Use WASD if available, otherwise arrows
+  const activeBits = wasdBits || arrowBits;
 
-  z += activeSet & 1 && !(activeSet & 2) ? -1 : 0; // Forward
-  z += activeSet & 2 && !(activeSet & 1) ? 1 : 0; // Backward
-  z += activeSet & 16 && !(activeSet & 32) && !hasWASD ? -1 : 0; // Arrow up
-  z += activeSet & 32 && !(activeSet & 16) && !hasWASD ? 1 : 0; // Arrow down
+  // Optimized movement calculation using bit manipulation
+  const leftRight = (activeBits & 4) - ((activeBits & 8) >> 1);
+  const fwdBack = (activeBits & 1) - ((activeBits & 2) >> 1);
+
+  x = leftRight ? (leftRight > 0 ? -1 : 1) : 0;
+  z = fwdBack ? (fwdBack > 0 ? -1 : 1) : 0;
 
   // Normalize diagonal movement
-  const isDiagonal = x !== 0 && z !== 0;
-  moveX[i] = isDiagonal ? x * inv : x;
-  moveZ[i] = isDiagonal ? z * inv : z;
+  if (x && z) {
+    moveX[i] = x * inv;
+    moveZ[i] = z * inv;
+  } else {
+    moveX[i] = x;
+    moveZ[i] = z;
+  }
 }
 
-// Core functions (minimal branching)
+// Core functions (optimized with direct bit operations)
 const setBit = (bit) => (state |= 1 << bit);
 const clearBit = (bit) => (state &= ~(1 << bit));
-const testBit = (bit) => state & (1 << bit);
+const testBit = (bit) => (state >> bit) & 1;
 
+// Optimized event handlers
 const handleKeyDown = (e) => {
   const bit = keyLookup[e.code];
-  const isValid = bit !== undefined && enabled;
-  const isNew = isValid && !testBit(bit);
+  if (bit === undefined || !enabled) return;
 
-  isValid && isNew && setBit(bit);
-  isValid && isNew && bindings?.get(e.code)?.onPress?.(e);
-  isValid && isNew && callbacks?.keydown?.forEach((cb) => cb(e.code, e));
+  const wasPressed = testBit(bit);
+  if (wasPressed) return;
 
-  const binding = isValid && bindings?.get(e.code);
-  binding?.preventDefault && e.preventDefault();
+  setBit(bit);
+
+  // Optimized callback handling
+  const binding = bindings?.get(e.code);
+  if (binding) {
+    binding.onPress?.(e);
+    binding.preventDefault && e.preventDefault();
+  }
+
+  // Batch callback execution
+  const keydownCallbacks = callbacks?.keydown;
+  if (keydownCallbacks?.length) {
+    for (let i = 0; i < keydownCallbacks.length; i++) {
+      keydownCallbacks[i](e.code, e);
+    }
+  }
 };
 
 const handleKeyUp = (e) => {
   const bit = keyLookup[e.code];
-  const isValid = bit !== undefined && enabled;
+  if (bit === undefined || !enabled || !testBit(bit)) return;
 
-  isValid && testBit(bit) && clearBit(bit);
-  isValid && bindings?.get(e.code)?.onRelease?.(e);
-  isValid && callbacks?.keyup?.forEach((cb) => cb(e.code, e));
+  clearBit(bit);
+
+  // Optimized callback handling
+  const binding = bindings?.get(e.code);
+  binding?.onRelease?.(e);
+
+  // Batch callback execution
+  const keyupCallbacks = callbacks?.keyup;
+  if (keyupCallbacks?.length) {
+    for (let i = 0; i < keyupCallbacks.length; i++) {
+      keyupCallbacks[i](e.code, e);
+    }
+  }
 };
 
-// Movement calculation (single lookup)
+// Movement calculation (single lookup with cached result)
+let cachedMovement = { x: 0, y: 0, z: 0 };
+let lastMovementState = -1;
+
 const getMovementVector = () => {
-  const h = state & H_MASK;
-  const v = state & V_MASK;
-  const yIdx = (v === SHIFT ? 1 : 0) | (v === SPACE ? 2 : 0);
+  const currentState = state & (H_MASK | V_MASK);
+  if (currentState === lastMovementState) return cachedMovement;
 
-  return {
-    x: moveX[h],
-    y: moveY[yIdx],
-    z: moveZ[h],
-  };
+  lastMovementState = currentState;
+  const h = state & H_MASK;
+  const vBits = state & V_MASK;
+  const yIdx = ((vBits === SHIFT) << 0) | ((vBits === SPACE) << 1);
+
+  cachedMovement.x = moveX[h];
+  cachedMovement.y = moveY[yIdx];
+  cachedMovement.z = moveZ[h];
+
+  return cachedMovement;
 };
 
-// Optimized state checks (single bit operations)
-const isKeyPressed = (code) => testBit(keyLookup[code] || 255);
-const isMovementActive = () => state & (H_MASK | V_MASK);
-const isHorizontalMovementActive = () => state & H_MASK;
-const isVerticalMovementActive = () => state & V_MASK;
-const isAscending = () => state & SHIFT;
-const isDescending = () => state & SPACE;
+// Optimized state checks (using bit shift operations)
+const isKeyPressed = (code) => {
+  const bit = keyLookup[code];
+  return bit !== undefined ? (state >> bit) & 1 : 0;
+};
 
-// Multi-key checks (optimized)
+const isMovementActive = () => !!(state & (H_MASK | V_MASK));
+const isHorizontalMovementActive = () => !!(state & H_MASK);
+const isVerticalMovementActive = () => !!(state & V_MASK);
+const isAscending = () => !!(state & SHIFT);
+const isDescending = () => !!(state & SPACE);
+
+// Multi-key checks (optimized with pre-computed masks)
 const areKeysPressed = (...codes) => {
   let mask = 0;
-  codes.forEach((code) => (mask |= 1 << (keyLookup[code] || 255)));
+  for (let i = 0; i < codes.length; i++) {
+    const bit = keyLookup[codes[i]];
+    if (bit !== undefined) mask |= 1 << bit;
+  }
   return (state & mask) === mask;
 };
 
 const isAnyKeyPressed = (...codes) => {
   let mask = 0;
-  codes.forEach((code) => (mask |= 1 << (keyLookup[code] || 255)));
-  return state & mask;
+  for (let i = 0; i < codes.length; i++) {
+    const bit = keyLookup[codes[i]];
+    if (bit !== undefined) mask |= 1 << bit;
+  }
+  return !!(state & mask);
 };
 
-// Reset with efficient callback handling
+// Reset with optimized callback handling
 const resetAllKeys = () => {
+  if (!state) return; // Early exit if no keys pressed
+
   const oldState = state;
   state = 0;
+  lastMovementState = -1; // Reset movement cache
 
-  // Trigger callbacks only for previously pressed keys
-  callbacks?.keyup &&
-    Object.entries(keyLookup).forEach(([code, bit]) => {
-      oldState & (1 << bit) && callbacks.keyup.forEach((cb) => cb(code, null));
-    });
+  // Batch process callbacks for efficiency
+  const keyupCallbacks = callbacks?.keyup;
+  if (keyupCallbacks?.length) {
+    const pressedCodes = [];
+    for (const [code, bit] of Object.entries(keyLookup)) {
+      if ((oldState >> bit) & 1) pressedCodes.push(code);
+    }
 
-  // Handle bindings
-  bindings &&
-    Object.entries(keyLookup).forEach(([code, bit]) => {
-      oldState & (1 << bit) && bindings.get(code)?.onRelease?.(null);
-    });
+    for (let i = 0; i < keyupCallbacks.length; i++) {
+      for (let j = 0; j < pressedCodes.length; j++) {
+        keyupCallbacks[i](pressedCodes[j], null);
+      }
+    }
+  }
+
+  // Handle bindings efficiently
+  if (bindings) {
+    for (const [code, bit] of Object.entries(keyLookup)) {
+      if ((oldState >> bit) & 1) {
+        bindings.get(code)?.onRelease?.(null);
+      }
+    }
+  }
 };
 
 // Lazy initialization helpers
@@ -162,61 +219,83 @@ const bindKey = (code, opts = {}) => {
 
 const unbindKey = (code) => bindings?.delete(code);
 
-// Callback management
+// Callback management (optimized array operations)
 const addCallback = (type, cb) => {
   const cbs = ensureCallbacks();
-  (cbs[type] || (cbs[type] = [])).push(cb);
+  const list = cbs[type] || (cbs[type] = []);
+  list.push(cb);
 };
 
 const removeCallback = (type, cb) => {
   const list = callbacks?.[type];
-  const idx = list?.indexOf(cb);
-  idx > -1 && list.splice(idx, 1);
+  if (!list) return;
+
+  const idx = list.indexOf(cb);
+  if (idx > -1) {
+    // Efficient removal by swapping with last element
+    const lastIdx = list.length - 1;
+    if (idx !== lastIdx) list[idx] = list[lastIdx];
+    list.length = lastIdx;
+  }
 };
 
 // Control functions
 const setEnabled = (en) => {
   enabled = en ? 1 : 0;
-  enabled || resetAllKeys();
+  if (!enabled) resetAllKeys();
 };
 
-const getInputState = () => ({
-  pressedKeys: Object.entries(keyLookup)
-    .filter(([, bit]) => testBit(bit))
-    .map(([code]) => code),
-  totalKeys: Object.keys(keyLookup).length,
-  bindings: bindings ? Array.from(bindings.keys()) : [],
-  enabled: Boolean(enabled),
-  keyState: state.toString(2),
-});
+// Optimized state reporting
+const getInputState = () => {
+  const pressedKeys = [];
+  for (const [code, bit] of Object.entries(keyLookup)) {
+    if (testBit(bit)) pressedKeys.push(code);
+  }
+
+  return {
+    pressedKeys,
+    totalKeys: Object.keys(keyLookup).length,
+    bindings: bindings ? Array.from(bindings.keys()) : [],
+    enabled: Boolean(enabled),
+    keyState: state.toString(2),
+  };
+};
 
 // Event listener management
 let attached = 0;
 
 const attachListeners = () => {
-  attached ||
-    (document.addEventListener("keydown", handleKeyDown),
-    document.addEventListener("keyup", handleKeyUp),
-    window.addEventListener("blur", resetAllKeys),
-    document.addEventListener(
-      "visibilitychange",
-      () => document.hidden && resetAllKeys()
-    ),
-    (attached = 1));
+  if (attached) return;
+
+  document.addEventListener("keydown", handleKeyDown, { passive: false });
+  document.addEventListener("keyup", handleKeyUp, { passive: true });
+  window.addEventListener("blur", resetAllKeys, { passive: true });
+  document.addEventListener(
+    "visibilitychange",
+    () => {
+      if (document.hidden) resetAllKeys();
+    },
+    { passive: true }
+  );
+
+  attached = 1;
 };
 
 const detachListeners = () => {
-  attached &&
-    (document.removeEventListener("keydown", handleKeyDown),
-    document.removeEventListener("keyup", handleKeyUp),
-    window.removeEventListener("blur", resetAllKeys),
-    document.removeEventListener("visibilitychange", resetAllKeys),
-    (attached = 0));
+  if (!attached) return;
+
+  document.removeEventListener("keydown", handleKeyDown);
+  document.removeEventListener("keyup", handleKeyUp);
+  window.removeEventListener("blur", resetAllKeys);
+  document.removeEventListener("visibilitychange", resetAllKeys);
+
+  attached = 0;
 };
 
 const dispose = () => {
   detachListeners();
   state = 0;
+  lastMovementState = -1;
   bindings = callbacks = null;
   enabled = 1;
 };

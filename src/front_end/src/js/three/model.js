@@ -6,202 +6,242 @@ import {
   MeshNormalMaterial,
   RepeatWrapping,
   Vector3,
+  InstancedMesh,
+  Matrix4,
 } from "../extern/three/three.module.min.js";
 import { GLTFLoader } from "../extern/three/GLTFLoader.js";
 import { TWO_PI } from "../constants/constants.js";
 import { random } from "../utils/random.js";
 
-// Reduced configuration
 const CONFIG = {
-  MODEL_LOAD_TIMEOUT: 10000,
-  TEXTURE_MAX_SIZE: 512,
+  TIMEOUT: 8000,
   GRID_SIZE: 12,
+  MAX_TEXTURE_SIZE: 512, // Increased for better quality/performance balance
+  MAX_INSTANCES: 1000,
+  MEMORY_LIMIT: 512 * 1024 * 1024, // 512MB
+  BATCH_SIZE: 8, // Optimized batch size
 };
 
-// Simplified caches
-export const modelCache = new Map();
-const loadPromiseCache = new Map();
-const textureCache = new WeakMap();
+// Unified cache system
+const cache = {
+  models: new Map(),
+  loading: new Map(),
+  memory: 0,
 
-// Single fallback cube instance
-const FALLBACK_CUBE = new Mesh(
-  new BoxGeometry(1, 1, 1),
-  new MeshNormalMaterial()
-);
-FALLBACK_CUBE.position.set(0, 0, 100);
-
-// Texture maps array (reused)
-const TEXTURE_MAPS = [
-  "map",
-  "normalMap",
-  "bumpMap",
-  "displacementMap",
-  "roughnessMap",
-  "metalnessMap",
-  "alphaMap",
-  "aoMap",
-  "emissiveMap",
-  "envMap",
-  "lightMap",
-  "specularMap",
-];
-
-// Optimized texture sizing - power of 2 only
-const getOptimalTextureSize = (size) => {
-  if (size <= 64) return 64;
-  if (size <= 128) return 128;
-  if (size <= 256) return 256;
-  return 512;
+  track(size) {
+    this.memory += size;
+  },
+  free(size) {
+    this.memory -= size;
+  },
+  canAllocate(size) {
+    return this.memory + size <= CONFIG.MEMORY_LIMIT;
+  },
+  getUsage() {
+    return (this.memory / CONFIG.MEMORY_LIMIT) * 100;
+  },
 };
 
+const loader = new GLTFLoader();
+
+// Optimized fallback
+const FALLBACK = new Mesh(new BoxGeometry(1, 1, 1), new MeshNormalMaterial());
+FALLBACK.position.set(500, 0, 0);
+
+// GPU-optimized texture processing
 const optimizeTexture = (texture) => {
-  const cached = textureCache.get(texture);
-  if (cached) return cached;
+  if (!texture?.image) return texture;
 
-  const image = texture?.image;
-  if (!image?.width) return texture;
+  const { width, height } = texture.image;
+  const size = width * height * 4;
 
-  const optimalWidth = getOptimalTextureSize(image.width);
-  const optimalHeight = getOptimalTextureSize(image.height);
+  if (!cache.canAllocate(size)) {
+    // Create minimal fallback texture
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 32;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#808080";
+    ctx.fillRect(0, 0, 32, 32);
+    texture.image = canvas;
+  } else if (Math.max(width, height) > CONFIG.MAX_TEXTURE_SIZE) {
+    // Efficient downscaling
+    const canvas = document.createElement("canvas");
+    const newSize = CONFIG.MAX_TEXTURE_SIZE;
+    canvas.width = canvas.height = newSize;
 
-  // Skip optimization if already optimal
-  if (optimalWidth >= image.width && optimalHeight >= image.height) {
-    texture.generateMipmaps = false;
-    texture.minFilter = texture.magFilter = LinearFilter;
-    texture.wrapS = texture.wrapT = RepeatWrapping;
-    texture.anisotropy = 1;
-    textureCache.set(texture, texture);
-    return texture;
+    const ctx = canvas.getContext("2d");
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(texture.image, 0, 0, newSize, newSize);
+    texture.image = canvas;
+    cache.track(newSize * newSize * 4);
+  } else {
+    cache.track(size);
   }
 
-  // Create optimized version
-  const canvas = document.createElement("canvas");
-  canvas.width = optimalWidth;
-  canvas.height = optimalHeight;
+  // GPU-friendly settings
+  texture.generateMipmaps = true;
+  texture.minFilter = texture.magFilter = LinearFilter;
+  texture.wrapS = texture.wrapT = RepeatWrapping;
+  texture.flipY = false;
+  texture.needsUpdate = true;
 
-  const ctx = canvas.getContext("2d");
-  ctx.imageSmoothingEnabled = true;
-  ctx.drawImage(image, 0, 0, optimalWidth, optimalHeight);
-
-  const optimized = texture.clone();
-  optimized.image = canvas;
-  optimized.needsUpdate = true;
-  optimized.generateMipmaps = false;
-  optimized.minFilter = optimized.magFilter = LinearFilter;
-  optimized.wrapS = optimized.wrapT = RepeatWrapping;
-  optimized.anisotropy = 1;
-
-  textureCache.set(texture, optimized);
-  return optimized;
+  return texture;
 };
 
-const optimizeModelTextures = (model) => {
-  model.traverse((node) => {
-    if (!node.isMesh?.material) return;
+// Streamlined geometry optimization
+const optimizeGeometry = (geometry) => {
+  if (!geometry.attributes.position) return geometry;
 
-    const materials = Array.isArray(node.material)
-      ? node.material
-      : [node.material];
+  const size = Object.values(geometry.attributes).reduce(
+    (sum, attr) => sum + attr.array.byteLength,
+    0
+  );
 
-    for (const material of materials) {
-      for (const mapName of TEXTURE_MAPS) {
-        const texture = material[mapName];
-        if (texture?.isTexture) {
-          material[mapName] = optimizeTexture(texture);
-        }
-      }
-    }
-  });
+  if (!cache.canAllocate(size)) {
+    console.warn("GPU memory limit reached, using simplified geometry");
+    return new BoxGeometry(1, 1, 1);
+  }
 
-  return model;
+  // Essential optimizations only
+  if (!geometry.attributes.normal) geometry.computeVertexNormals();
+  geometry.computeBoundingSphere();
+  cache.track(size);
+
+  return geometry;
 };
 
-const setupModelTransform = (model) => {
+// Efficient model processing
+const processModel = (model, key) => {
   const box = new Box3().setFromObject(model);
   const center = box.getCenter(new Vector3());
   const size = box.getSize(new Vector3());
 
-  // Center and position
+  // Center and scale
   model.position.sub(center);
-  model.position.y += size.y * 0.1;
-
-  // Scale normalization
   const maxDim = Math.max(size.x, size.y, size.z);
-  if (maxDim > 0 && (maxDim < 0.5 || maxDim > 2)) {
-    model.scale.multiplyScalar(1 / maxDim);
-  }
+  if (maxDim > 2) model.scale.multiplyScalar(2 / maxDim);
+  else if (maxDim < 0.5) model.scale.multiplyScalar(0.5 / maxDim);
 
   model.rotation.y = random() * TWO_PI;
+
+  // Optimize all meshes
+  model.traverse((node) => {
+    if (node.isMesh) {
+      node.geometry = optimizeGeometry(node.geometry);
+
+      // Handle materials efficiently
+      const materials = Array.isArray(node.material)
+        ? node.material
+        : [node.material];
+      materials.forEach((mat) => {
+        ["map", "normalMap", "roughnessMap", "metalnessMap"].forEach((prop) => {
+          if (mat[prop]?.isTexture) {
+            mat[prop] = optimizeTexture(mat[prop]);
+          }
+        });
+      });
+    }
+  });
+
   return model;
 };
 
-const loadModelFromUrl = (modelUrl) => {
-  const loader = new GLTFLoader();
+// Main loading function
+export const loadModel = async (modelName) => {
+  if (!modelName) return FALLBACK.clone();
 
-  return new Promise((resolve) => {
-    let resolved = false;
+  // Check cache first
+  if (cache.models.has(modelName)) {
+    const cached = cache.models.get(modelName);
+    return cached === FALLBACK ? FALLBACK.clone() : cached.clone();
+  }
 
-    const timeout = setTimeout(() => {
-      if (!resolved) {
-        console.warn(`Model load timeout: ${modelUrl}`);
-        resolved = true;
-        resolve(null);
-      }
-    }, CONFIG.MODEL_LOAD_TIMEOUT);
+  // Check if already loading
+  if (cache.loading.has(modelName)) {
+    const result = await cache.loading.get(modelName);
+    return result === FALLBACK ? FALLBACK.clone() : result.clone();
+  }
+
+  // Create loading promise
+  const promise = new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      console.warn(`Model timeout: ${modelName}`);
+      resolve(FALLBACK);
+    }, CONFIG.TIMEOUT);
 
     loader.load(
-      modelUrl,
+      `/models/${modelName}.glb`,
       (gltf) => {
-        clearTimeout(timeout);
-        if (!resolved) {
-          resolved = true;
-          resolve(gltf.scene);
+        clearTimeout(timer);
+
+        // Check memory before processing
+        if (cache.getUsage() > 85) {
+          console.warn(
+            `High GPU memory usage (${cache.getUsage().toFixed(1)}%)`
+          );
         }
+
+        const model = processModel(gltf.scene.clone(), modelName);
+        cache.models.set(modelName, model);
+        resolve(model);
       },
       undefined,
       (error) => {
-        clearTimeout(timeout);
-        if (!resolved) {
-          console.error(`Model failed to load: ${modelUrl}`, error);
-          resolved = true;
-          resolve(null);
-        }
+        clearTimeout(timer);
+        console.error(`Failed to load ${modelName}:`, error);
+        cache.models.set(modelName, FALLBACK);
+        resolve(FALLBACK);
       }
     );
   });
+
+  cache.loading.set(modelName, promise);
+  const result = await promise;
+  cache.loading.delete(modelName);
+
+  return result === FALLBACK ? FALLBACK.clone() : result.clone();
 };
 
-// Main model loading function
-export const loadModel = async (modelName) => {
-  if (!modelName) return FALLBACK_CUBE;
+// Optimized batch loading with better GPU utilization
+export const batchLoadModels = async (modelNames) => {
+  const results = [];
 
-  // Return cached model
-  const cached = modelCache.get(modelName);
-  if (cached) return cached;
+  for (let i = 0; i < modelNames.length; i += CONFIG.BATCH_SIZE) {
+    const batch = modelNames.slice(i, i + CONFIG.BATCH_SIZE);
+    const batchPromises = batch.map(loadModel);
+    const batchResults = await Promise.allSettled(batchPromises);
+    results.push(...batchResults);
 
-  // Return pending promise
-  const pending = loadPromiseCache.get(modelName);
-  if (pending) return pending;
-
-  const modelUrl = `/models/${modelName}.glb`;
-  const loadPromise = loadModelFromUrl(modelUrl).then((model) => {
-    loadPromiseCache.delete(modelName);
-
-    if (!model) {
-      modelCache.set(modelName, FALLBACK_CUBE);
-      return FALLBACK_CUBE;
+    // Micro-pause for GPU breathing room
+    if (i + CONFIG.BATCH_SIZE < modelNames.length) {
+      await new Promise((resolve) => setTimeout(resolve, 8));
     }
+  }
 
-    const processedModel = setupModelTransform(optimizeModelTextures(model));
-    modelCache.set(modelName, processedModel);
-    return processedModel;
-  });
-
-  loadPromiseCache.set(modelName, loadPromise);
-  return loadPromise;
+  return results;
 };
 
-// Simplified grid positioning
+// Instanced mesh creation for repeated models
+export const createInstancedMesh = (
+  geometry,
+  material,
+  count = CONFIG.MAX_INSTANCES
+) => {
+  const instancedMesh = new InstancedMesh(geometry, material, count);
+  const matrix = new Matrix4();
+
+  // Pre-initialize all matrices
+  for (let i = 0; i < count; i++) {
+    instancedMesh.setMatrixAt(i, matrix.identity());
+  }
+
+  instancedMesh.instanceMatrix.needsUpdate = true;
+  instancedMesh.count = 0;
+  return instancedMesh;
+};
+
+// Grid positioning - simplified
 export const calculateGridPositions = (
   modelNames,
   gridSize = CONFIG.GRID_SIZE
@@ -209,95 +249,99 @@ export const calculateGridPositions = (
   const positions = new Map();
   if (!modelNames?.length) return positions;
 
-  const gridSide = Math.ceil(Math.sqrt(modelNames.length));
-  const halfGrid = (gridSide - 1) / 2;
+  const side = Math.ceil(Math.sqrt(modelNames.length));
+  const offset = ((side - 1) * gridSize) / 2;
 
   modelNames.forEach((name, i) => {
-    const row = Math.floor(i / gridSide);
-    const col = i % gridSide;
-    positions.set(
-      name,
-      new Vector3((col - halfGrid) * gridSize, 0, (row - halfGrid) * gridSize)
-    );
+    const x = (i % side) * gridSize - offset;
+    const z = Math.floor(i / side) * gridSize - offset;
+    positions.set(name, new Vector3(x, 0, z));
   });
 
   return positions;
 };
 
-// Utility functions
-export const applyModelPositions = (models, positions) => {
-  for (const [modelName, position] of positions) {
-    const model = models.get(modelName);
-    if (model) model.position.copy(position);
+// Apply positions efficiently
+export const applyPositions = (models, positions) => {
+  positions.forEach((pos, name) => {
+    const model = models.get(name);
+    if (model) model.position.copy(pos);
+  });
+};
+
+// Preload helper
+export const preloadModels = (modelNames) => batchLoadModels(modelNames);
+
+// Efficient cleanup
+const disposeRecursive = (obj) => {
+  if (obj.geometry && !obj.geometry.userData?.shared) {
+    obj.geometry.dispose();
   }
-};
-
-export const setModelScale = (model, scale) => {
-  if (model) model.scale.setScalar(scale);
-  return model;
-};
-
-const disposeTextures = (material) => {
-  for (const prop of TEXTURE_MAPS) {
-    const texture = material[prop];
-    if (texture?.isTexture) {
-      textureCache.delete(texture);
-      texture.dispose();
-    }
+  if (obj.material) {
+    const materials = Array.isArray(obj.material)
+      ? obj.material
+      : [obj.material];
+    materials.forEach((mat) => {
+      if (!mat.userData?.shared) {
+        ["map", "normalMap", "roughnessMap", "metalnessMap"].forEach((prop) => {
+          if (mat[prop]?.dispose && !mat[prop].userData?.shared) {
+            mat[prop].dispose();
+          }
+        });
+        mat.dispose();
+      }
+    });
   }
 };
 
 export const disposeModel = (model, scene) => {
-  if (!model) return;
+  if (!model || model === FALLBACK) return;
 
-  if (scene?.children.includes(model)) {
-    scene.remove(model);
-  }
-
-  model.traverse((child) => {
-    if (!child.isMesh) return;
-
-    child.geometry?.dispose();
-
-    if (child.material) {
-      const materials = Array.isArray(child.material)
-        ? child.material
-        : [child.material];
-      for (const material of materials) {
-        disposeTextures(material);
-        material.dispose();
-      }
-    }
-  });
+  scene?.remove(model);
+  model.traverse(disposeRecursive);
 };
 
-export const clearModelFromCache = (modelName) => {
-  const model = modelCache.get(modelName);
-  if (model && model !== FALLBACK_CUBE) {
+export const clearCache = (modelName) => {
+  const model = cache.models.get(modelName);
+  if (model && model !== FALLBACK) {
     disposeModel(model);
-    modelCache.delete(modelName);
+    cache.models.delete(modelName);
   }
 };
-
-export const preloadModels = async (modelNames) => {
-  if (!Array.isArray(modelNames) || !modelNames.length) return [];
-
-  const validNames = modelNames.filter((name) => name?.trim?.());
-  const results = await Promise.allSettled(validNames.map(loadModel));
-
-  return results
-    .filter((result) => result.status === "fulfilled")
-    .map((result) => result.value);
-};
-
-export const getCachedModels = () => Object.fromEntries(modelCache);
 
 export const clearAllCaches = () => {
-  for (const model of modelCache.values()) {
-    if (model !== FALLBACK_CUBE) {
-      disposeModel(model);
+  cache.models.forEach((model, name) => {
+    if (model !== FALLBACK) disposeModel(model);
+  });
+  cache.models.clear();
+  cache.loading.clear();
+  cache.memory = 0;
+};
+
+// Performance monitoring
+export const getMemoryUsage = () => ({
+  used: cache.memory,
+  percentage: cache.getUsage(),
+  available: CONFIG.MEMORY_LIMIT - cache.memory,
+});
+
+// Force GPU upload for critical models
+export const forceGPUUpload = (renderer, model) => {
+  const tempCamera = new THREE.PerspectiveCamera();
+  model.traverse((node) => {
+    if (node.isMesh) {
+      renderer.render(node, tempCamera);
+
+      const materials = Array.isArray(node.material)
+        ? node.material
+        : [node.material];
+      materials.forEach((mat) => {
+        ["map", "normalMap", "roughnessMap", "metalnessMap"].forEach((prop) => {
+          if (mat[prop]?.isTexture) {
+            renderer.setTexture2D(mat[prop], 0);
+          }
+        });
+      });
     }
-  }
-  modelCache.clear();
-  loadPromiseCache.clear();
+  });
 };

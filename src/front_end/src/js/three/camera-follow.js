@@ -4,171 +4,133 @@ import {
   Raycaster,
 } from "../extern/three/three.module.min.js";
 
-// Constants
+// Configuration
 const CONFIG = {
   DIST_MIN: 3,
   DIST_MAX: 15,
   DIST_DEFAULT: 8,
   HEIGHT_TARGET: 0.8,
   HEIGHT_CAMERA: 1.5,
-  COLLISION: true,
-  COLL_LAYERS: 1,
   COLL_BUFFER: 0.15,
   ZOOM_FACTOR: 0.5,
 };
 
-// Object pool (reused vectors to avoid GC)
-const _vectors = {
-  targetPos: new Vector3(),
-  camPos: new Vector3(),
+// Reusable objects
+const tempVectors = {
+  target: new Vector3(),
+  camera: new Vector3(),
   rayDir: new Vector3(),
   lookAt: new Vector3(),
 };
 
-// Raycaster
-const _raycaster = new Raycaster();
-_raycaster.layers.mask = CONFIG.COLL_LAYERS;
+const raycaster = new Raycaster();
+raycaster.layers.mask = 1;
+const intersects = [];
 
-// Scalar values (avoid object property lookups)
-let _distance = CONFIG.DIST_DEFAULT;
-let _useCollision = CONFIG.COLLISION;
+// State
+let distance = CONFIG.DIST_DEFAULT;
+let useCollision = true;
+let camera, target, scene;
 
-// Object references
-let _camera = null;
-let _target = null;
-let _scene = null;
-let _targetPosition = null; // Cache references to frequently accessed properties
-let _cameraPosition = null;
-
-// Pre-allocated array for intersections
-const _intersects = [];
-
-// Cache Math functions for faster access
-const _sin = Math.sin;
-const _cos = Math.cos;
-const _atan2 = Math.atan2;
-const _clamp = MathUtils.clamp;
-
-// Wheel zoom handler
-function _onWheel(e) {
-  const dir = e.deltaY < 0 ? -1 : e.deltaY > 0 ? 1 : 0;
-  if (dir !== 0) {
-    _distance = _clamp(
-      _distance + dir * CONFIG.ZOOM_FACTOR,
+// Optimized wheel handler
+const onWheel = (e) => {
+  const delta = Math.sign(e.deltaY) * CONFIG.ZOOM_FACTOR;
+  if (delta) {
+    distance = MathUtils.clamp(
+      distance + delta,
       CONFIG.DIST_MIN,
       CONFIG.DIST_MAX
     );
   }
+};
+
+// Streamlined collision detection
+function checkCollision(targetPos, cameraPos) {
+  if (!useCollision || !scene) return;
+
+  const rayDir = tempVectors.rayDir
+    .subVectors(cameraPos, targetPos)
+    .normalize();
+  raycaster.set(targetPos, rayDir);
+  raycaster.far = distance;
+
+  intersects.length = 0;
+  raycaster.intersectObjects(scene.children, true, intersects);
+
+  if (intersects[0]) {
+    const safeDistance = intersects[0].distance * (1 - CONFIG.COLL_BUFFER);
+    cameraPos.copy(targetPos).addScaledVector(rayDir, safeDistance);
+  }
 }
 
-function _checkCollision() {
-  if (!_useCollision || !_scene) return false;
+// Fast yaw extraction
+const getYaw = (q) =>
+  Math.atan2(2 * (q.y * q.w + q.x * q.z), 1 - 2 * (q.z * q.z + q.y * q.y));
 
-  const targetPos = _vectors.targetPos;
-  const camPos = _vectors.camPos;
-  const rayDir = _vectors.rayDir;
+export function initCamController(cam, tgt, options = {}) {
+  camera = cam;
+  target = tgt;
+  scene = options.scene;
 
-  rayDir.subVectors(camPos, targetPos).normalize();
-  _raycaster.set(targetPos, rayDir);
-  _raycaster.far = _distance;
-
-  _intersects.length = 0; // Clear reused array - faster than creating new array
-  _raycaster.intersectObjects(_scene.children, true, _intersects);
-
-  if (_intersects.length > 0) {
-    const d = _intersects[0].distance * (1 - CONFIG.COLL_BUFFER);
-    camPos.copy(targetPos).addScaledVector(rayDir, d);
-    return true;
+  if (options.distance !== undefined) {
+    distance = MathUtils.clamp(
+      options.distance,
+      CONFIG.DIST_MIN,
+      CONFIG.DIST_MAX
+    );
+  }
+  if (options.collisionDetection !== undefined) {
+    useCollision = options.collisionDetection;
   }
 
-  return false;
-}
-
-// Fast quaternion to angle conversion
-function _getYawAngle(q) {
-  return _atan2(2 * (q.y * q.w + q.x * q.z), 1 - 2 * (q.z * q.z + q.y * q.y));
-}
-
-// Controller API
-export function initCamController(cam, tgt, opt = {}) {
-  _camera = cam;
-  _target = tgt;
-  _scene = opt.scene || null;
-
-  // Cache frequently accessed properties
-  _targetPosition = tgt.position;
-  _cameraPosition = cam.position;
-
-  if (opt.distance !== undefined) {
-    _distance = _clamp(opt.distance, CONFIG.DIST_MIN, CONFIG.DIST_MAX);
-  }
-  if (opt.collisionDetection !== undefined) {
-    _useCollision = !!opt.collisionDetection;
-  }
-
-  document.addEventListener("wheel", _onWheel, { passive: true });
+  document.addEventListener("wheel", onWheel, { passive: true });
 
   return {
-    reset: () => (_distance = CONFIG.DIST_DEFAULT),
+    reset: () => (distance = CONFIG.DIST_DEFAULT),
     setDistance: (d) =>
-      (_distance = _clamp(d, CONFIG.DIST_MIN, CONFIG.DIST_MAX)),
-    setCollisionDetection: (v) => (_useCollision = !!v),
-    getState: () => ({
-      distance: _distance,
-      collisionDetection: _useCollision,
-    }),
+      (distance = MathUtils.clamp(d, CONFIG.DIST_MIN, CONFIG.DIST_MAX)),
+    setCollisionDetection: (enabled) => (useCollision = enabled),
+    getState: () => ({ distance, collisionDetection: useCollision }),
   };
 }
 
 export function updateCamera() {
-  if (!_camera || !_target) return;
+  if (!camera || !target) return;
 
-  const targetPos = _vectors.targetPos;
-  const camPos = _vectors.camPos;
-  const lookAt = _vectors.lookAt;
+  const targetPos = tempVectors.target.copy(target.position);
+  const cameraPos = tempVectors.camera;
 
-  // Direct property access
-  targetPos.set(_targetPosition.x, _targetPosition.y, _targetPosition.z);
-
-  // Fast quaternion to yaw angle conversion
-  const angle = _getYawAngle(_target.quaternion);
-  const sin = _sin(angle);
-  const cos = _cos(angle);
-
-  // Direct calculation without intermediate variables
-  camPos.set(
-    targetPos.x + sin * _distance,
+  // Calculate camera position from target rotation
+  const yaw = getYaw(target.quaternion);
+  cameraPos.set(
+    targetPos.x + Math.sin(yaw) * distance,
     targetPos.y + CONFIG.HEIGHT_CAMERA,
-    targetPos.z + cos * _distance
+    targetPos.z + Math.cos(yaw) * distance
   );
 
-  // Check collision only when necessary
-  if (_useCollision && _scene) {
-    _checkCollision();
-  }
+  checkCollision(targetPos, cameraPos);
 
-  // Direct property assignment instead of copy
-  _cameraPosition.x = camPos.x;
-  _cameraPosition.y = camPos.y;
-  _cameraPosition.z = camPos.z;
-
-  lookAt.set(targetPos.x, targetPos.y + CONFIG.HEIGHT_TARGET, targetPos.z);
-
-  _camera.lookAt(lookAt);
+  camera.position.copy(cameraPos);
+  camera.lookAt(
+    tempVectors.lookAt.set(
+      targetPos.x,
+      targetPos.y + CONFIG.HEIGHT_TARGET,
+      targetPos.z
+    )
+  );
 }
 
 export function disposeCameraController() {
-  document.removeEventListener("wheel", _onWheel);
-  _camera = _target = _scene = null;
-  _targetPosition = _cameraPosition = null;
-  _intersects.length = 0;
+  document.removeEventListener("wheel", onWheel);
+  camera = target = scene = null;
+  intersects.length = 0;
 }
 
 export function getCameraState() {
   return {
-    distance: _distance,
-    collisionDetection: _useCollision,
-    targetPosition: _target ? new Vector3().copy(_targetPosition) : null,
-    cameraPosition: _camera ? new Vector3().copy(_cameraPosition) : null,
+    distance,
+    collisionDetection: useCollision,
+    targetPosition: target?.position.clone(),
+    cameraPosition: camera?.position.clone(),
   };
 }

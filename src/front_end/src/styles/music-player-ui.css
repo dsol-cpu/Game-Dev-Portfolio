@@ -12,6 +12,7 @@
   transition: all 0.2s ease;
   flex-shrink: 0;
   backdrop-filter: blur(8px);
+  user-select: none;
 }
 
 .music-control-btn:hover {

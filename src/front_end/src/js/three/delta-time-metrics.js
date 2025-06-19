@@ -19,7 +19,7 @@ export function createDeltaTimeMetricsOverlay() {
   container.style.fontSize = "14px";
   container.style.fontWeight = "bold";
   container.style.textShadow = "1px 1px 2px rgba(0,0,0,0.8)";
-  container.style.zIndex = "10";
+  container.style.zIndex = "15";
   container.style.pointerEvents = "none";
   container.style.textAlign = "right";
   container.style.display = "flex";

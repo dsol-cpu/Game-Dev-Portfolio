@@ -28,6 +28,7 @@
   cursor: pointer;
   background-color: transparent;
   user-select: none;
+  z-index: 15;
 }
 
 .game-preview:hover:not(.expanded) {
