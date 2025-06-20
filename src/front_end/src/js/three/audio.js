@@ -512,10 +512,6 @@ export async function restoreAudioState(immediate = true) {
     if (!audio.userInteracted) await waitForUserInteraction();
     await resumeContext();
 
-    if (!audio.music.playing && audio.music.buffer) {
-      await playMusic(audio.music.pausedAt, immediate);
-    }
-
     setGainValue(audio.musicGain, audio.volume, immediate, 0.1);
     setGainValue(audio.sfxGain, audio.volume, immediate, 0.1);
   }

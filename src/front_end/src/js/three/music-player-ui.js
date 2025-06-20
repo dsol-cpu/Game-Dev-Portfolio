@@ -53,6 +53,9 @@ const state = {
   initialized: false,
   syncInterval: null,
   elements: {}, // Cache DOM elements
+  playerContainer: null, // Store reference to player container
+  isVisible: true, // Track visibility state
+  wasPlayingBeforeHide: false, // Remember playback state when hiding
   lastUpdate: {
     // Debounce updates
     position: 0,
@@ -204,6 +207,9 @@ const handleMute = () => {
 
 // Consolidated UI updates with change detection
 const updateUI = () => {
+  // Don't update UI if player is hidden
+  if (!state.isVisible || !state.playerContainer) return;
+
   const current = {
     position: getCurrentPosition(),
     duration: getDuration(),
@@ -562,9 +568,68 @@ const createPlayer = () => {
   return container;
 };
 
+// NEW: Hide music player function
+export const hideMusicPlayer = () => {
+  if (!state.playerContainer || !state.isVisible) return;
+
+  // Remember if music was playing when we hide
+  state.wasPlayingBeforeHide = isMusicPlaying();
+
+  // Pause music if playing
+  if (state.wasPlayingBeforeHide) {
+    pauseMusic();
+  }
+
+  // Hide the player
+  state.playerContainer.style.display = "none";
+  state.isVisible = false;
+
+  console.log("Music player hidden, was playing:", state.wasPlayingBeforeHide);
+};
+
+// NEW: Show music player function
+export const showMusicPlayer = () => {
+  if (!state.playerContainer || state.isVisible) return;
+
+  // Show the player
+  state.playerContainer.style.display = "flex";
+  state.isVisible = true;
+
+  // Resume music if it was playing before hiding
+  if (state.wasPlayingBeforeHide && hasUserInteracted()) {
+    playMusic();
+    state.wasPlayingBeforeHide = false; // Reset the flag
+  }
+
+  // Force UI update when showing
+  updateUI();
+  updatePlaylist();
+
+  console.log("Music player shown");
+};
+
+// NEW: Check if music player is visible
+export const isMusicPlayerVisible = () => {
+  return (
+    state.isVisible &&
+    state.playerContainer &&
+    state.playerContainer.style.display !== "none"
+  );
+};
+
 // Optimized initialization
 export const initMusicPlayer = (container, initialPlaylist = []) => {
-  if (!container || state.initialized) return null;
+  if (!container) return null;
+
+  // If already initialized, just show it
+  if (state.initialized && state.playerContainer) {
+    // Re-attach to new container if different
+    if (state.playerContainer.parentNode !== container) {
+      container.appendChild(state.playerContainer);
+    }
+    showMusicPlayer();
+    return () => hideMusicPlayer(); // Return hide function instead of dispose
+  }
 
   initAudio();
 
@@ -579,6 +644,7 @@ export const initMusicPlayer = (container, initialPlaylist = []) => {
   state.lastKnownVolume = getVolume() || 0.7;
 
   const player = createPlayer();
+  state.playerContainer = player; // Store reference
   container.appendChild(player);
 
   if (getComputedStyle(container).position === "static") {
@@ -590,13 +656,36 @@ export const initMusicPlayer = (container, initialPlaylist = []) => {
   updatePlaylist();
 
   // Start optimized sync with reduced frequency
-  state.syncInterval = setInterval(updateUI, CONFIG.updateInterval);
+  if (!state.syncInterval) {
+    state.syncInterval = setInterval(updateUI, CONFIG.updateInterval);
+  }
 
   state.initialized = true;
-  return () => {
+  state.isVisible = true;
+
+  // Return hide function instead of dispose function
+  return () => hideMusicPlayer();
+};
+
+// NEW: Complete disposal function (only call when truly cleaning up)
+export const disposeMusicPlayer = () => {
+  if (state.syncInterval) {
     clearInterval(state.syncInterval);
-    player.remove();
-  };
+    state.syncInterval = null;
+  }
+
+  if (state.playerContainer) {
+    state.playerContainer.remove();
+    state.playerContainer = null;
+  }
+
+  // Reset state
+  state.initialized = false;
+  state.isVisible = false;
+  state.wasPlayingBeforeHide = false;
+  state.elements = {};
+
+  console.log("Music player completely disposed");
 };
 
 // Simplified exports

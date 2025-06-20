@@ -529,27 +529,22 @@
               <div class="xp-button close"></div>
             </div>
           </div>
-          <div class="xp-content">
-            <div class="container">
-              <div class="filter-buttons">
-                <button class="filter-button active" data-filter="all">
-                  All
-                </button>
-                <button class="filter-button" data-filter="unity">Unity</button>
-                <button class="filter-button" data-filter="unreal">
-                  Unreal Engine
-                </button>
-                <button class="filter-button" data-filter="godot">Godot</button>
-                <button class="filter-button" data-filter="web">
-                  Web Games
-                </button>
-                <button class="filter-button" data-filter="3d">
-                  3D Modeling
-                </button>
-              </div>
-              <div class="project-card-grid"></div>
+          <div class="container">
+            <div class="filter-buttons">
+              <button class="filter-button active" data-filter="all">
+                All
+              </button>
+              <button class="filter-button" data-filter="unity">Unity</button>
+              <button class="filter-button" data-filter="unreal">
+                Unreal Engine
+              </button>
+              <button class="filter-button" data-filter="godot">Godot</button>
+              <button class="filter-button" data-filter="web">Web Games</button>
+              <button class="filter-button" data-filter="3d">
+                3D Modeling
+              </button>
             </div>
-          </div>
+            <div class="project-card-grid"></div>
         </div>
       </section>
 
@@ -650,8 +645,8 @@
         </div>
       </div>
 
-      <!-- Game Controls UI -->
-      <div class="game-controls-info">
+      <!-- Compact Game Controls UI -->
+      <div class="game-controls-info visible">
         <div class="controls-header">
           <h3 class="controls-title">Controls</h3>
           <div class="controls-buttons">
@@ -662,13 +657,13 @@
         <div class="controls-content">
           <div class="controls-layout">
             <div class="control-section">
-              <span class="control-label">Move Horizontal:</span>
+              <span class="control-label">Move:</span>
               <div class="key-group">
                 <span class="key" data-key="KeyW">W</span>
                 <span class="key" data-key="KeyA">A</span>
                 <span class="key" data-key="KeyS">S</span>
                 <span class="key" data-key="KeyD">D</span>
-                <span class="key-separator">or</span>
+                <span class="key-separator">/</span>
                 <span class="key" data-key="ArrowUp">↑</span>
                 <span class="key" data-key="ArrowLeft">←</span>
                 <span class="key" data-key="ArrowDown">↓</span>
@@ -677,21 +672,17 @@
             </div>
 
             <div class="control-section">
-              <span class="control-label">Ascend:</span>
+              <span class="control-label">Alt:</span>
               <div class="key-group">
-                <span class="key" data-key="ShiftLeft">Shift</span>
+                <span class="key" data-key="ShiftLeft">⇧</span>
+                <span class="key-separator">up</span>
+                <span class="key" data-key="Space">␣</span>
+                <span class="key-separator">down</span>
               </div>
             </div>
 
             <div class="control-section">
-              <span class="control-label">Descend:</span>
-              <div class="key-group">
-                <span class="key" data-key="Space">Space</span>
-              </div>
-            </div>
-
-            <div class="control-section">
-              <span class="control-label">Menu/Reset:</span>
+              <span class="control-label">Menu:</span>
               <div class="key-group">
                 <span class="key" data-key="Escape">Esc</span>
                 <span class="key" data-key="KeyR">R</span>
@@ -700,13 +691,29 @@
           </div>
 
           <div class="status-section">
-            <div class="status-display">
-              <span class="status-item"
-                >Status: <span id="movement-status">Idle</span></span
-              >
-              <span class="status-item"
-                >Keys: <span id="active-keys">None</span></span
-              >
+            <div class="status-grid">
+              <div class="status-item">
+                <span class="status-label">Status</span>
+                <span
+                  class="status-value"
+                  id="movement-status"
+                  data-status="idle"
+                  >Hovering</span
+                >
+              </div>
+              <div class="status-item">
+                <span class="status-label">Altitude</span>
+                <span
+                  class="status-value"
+                  id="altitude-status"
+                  data-altitude="stable"
+                  >Stable</span
+                >
+              </div>
+            </div>
+            <div class="status-item" style="margin-top: 6px">
+              <span class="status-label">Active Keys</span>
+              <span class="status-value" id="active-keys">None</span>
             </div>
           </div>
         </div>

@@ -1,6 +1,11 @@
 import { getCurrentHeight, getHeightLimits, getDirection } from "./player.js";
 import { debounce } from "../utils/helper.js";
-import { initMusicPlayer, syncMusicPlayer } from "./music-player-ui.js";
+import {
+  initMusicPlayer,
+  syncMusicPlayer,
+  hideMusicPlayer,
+  showMusicPlayer,
+} from "./music-player-ui.js";
 import {
   initGameControlsUI,
   cleanupGameControlsUI,
@@ -38,8 +43,9 @@ const UI_THEME = {
   },
 };
 
-// Store cleanup functions
+// Store cleanup functions - separate music player from others
 let cleanupFunctions = [];
+let musicPlayerInitialized = false;
 
 // Cache for expensive operations
 const cache = {
@@ -539,12 +545,14 @@ export const initGameUI = (elements) => {
   initGameControlsUI();
   cleanupFunctions.push(() => cleanupGameControlsUI());
 
-  // Initialize media player
-  const mediaPlayerCleanup = initMusicPlayer(container, [
-    "/audio/Little Jack (Nasrad, Ixa'taka, Valua).mp3",
-  ]);
-  if (mediaPlayerCleanup) {
-    cleanupFunctions.push(mediaPlayerCleanup);
+  // Initialize or show music player (but don't add to cleanup functions)
+  if (!musicPlayerInitialized) {
+    initMusicPlayer(container, [
+      "/audio/Little Jack (Nasrad, Ixa'taka, Valua).mp3",
+    ]);
+    musicPlayerInitialized = true;
+  } else {
+    showMusicPlayer();
   }
 
   // Optimized resize handler
@@ -559,12 +567,16 @@ export const initGameUI = (elements) => {
     window.removeEventListener("resize", debouncedResize)
   );
 
+  // Return cleanup function that hides music player instead of disposing
   return () => {
     cleanupFunctions.forEach((cleanup) => cleanup());
     cleanupFunctions = [];
     Object.values(ui).forEach((el) => el.remove());
     altitudeText.remove();
     compassText.remove();
+
+    // Hide music player instead of disposing it
+    hideMusicPlayer();
 
     // Clear caches
     cache.gradients.clear();
@@ -654,6 +666,9 @@ export const disposeGameUI = () => {
   const styles = document.getElementById("game-ui-styles");
   if (styles) styles.remove();
 
+  // Hide music player instead of disposing it
+  hideMusicPlayer();
+
   // Clear all caches
   cache.gradients.clear();
   cache.paths.clear();
@@ -662,4 +677,15 @@ export const disposeGameUI = () => {
   cache.lastRotation = null;
   cache.lastDirection = null;
   cache.lastLimitState = null;
+};
+
+// Add new function to completely dispose everything (call this only on page unload)
+export const completelyDisposeGameUI = () => {
+  disposeGameUI();
+
+  // Import and call the complete disposal function
+  import("./music-player-ui.js").then(({ disposeMusicPlayer }) => {
+    disposeMusicPlayer();
+    musicPlayerInitialized = false;
+  });
 };

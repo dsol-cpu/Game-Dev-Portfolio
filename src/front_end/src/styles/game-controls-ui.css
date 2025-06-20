@@ -13,104 +13,232 @@
   box-shadow: 0 0 10px rgba(255, 180, 40, 0.6);
 }
 
-/* Enhanced Game Controls UI Styles */
+/* Game Controls UI */
 .game-controls-info {
-  position: absolute;
+  position: fixed;
   bottom: 20px;
   left: 20px;
-  transition: opacity 0.3s ease-in-out;
-  backdrop-filter: blur(5px);
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-  max-width: 280px;
-  width: auto;
-  z-index: 4;
+  background: rgba(15, 25, 35, 0.85);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(100, 150, 200, 0.3);
+  border-radius: 12px;
+  padding: 12px;
+  max-width: 200px;
+  font-size: 12px;
+  color: #e1ebf5;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  transition: all 0.3s ease;
+  z-index: 1000;
+}
+
+.game-controls-info:not(.visible) {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.game-controls-info.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.game-controls-info.collapsed {
+  max-width: 60px;
+  padding: 8px;
 }
 
 .game-controls-info.collapsed .controls-content {
   display: none;
 }
 
-.key {
-  transition: all 0.1s ease;
-  cursor: default;
-  user-select: none;
+/* Header */
+.controls-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  border-bottom: 1px solid rgba(100, 150, 200, 0.2);
+  padding-bottom: 6px;
+}
+
+.controls-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #9bb3cd;
+}
+
+.controls-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+.toggle-btn,
+.close-btn {
+  background: rgba(100, 150, 200, 0.2);
+  border: 1px solid rgba(100, 150, 200, 0.3);
+  color: #9bb3cd;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
   font-weight: bold;
-  font-size: 11px;
+  transition: all 0.2s ease;
 }
 
-.key.active {
-  background-color: #c5a45c !important;
-  color: rgba(34, 51, 68, 0.9) !important;
-  transform: scale(0.95);
-  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
-  border-color: #e5b668 !important;
-}
-
-.key:hover {
-  background-color: rgba(155, 179, 205, 0.3);
-  border-color: rgba(155, 179, 205, 0.7);
-}
-
-.control-group {
-  line-height: 1.4;
-}
-
-.status-display {
-  font-family: monospace;
-  background: rgba(0, 0, 0, 0.2);
-  padding: 4px 6px;
-  border-radius: 3px;
-  border: 1px solid rgba(155, 179, 205, 0.2);
-}
-
-.close-btn:hover,
-.toggle-btn:hover {
-  background-color: rgba(197, 164, 92, 0.2) !important;
+.toggle-btn:hover,
+.close-btn:hover {
+  background: rgba(197, 164, 92, 0.3);
+  border-color: rgba(197, 164, 92, 0.5);
   transform: scale(1.1);
 }
 
-.close-btn:active,
-.toggle-btn:active {
+/* Compact Controls Layout */
+.controls-layout {
+  display: grid;
+  gap: 8px;
+}
+
+.control-section {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.control-label {
+  color: #9bb3cd;
+  font-weight: 500;
+  min-width: 45px;
+  flex-shrink: 0;
+}
+
+.key-group {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+
+.key {
+  background: rgba(100, 150, 200, 0.15);
+  border: 1px solid rgba(100, 150, 200, 0.3);
+  color: #e1ebf5;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  min-width: 18px;
+  text-align: center;
+  transition: all 0.15s ease;
+  cursor: default;
+  user-select: none;
+  line-height: 1.2;
+}
+
+.key.active {
+  background: #c5a45c;
+  color: #1a1a2e;
+  border-color: #e5b668;
   transform: scale(0.95);
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
-/* Movement status indicator colors */
-#movement-status[data-status="moving"] {
-  color: #5b98bd;
+.key:hover:not(.active) {
+  background: rgba(100, 150, 200, 0.25);
+  border-color: rgba(100, 150, 200, 0.5);
 }
 
-#movement-status[data-status="sprinting"] {
-  color: #e5b668;
-  font-weight: bold;
+.key-separator {
+  color: rgba(155, 179, 205, 0.5);
+  font-size: 9px;
+  margin: 0 2px;
 }
 
+/* Status Section */
+.status-section {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(100, 150, 200, 0.2);
+}
+
+.status-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  font-size: 10px;
+}
+
+.status-item {
+  background: rgba(0, 0, 0, 0.3);
+  padding: 4px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(100, 150, 200, 0.2);
+  text-align: center;
+}
+
+.status-label {
+  color: #9bb3cd;
+  font-weight: 500;
+  display: block;
+  font-size: 9px;
+  margin-bottom: 2px;
+}
+
+.status-value {
+  color: #e1ebf5;
+  font-weight: 600;
+}
+
+/* Status Colors */
 #movement-status[data-status="idle"] {
   color: rgba(225, 235, 245, 0.7);
 }
+#movement-status[data-status="cruising"] {
+  color: #5b98bd;
+}
+#movement-status[data-status="maneuvering"] {
+  color: #e5b668;
+  font-weight: bold;
+}
+#movement-status[data-status="altitude"] {
+  color: #98d982;
+}
 
-/* Responsive design for smaller screens */
+#altitude-status[data-altitude="stable"] {
+  color: rgba(225, 235, 245, 0.7);
+}
+#altitude-status[data-altitude="ascending"] {
+  color: #98d982;
+}
+#altitude-status[data-altitude="descending"] {
+  color: #ff6b6b;
+}
+#altitude-status[data-altitude="conflicted"] {
+  color: #ffa726;
+}
+
+/* Responsive Design */
 @media (max-width: 900px) {
   .game-controls-info {
-    position: absolute !important;
-    top: 10px !important;
-    left: 50% !important;
-    bottom: auto !important;
-    right: auto !important;
-    transform: translateX(-50%) !important;
-    font-size: 10px !important;
-    padding: 10px !important;
-    max-width: 250px !important;
-    width: auto !important;
-    z-index: 1000 !important;
+    bottom: 10px;
+    left: 10px;
+    max-width: 180px;
+    font-size: 11px;
+    padding: 10px;
   }
 
   .key {
-    padding: 1px 4px !important;
-    font-size: 9px !important;
-    min-width: 16px !important;
+    font-size: 9px;
+    padding: 1px 4px;
+    min-width: 16px;
   }
 
-  .control-group {
-    line-height: 1.2 !important;
+  .control-label {
+    min-width: 40px;
+    font-size: 10px;
   }
 }
