@@ -12,6 +12,7 @@ import { PROJECT_CARD_DATA } from "../data/projects.js";
 const state = {
   models: new Map(),
   spotlights: new Map(),
+  modelZoomLevels: new Map(), // Store zoom levels for each model
   scene: null,
   camera: null,
   canvas: null,
@@ -46,6 +47,21 @@ const getExpandedScaleMultiplier = () => {
   if (width <= 1024) return 0.8;
   if (width <= 1440) return 0.9;
   return 1;
+};
+
+// Get the current zoom level for a model, or default if not set
+const getModelZoomLevel = (modelName, isExpanded = false) => {
+  const storedZoom = state.modelZoomLevels.get(modelName);
+  if (storedZoom !== undefined) return storedZoom;
+
+  // Default zoom level
+  const baseScale = getResponsiveBaseScale();
+  return isExpanded ? baseScale * getExpandedScaleMultiplier() : baseScale;
+};
+
+// Set the zoom level for a model
+const setModelZoomLevel = (modelName, zoomLevel) => {
+  state.modelZoomLevels.set(modelName, zoomLevel);
 };
 
 const createSpotlight = (modelName) => {
@@ -146,7 +162,7 @@ const calculateExpandedPosition = (expandedCard) => {
   return state.camera.position.clone().add(direction.multiplyScalar(6));
 };
 
-// Simplified model positioning - no complex state management
+// Updated model positioning - preserves user zoom levels
 const updateAllModelPositions = () => {
   const expandedCard = document.querySelector(".project-card.expanded");
   const isAnyCardExpanded = !!expandedCard;
@@ -169,7 +185,7 @@ const updateAllModelPositions = () => {
 
       if (isExpandedModel) {
         const position = calculateExpandedPosition(expandedCard);
-        const scale = getResponsiveBaseScale() * getExpandedScaleMultiplier();
+        const scale = getModelZoomLevel(modelName, true);
         model.position.copy(position);
         model.scale.setScalar(scale);
         updateSpotlightPosition(modelName, position, true);
@@ -181,7 +197,7 @@ const updateAllModelPositions = () => {
 
       if (isVisible) {
         const position = calculateModelPosition(modelName);
-        const scale = getResponsiveBaseScale();
+        const scale = getModelZoomLevel(modelName, false);
         model.position.copy(position);
         model.scale.setScalar(scale);
         updateSpotlightPosition(modelName, position, false);
@@ -324,7 +340,20 @@ const toggleExpand = async (e, id) => {
   if (!card || state.isTransitioning) return;
 
   const expanding = !card.classList.contains("expanded");
+  const modelName = card.dataset.model;
   state.isTransitioning = true;
+
+  // If unexpanding, reset zoom and rotation
+  if (!expanding && modelName) {
+    const model = state.models.get(modelName);
+    if (model) {
+      // Reset rotation
+      model.rotation.set(0, 0, 0);
+
+      // Reset zoom level to default
+      state.modelZoomLevels.delete(modelName);
+    }
+  }
 
   document.querySelectorAll(".project-card").forEach((c) => {
     if (c.id === id) {
@@ -399,20 +428,28 @@ const setupInteraction = () => {
   );
   document.addEventListener("touchend", endDrag, { passive: true });
 
+  // Updated wheel event handler - now stores the zoom level
   document.addEventListener(
     "wheel",
     (e) => {
       const win = e.target.closest(".model-view-window");
       const card = win?.closest(".project-card.expanded");
       const model = card && state.models.get(win.dataset.modelName);
+      const modelName = win?.dataset.modelName;
 
-      if (model) {
+      if (model && modelName) {
         e.preventDefault();
+        const currentScale = model.scale.x;
         const newScale = Math.max(
           0.05,
-          Math.min(0.8, model.scale.x * (1 - Math.sign(e.deltaY) * 0.1))
+          Math.min(0.8, currentScale * (1 - Math.sign(e.deltaY) * 0.1))
         );
+
+        // Update the model scale
         model.scale.setScalar(newScale);
+
+        // Store the new zoom level
+        setModelZoomLevel(modelName, newScale);
       }
     },
     { passive: false }
@@ -471,6 +508,20 @@ const loadProjectModel = async (name) => {
 export const resetExpandedCards = () => {
   const expandedCard = document.querySelector(".project-card.expanded");
   if (expandedCard) {
+    const modelName = expandedCard.dataset.model;
+
+    // Reset zoom and rotation before unexpanding
+    if (modelName) {
+      const model = state.models.get(modelName);
+      if (model) {
+        // Reset rotation
+        model.rotation.set(0, 0, 0);
+
+        // Reset zoom level to default
+        state.modelZoomLevels.delete(modelName);
+      }
+    }
+
     toggleExpand(null, expandedCard.id);
   }
 };
@@ -522,7 +573,7 @@ export const initProjectCardScene = async () => {
   registerCamera(state.camera, state.canvas.getContext("2d", { alpha: true }));
 
   const modelNames = [...document.querySelectorAll("[data-model]")]
-    .map((el) => el.dataset.model)
+    .map((element) => element.dataset.model)
     .filter(Boolean);
 
   await Promise.all(
@@ -538,13 +589,3 @@ export const initProjectCardScene = async () => {
     setupInteraction();
   });
 };
-
-// Simple, direct function for filter updates
-const updateProjectModelsAfterFilter = () => {
-  requestAnimationFrame(() => {
-    updateAllModelPositions();
-  });
-};
-
-// Expose globally for filter integration
-window.updateProjectModelsAfterFilter = updateProjectModelsAfterFilter;
