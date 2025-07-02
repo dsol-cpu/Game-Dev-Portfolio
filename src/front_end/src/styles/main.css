@@ -1,0 +1,295 @@
+:root {
+  /* Light Theme (default) - Professional Pastel */
+  --primary-color: #6a9be7; /* Mature sky blue */
+  --secondary-color: #ffb88c; /* Soft peach */
+  --dark-color: #4a5d7e; /* Professional navy blue */
+  --light-color: #f8faff; /* Clean white with hint of blue */
+  --accent-color: #f794a4; /* Soft pink accent */
+  --text-color: #2e3a52; /* Deep blue-gray text */
+  --bg-color: #f6f3da; /* Very light blue background */
+  --card-bg: #fef4fa; /* Very light pink card background */
+  --input-bg: #f5f8ff;
+  --input-border: #d0ddf0;
+  --window-text-color: black;
+}
+
+/* Dark Theme - Night skies theme */
+[data-theme="dark"] {
+  --primary-color: #74b3ff; /* Brighter blue for dark mode */
+  --secondary-color: #ffce54; /* Brighter gold for dark mode */
+  --dark-color: #f2f9ff; /* Light text in dark mode */
+  --light-color: #1a202c; /* Dark background */
+  --accent-color: #ff8585; /* Brighter red accent */
+  --text-color: #f2f9ff; /*Light text*/
+  --bg-color: #b6c9ee; /* Dark sky background */
+  --card-bg: #2d3748; /* Dark card backgrounds */
+  --input-bg: #2d3748;
+  --input-border: #4a5568;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+  background-color: var(--bg-color);
+  color: var(--text-color);
+  display: flex;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+button {
+  outline: none;
+  user-select: none;
+}
+
+.pdf {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+}
+
+/* Main content styles */
+.main-content {
+  flex: 1;
+  margin-left: var(--sidebar-width);
+  padding: 2rem;
+  overflow: hidden;
+}
+
+section {
+  display: block;
+  background-color: var(--light-color);
+}
+
+section .container {
+  position: relative;
+  min-height: 550px;
+  background-color: var(--light-color);
+  margin: 3px;
+  border-width: 5px;
+  border-color: var(--accent-color);
+  display: flex;
+  flex-direction: column;
+  transition: min-height 0.3s ease; /* Smooth transition */
+}
+
+.skill-bar {
+  margin-bottom: 1.5rem;
+}
+
+.skill-info {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+  font-family: "Orbitron", sans-serif;
+}
+
+.skill-bar-outer {
+  width: 100%;
+  height: 10px;
+  background-color: rgba(0, 0, 0, 0.1);
+  border-radius: 5px;
+  overflow: hidden;
+  box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.1);
+}
+
+.skill-bar-inner {
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    var(--primary-color),
+    var(--secondary-color)
+  );
+  border-radius: 5px;
+  width: 0;
+  transition: width 1s ease;
+}
+
+/* Portfolio section - Y2K Windows XP Style */
+.filter-buttons {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+  z-index: 3;
+  justify-content: center;
+  position: relative;
+}
+
+.filter-button {
+  padding: 0.4rem 1.2rem;
+  background: linear-gradient(180deg, #f0f0f0 0%, #d4d4d4 50%, #c0c0c0 100%);
+  border: 1px solid #8b8b8b;
+  border-top-color: #ffffff;
+  border-left-color: #ffffff;
+  border-radius: 0;
+  cursor: pointer;
+  font-family: "Tahoma", "MS Sans Serif", sans-serif;
+  font-size: 0.75rem;
+  font-weight: normal;
+  text-transform: none;
+  letter-spacing: 0;
+  color: #000000;
+  position: relative;
+  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.8),
+    inset -1px -1px 0 rgba(128, 128, 128, 0.5);
+  transition: all 0.1s ease;
+}
+
+.filter-button:hover {
+  background: linear-gradient(180deg, #f8f8f8 0%, #e0e0e0 50%, #d0d0d0 100%);
+  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.9),
+    inset -1px -1px 0 rgba(128, 128, 128, 0.6);
+}
+
+.filter-button:active,
+.filter-button.active {
+  background: linear-gradient(180deg, #c0c0c0 0%, #a8a8a8 50%, #909090 100%);
+  border-top-color: #8b8b8b;
+  border-left-color: #8b8b8b;
+  border-bottom-color: #ffffff;
+  border-right-color: #ffffff;
+  box-shadow: inset -1px -1px 0 rgba(255, 255, 255, 0.8),
+    inset 1px 1px 0 rgba(128, 128, 128, 0.8);
+  transform: none;
+  color: #000000;
+}
+
+/* Optional: Add a classic Windows XP blue variant */
+.filter-button.xp-blue {
+  background: linear-gradient(180deg, #dae7f4 0%, #7db3e8 50%, #4a8bc2 100%);
+  color: #ffffff;
+  text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.3);
+}
+
+.filter-button.xp-blue:hover {
+  background: linear-gradient(180deg, #e6f0fa 0%, #8ac0ed 50%, #5a9bd4 100%);
+}
+
+.filter-button.xp-blue:active,
+.filter-button.xp-blue.active {
+  background: linear-gradient(180deg, #4a8bc2 0%, #3574a8 50%, #1f5f96 100%);
+  border-top-color: #1f5f96;
+  border-left-color: #1f5f96;
+  border-bottom-color: #8ac0ed;
+  border-right-color: #8ac0ed;
+}
+/* Contact form */
+#contact-form {
+  margin-top: 2rem;
+  background: var(--card-bg);
+  padding: 2rem;
+  border-radius: 10px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+}
+
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-family: "Orbitron", sans-serif;
+  color: var(--primary-color);
+}
+
+.form-group input,
+.form-group textarea {
+  width: 100%;
+  border-radius: 15px;
+  padding: 0.85rem;
+  border: 1px solid var(--input-border);
+  font-size: 1rem;
+  background: var(--input-bg);
+  color: var(--text-color);
+  transition: all 0.3s ease;
+}
+
+.form-group input:focus,
+.form-group textarea:focus {
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(74, 144, 226, 0.2);
+  outline: none;
+}
+
+#game-view-container {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+}
+
+/* Game View Container */
+.game-view-container {
+  position: fixed;
+  top: 0;
+  left: var(--sidebar-width, 240px);
+  right: 0;
+  bottom: 0;
+  background-color: var(--bg-color);
+  display: none;
+  overflow: hidden;
+}
+
+/* When game mode is active */
+body.game-mode .main-content {
+  display: none;
+}
+
+body.game-mode .game-view-container {
+  display: block;
+}
+
+#main-game-canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background-color: skyblue; /* Temporary background for visibility */
+}
+
+canvas#main-game-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* Game Controls Info Styling */
+.game-view-container .game-controls-info {
+  position: absolute;
+  bottom: 20px;
+  left: 20px;
+  background-color: rgba(0, 0, 0, 0.6);
+  padding: 10px 15px;
+  border-radius: 8px;
+  color: white;
+}
+
+.game-view-container .game-controls-info ul {
+  list-style-type: none;
+  padding: 0;
+  margin: 0;
+}
+
+.game-view-container .game-controls-info li {
+  display: flex;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.game-view-container .game-controls-info li svg {
+  width: 24px;
+  height: 24px;
+  margin-right: 10px;
+  fill: white;
+}
+
+.game-view-container .game-controls-info p {
+  margin: 0;
+}

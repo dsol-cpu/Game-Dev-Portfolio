@@ -1,16 +1,724 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#000000" />
-    <link rel="shortcut icon" type="image/ico" href="/src/assets/favicon.ico" />
-    <title>David Solinsky</title>
-  </head>
-  <body>
-    <noscript>You need to enable JavaScript to run this app.</noscript>
-    <div id="root"></div>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <script src="/src/index.jsx" type="module"></script>
+    <!-- Open Graph Meta Tags (Facebook, Discord, etc.) -->
+    <meta
+      property="og:title"
+      content="David Solinsky - Gameplay & Systems Programmer"
+    />
+    <meta
+      property="og:description"
+      content="Game developer specializing in Unity and Godot with focus on gameplay programming, procedural generation, and shader development."
+    />
+    <meta property="og:image" content="/images/me.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta
+      property="og:url"
+      content="https://david-solinsky-game-dev.pages.dev/"
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="David Solinsky Portfolio" />
+
+    <!-- Twitter Card Meta Tags -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta
+      name="twitter:title"
+      content="David Solinsky - Gameplay & Systems Programmer"
+    />
+    <meta
+      name="twitter:description"
+      content="Game developer specializing in Unity and Godot with focus on gameplay programming, procedural generation, and shader development."
+    />
+    <meta name="twitter:image" content="/images/me.png" />
+
+    <!-- General Meta Tags -->
+    <meta
+      name="description"
+      content="Game developer specializing in Unity and Godot with focus on gameplay programming, procedural generation, and shader development."
+    />
+    <meta
+      name="keywords"
+      content="game developer, unity, godot, gameplay programming, procedural generation, shader development"
+    />
+    <meta name="author" content="David Solinsky" />
+
+    <link rel="icon" href="/icons/favicon.ico" type="image/x-icon" />
+    <title>David Solinsky</title>
+
+    <!-- Preconnect to CDN for faster loading -->
+    <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
+
+    <!-- CSS files -->
+    <link rel="stylesheet" href="src/styles/main.css" />
+    <link rel="stylesheet" href="src/styles/xp-window.css" />
+    <link rel="stylesheet" href="src/styles/game.css" />
+    <link rel="stylesheet" href="src/styles/game-controls-ui.css" />
+    <link rel="stylesheet" href="src/styles/project-card.css" />
+    <link rel="stylesheet" href="src/styles/sidebar.css" />
+    <link rel="stylesheet" href="src/styles/about-section.css" />
+    <link rel="stylesheet" href="src/styles/blog.css" />
+    <link rel="stylesheet" href="src/styles/responsive.css" />
+    <link rel="stylesheet" href="src/styles/music-player-ui.css" />
+    <script>
+      // Compressed SVG Sprite System
+      const createSvgSprite = (svgData = {}) => {
+        const NS = "http://www.w3.org/2000/svg";
+        const SHAPES = new Set([
+          "path",
+          "circle",
+          "rect",
+          "polygon",
+          "line",
+          "polyline",
+        ]);
+
+        let isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        let container =
+          document.getElementById("svg-sprite-container") ||
+          (() => {
+            const div = document.createElement("div");
+            div.id = "svg-sprite-container";
+            document.body.appendChild(div);
+            return div;
+          })();
+
+        const el = (tag, attrs = {}) => {
+          const e = document.createElementNS(NS, tag);
+          Object.entries(attrs).forEach(([k, v]) => e.setAttribute(k, v));
+          return e;
+        };
+
+        const processNode = (node, parent) => {
+          [...node.childNodes].forEach((child) => {
+            if (child.nodeType !== 1)
+              return parent.appendChild(child.cloneNode(true));
+
+            const isShape = SHAPES.has(child.tagName);
+            const attrs = [...child.attributes].reduce((acc, attr) => {
+              if (attr.name === "stroke")
+                acc.stroke = attr.value === "none" ? "none" : "currentColor";
+              else if (attr.name === "fill")
+                acc.fill = attr.value === "none" ? "none" : "currentColor";
+              else acc[attr.name] = attr.value;
+              return acc;
+            }, {});
+
+            if (isShape && !attrs.stroke) attrs.stroke = "none";
+            if (!attrs.fill) attrs.fill = "none";
+
+            const clone = el(child.tagName, attrs);
+            if (child.hasChildNodes()) processNode(child, clone);
+            parent.appendChild(clone);
+          });
+        };
+
+        const createSymbols = (data) => {
+          const symbols = { light: new Map(), dark: new Map() };
+          const fileRegex = /([^\\/]{1,255})\.svg$/;
+          const themeRegex = /-(light|dark)$/;
+          const keys = Object.keys(data);
+
+          Object.entries(data).forEach(([path, content]) => {
+            const match = fileRegex.exec(path);
+            if (!match) return;
+
+            const fileName = match[1];
+            const themeMatch = themeRegex.exec(fileName);
+            const base = themeMatch
+              ? fileName.replace(themeRegex, "")
+              : fileName;
+            const isLight = themeMatch?.[1] === "light";
+            const isDarkTheme = themeMatch?.[1] === "dark";
+
+            const hasLight = keys.some((p) => p.includes(`${base}-light.svg`));
+            const hasDark = keys.some((p) => p.includes(`${base}-dark.svg`));
+
+            const processForTheme = (theme) => {
+              try {
+                const doc = new DOMParser().parseFromString(
+                  content,
+                  "image/svg+xml"
+                );
+                const svg = doc.querySelector("svg");
+                if (!svg) return;
+
+                const viewBox = svg.getAttribute("viewBox");
+                const [w, h] = [
+                  svg.getAttribute("width") || "24",
+                  svg.getAttribute("height") || "24",
+                ];
+
+                const symbol = el("symbol", {
+                  id: `icon-${base}`,
+                  viewBox: viewBox || `0 0 ${w} ${h}`,
+                  "data-icon-name": base,
+                  "data-theme": theme,
+                  class: `themed-icon${
+                    base === "sun" || base === "moon"
+                      ? ` theme-icon-${base}`
+                      : ""
+                  }`,
+                });
+
+                processNode(svg, symbol);
+                symbols[theme].set(symbol.id, symbol);
+              } catch (e) {
+                console.error(`Error processing ${path}:`, e);
+              }
+            };
+
+            if (isLight || (!isLight && !isDarkTheme && !hasDark))
+              processForTheme("light");
+            if (isDarkTheme || (!isLight && !isDarkTheme && !hasLight))
+              processForTheme("dark");
+          });
+
+          return symbols;
+        };
+
+        const buildSprites = (symbols) => {
+          const sprites = {};
+          ["light", "dark"].forEach((theme) => {
+            const svg = el("svg", {
+              id: `svg-sprite-${theme}`,
+              "aria-hidden": "true",
+              "data-theme": theme,
+            });
+            svg.style.cssText =
+              "position:absolute;width:0;height:0;overflow:hidden;display:none;";
+
+            symbols[theme].forEach((symbol) =>
+              svg.appendChild(symbol.cloneNode(true))
+            );
+            container.appendChild(svg);
+            sprites[theme] = svg;
+          });
+          return sprites;
+        };
+
+        const applyTheme = (sprites, dark) => {
+          sprites.light &&
+            (sprites.light.style.display = dark ? "none" : "block");
+          sprites.dark &&
+            (sprites.dark.style.display = dark ? "block" : "none");
+        };
+
+        // Initialize
+        let symbols = createSymbols(svgData);
+        let sprites = buildSprites(symbols);
+        applyTheme(sprites, isDark);
+
+        const handleThemeChange = (dark) => {
+          if (isDark === dark) return;
+          isDark = dark;
+          applyTheme(sprites, dark);
+          document.dispatchEvent(
+            new CustomEvent("themeChange", {
+              detail: { isDark: dark, source: "svgSpriteManager" },
+            })
+          );
+        };
+
+        // Event listeners
+        window
+          .matchMedia("(prefers-color-scheme: dark)")
+          .addEventListener("change", (e) => handleThemeChange(e.matches), {
+            passive: true,
+          });
+
+        document.addEventListener(
+          "themeChange",
+          (e) => {
+            if (
+              typeof e.detail?.isDark === "boolean" &&
+              e.detail.source !== "svgSpriteManager"
+            ) {
+              handleThemeChange(e.detail.isDark);
+            }
+          },
+          { passive: true }
+        );
+
+        // Public API
+        return {
+          addSvgs: (newSvgs) => {
+            if (!newSvgs || !Object.keys(newSvgs).length) return;
+
+            const newSymbols = createSymbols({ ...svgData, ...newSvgs });
+            symbols = newSymbols;
+
+            // Remove old sprites
+            sprites.light?.remove();
+            sprites.dark?.remove();
+
+            sprites = buildSprites(symbols);
+            applyTheme(sprites, isDark);
+
+            Object.assign(svgData, newSvgs);
+          },
+          toggleTheme: () => handleThemeChange(!isDark),
+          isDark: () => isDark,
+          setTheme: (dark) =>
+            typeof dark === "boolean" && handleThemeChange(dark),
+        };
+      };
+
+      // Optimized initialization
+      (async () => {
+        // Apply theme immediately to prevent flash
+        const getTheme = () =>
+          localStorage.getItem("theme") ||
+          (window.matchMedia("(prefers-color-scheme: dark)").matches
+            ? "dark"
+            : "light");
+
+        const currentTheme = getTheme();
+        document.documentElement.setAttribute("data-theme", currentTheme);
+
+        // Wait for DOM
+        await new Promise((resolve) => {
+          if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", resolve);
+          } else resolve();
+        });
+
+        // Load SVGs and initialize sprite system
+        const icons = [
+          "about.svg",
+          "portfolio.svg",
+          "github.svg",
+          "linkedin.svg",
+          "itch.svg",
+          "sun.svg",
+          "moon.svg",
+          "resume.svg",
+          "space.svg",
+          "shift.svg",
+          "wasd.svg",
+          "person.svg",
+          "play-btn.svg",
+          "gitlab.svg",
+          "gamepad.svg",
+        ];
+
+        const svgData = {};
+        await Promise.all(
+          icons.map(async (icon) => {
+            try {
+              const response = await fetch(`/icons/${icon}`);
+              svgData[`/icons/${icon}`] = response.ok
+                ? await response.text()
+                : `<svg viewBox="0 0 24 24"><rect width="24" height="24" fill="red" opacity="0.3"/></svg>`;
+            } catch (err) {
+              console.error(`Error loading ${icon}:`, err);
+              svgData[
+                `/icons/${icon}`
+              ] = `<svg viewBox="0 0 24 24"><rect width="24" height="24" fill="red" opacity="0.3"/></svg>`;
+            }
+          })
+        );
+
+        // Initialize sprite system
+        window.sprite = createSvgSprite(svgData);
+        window.sprite.setTheme(currentTheme === "dark");
+
+        // Setup theme toggle
+        const themeToggle = document.getElementById("theme-toggle");
+        themeToggle.checked = currentTheme === "dark";
+
+        themeToggle.addEventListener("change", function () {
+          const isDark = this.checked;
+          const theme = isDark ? "dark" : "light";
+          document.documentElement.setAttribute("data-theme", theme);
+          localStorage.setItem("theme", theme);
+          window.sprite.setTheme(isDark);
+        });
+
+        // Setup game view toggle
+        const viewToggleBtn = document.getElementById("view-toggle-btn");
+        const initGameCanvas = () => {
+          const canvas = document.getElementById("main-game-canvas");
+          canvas.width = canvas.clientWidth;
+          canvas.height = canvas.clientHeight;
+          const ctx = canvas.getContext("2d");
+          ctx && ctx.clearRect(0, 0, canvas.width, canvas.height);
+        };
+
+        viewToggleBtn.addEventListener("click", function () {
+          document.body.classList.toggle("game-mode");
+          const isGameMode = document.body.classList.contains("game-mode");
+          this.querySelector(".view-label").textContent = isGameMode
+            ? "Website View"
+            : "Game View";
+          isGameMode && initGameCanvas();
+        });
+
+        window.addEventListener("resize", () => {
+          document.body.classList.contains("game-mode") && initGameCanvas();
+        });
+
+        // Update copyright year dynamically
+        const currentYear = new Date(Date.now()).getFullYear();
+        const copyrightElement = document.querySelector(
+          ".sidebar-attribution .copyright-year"
+        );
+        if (copyrightElement) {
+          copyrightElement.textContent = `©${currentYear} David Solinsky`;
+        }
+      })();
+    </script>
+  </head>
+
+  <body>
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="profile">
+        <img
+          src="/images/me.png"
+          alt="Profile"
+          class="profile-image"
+          width="574"
+          height="608"
+          loading="lazy"
+        />
+        <h2 class="profile-name">David Solinsky</h2>
+        <p class="profile-title">Gameplay & Systems Programmer</p>
+      </div>
+      <div class="social-links">
+        <a
+          target="_blank"
+          href="https://www.github.com/dsol-cpu"
+          title="GitHub"
+        >
+          <svg aria-hidden="true">
+            <use href="#icon-github" />
+          </svg>
+        </a>
+        <a
+          target="_blank"
+          href="https://linkedin.com/in/david-solinsky"
+          title="LinkedIn"
+        >
+          <svg aria-hidden="true">
+            <use href="#icon-linkedin" />
+          </svg>
+        </a>
+        <a target="_blank" href="https://smeppu.itch.io/" title="Itch.io">
+          <svg aria-hidden="true">
+            <use href="#icon-itch" />
+          </svg>
+        </a>
+      </div>
+
+      <ul class="nav-links">
+        <li>
+          <a href="" class="nav-link active" data-target="about">
+            <svg aria-hidden="true" class="nav-icon">
+              <use href="#icon-person" />
+            </svg>
+            About Me
+          </a>
+        </li>
+        <li>
+          <a href="" class="nav-link" data-target="portfolio">
+            <svg aria-hidden="true" class="nav-icon">
+              <use href="#icon-portfolio" />
+            </svg>
+            Portfolio
+          </a>
+        </li>
+        <li>
+          <a href="" class="nav-link" data-target="blog">
+            <svg aria-hidden="true" class="nav-icon">
+              <use href="#icon-resume" />
+            </svg>
+            Blog
+          </a>
+        </li>
+      </ul>
+
+      <div class="theme-toggle">
+        <div class="theme-toggle-wrapper">
+          <svg class="light-icon" aria-hidden="true">
+            <use href="#icon-sun" />
+          </svg>
+          <label class="theme-switch">
+            <input type="checkbox" id="theme-toggle" />
+            <span class="slider"></span>
+          </label>
+          <svg class="dark-icon" aria-hidden="true">
+            <use href="#icon-moon" />
+          </svg>
+        </div>
+      </div>
+
+      <div class="view-toggle">
+        <button id="view-toggle-btn" class="view-toggle-btn">
+          <span class="view-label">Game View</span>
+        </button>
+      </div>
+
+      <div class="sidebar-attribution">
+        <div class="copyright-year">
+          @You need Javascript For this Website Lol
+        </div>
+        <div class="icon-attribution">
+          SVG Icons by Freepik, Devicons, and Iconic Arts, ariefstudio, and Cap
+          Cool
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+      <!-- About Section -->
+      <section id="about">
+        <!-- Main about content with image and text side by side -->
+        <div class="about-content-wrapper">
+          <div class="about-media">
+            <img src="/images/frisk-undertale.gif" alt="" />
+          </div>
+          <div class="xp-window">
+            <div class="xp-titlebar">
+              <div class="xp-icon"></div>
+              <div class="xp-title">about.txt</div>
+              <div class="xp-controls">
+                <div class="xp-button minimize"></div>
+                <div class="xp-button maximize"></div>
+                <div class="xp-button close"></div>
+              </div>
+            </div>
+            <div class="xp-content">
+              <div class="xp-sub-window">
+                <div class="about-text">
+                  <p>I'm a game developer.</p>
+                  <p>
+                    I have worked in Unity and Godot with a strong focus on
+                    gameplay programming, procedural generation, and shader
+                    development. My experience includes working as a software
+                    engineer in the government and fintech space for the past
+                    3–4 years.
+                  </p>
+                  <p>
+                    When I'm not coding, I enjoy experimenting with 3D modeling,
+                    learning about game design principles, and playing
+                    <i>Fields of Mistria</i> or <i>Minecraft</i> with my
+                    friends.
+                  </p>
+                  <p>I'm currently playing: <i>Palworld</i>.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Portfolio Section -->
+      <section id="portfolio">
+        <div class="xp-window">
+          <div class="xp-titlebar">
+            <div class="xp-icon"></div>
+            <div class="xp-title">portfolio.txt</div>
+            <div class="xp-controls">
+              <div class="xp-button minimize"></div>
+              <div class="xp-button maximize"></div>
+              <div class="xp-button close"></div>
+            </div>
+          </div>
+          <div class="container">
+            <div class="filter-buttons">
+              <button class="filter-button active" data-filter="all">
+                All
+              </button>
+              <button class="filter-button" data-filter="unity">Unity</button>
+              <button class="filter-button" data-filter="unreal">
+                Unreal Engine
+              </button>
+              <button class="filter-button" data-filter="godot">Godot</button>
+              <button class="filter-button" data-filter="web">Web Games</button>
+              <button class="filter-button" data-filter="3d">
+                3D Modeling
+              </button>
+            </div>
+            <div class="project-card-grid"></div>
+        </div>
+      </section>
+
+      <section id="blog">
+        <div class="xp-window">
+          <div class="xp-titlebar">
+            <div class="xp-icon"></div>
+            <div class="xp-title">blog.txt</div>
+            <div class="xp-controls">
+              <div class="xp-button minimize"></div>
+              <div class="xp-button maximize"></div>
+              <div class="xp-button close"></div>
+            </div>
+          </div>
+        </div>
+        <div class="container">
+          <div class="blog-list"></div>
+        </div>
+      </section>
+    </div>
+
+    <div id="game-view-container" class="game-view-container">
+      <canvas id="main-game-canvas">
+        Your browser does not support the HTML5 canvas element.
+      </canvas>
+      <div id="mobile-controls" class="mobile-controls hidden">
+        <div id="joystick-container" class="joystick-container">
+          <svg
+            viewBox="0 0 128 128"
+            width="100%"
+            height="100%"
+            style="overflow: visible"
+          >
+            <circle cx="64" cy="64" r="64" fill="rgba(0, 0, 0, 0.3)"></circle>
+            <g
+              id="joystick-knob"
+              transform="translate(64, 64)"
+              style="transition: transform 0.2s ease-out"
+            >
+              <circle
+                cx="0"
+                cy="0"
+                r="32"
+                fill="rgba(255, 255, 255, 0.8)"
+                stroke="#555"
+                stroke-width="1"
+              ></circle>
+            </g>
+          </svg>
+        </div>
+
+        <div class="altitude-controls">
+          <button id="altitude-up" class="altitude-button" aria-label="Up">
+            <svg class="icon-up" viewBox="0 0 64 64" width="100%" height="100%">
+              <circle
+                cx="32"
+                cy="32"
+                r="30"
+                fill="rgba(0,0,0,0.3)"
+                stroke="#555"
+                stroke-width="1"
+              ></circle>
+              <path
+                d="M20 36 L32 20 L44 36"
+                stroke="#FFFFFF"
+                stroke-width="4"
+                fill="none"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              ></path>
+            </svg>
+          </button>
+          <button id="altitude-down" class="altitude-button" aria-label="Down">
+            <svg
+              class="icon-down"
+              viewBox="0 0 64 64"
+              width="100%"
+              height="100%"
+            >
+              <circle
+                cx="32"
+                cy="32"
+                r="30"
+                fill="rgba(0,0,0,0.3)"
+                stroke="#555"
+                stroke-width="1"
+              ></circle>
+              <path
+                d="M20 28 L32 44 L44 28"
+                stroke="#FFFFFF"
+                stroke-width="4"
+                fill="none"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              ></path>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Compact Game Controls UI -->
+      <div class="game-controls-info visible">
+        <div class="controls-header">
+          <h3 class="controls-title">Controls</h3>
+          <div class="controls-buttons">
+            <button class="toggle-btn">-</button>
+          </div>
+        </div>
+
+        <div class="controls-content">
+          <div class="controls-layout">
+            <div class="control-section">
+              <span class="control-label">Move:</span>
+              <div class="key-group">
+                <span class="key" data-key="KeyW">W</span>
+                <span class="key" data-key="KeyA">A</span>
+                <span class="key" data-key="KeyS">S</span>
+                <span class="key" data-key="KeyD">D</span>
+                <span class="key-separator">/</span>
+                <span class="key" data-key="ArrowUp">↑</span>
+                <span class="key" data-key="ArrowLeft">←</span>
+                <span class="key" data-key="ArrowDown">↓</span>
+                <span class="key" data-key="ArrowRight">→</span>
+              </div>
+            </div>
+
+            <div class="control-section">
+              <span class="control-label">Alt:</span>
+              <div class="key-group">
+                <span class="key" data-key="ShiftLeft">⇧</span>
+                <span class="key-separator">up</span>
+                <span class="key" data-key="Space">␣</span>
+                <span class="key-separator">down</span>
+              </div>
+            </div>
+
+            <div class="control-section">
+              <span class="control-label">Menu:</span>
+              <div class="key-group">
+                <span class="key" data-key="Escape">Esc</span>
+                <span class="key" data-key="KeyR">R</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="status-section">
+            <div class="status-grid">
+              <div class="status-item">
+                <span class="status-label">Status</span>
+                <span
+                  class="status-value"
+                  id="movement-status"
+                  data-status="idle"
+                  >Hovering</span
+                >
+              </div>
+              <div class="status-item">
+                <span class="status-label">Altitude</span>
+                <span
+                  class="status-value"
+                  id="altitude-status"
+                  data-altitude="stable"
+                  >Stable</span
+                >
+              </div>
+            </div>
+            <div class="status-item" style="margin-top: 6px">
+              <span class="status-label">Active Keys</span>
+              <span class="status-value" id="active-keys">None</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/js/main.js"></script>
   </body>
 </html>

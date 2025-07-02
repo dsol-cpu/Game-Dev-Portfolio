@@ -1,0 +1,470 @@
+/* Project card component */
+:root {
+  --portfolio-card-bg: #fcf2ff; /* Soft lavender card background */
+  --portfolio-card-shadow: 0 8px 20px rgba(106, 155, 231, 0.15);
+  --portfolio-card-border: #f794a466; /* Pink border to match theme */
+}
+
+[data-theme="dark"] {
+  --portfolio-card-bg: #2a3442;
+  --portfolio-card-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+  --portfolio-card-border: rgba(116, 179, 255, 0.7);
+}
+
+.project-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1rem;
+  height: 100%;
+}
+
+.game-preview {
+  width: 350px;
+  height: 256px;
+  position: relative;
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12), 0 4px 8px rgba(0, 0, 0, 0.06);
+  cursor: pointer;
+  background-color: transparent;
+  user-select: none;
+  z-index: 15;
+}
+
+.game-preview:hover:not(.expanded) {
+  transform: none !important;
+  box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15), 0 5px 15px rgba(0, 0, 0, 0.08);
+}
+
+/* Expanded state */
+.game-preview.project-card.expanded {
+  width: 500px;
+  height: 100%;
+  max-height: 80vh;
+  cursor: default;
+  z-index: 9999 !important; /* Very high z-index to appear above everything */
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  position: fixed; /* Changed to fixed positioning */
+  background-color: transparent;
+  overflow: visible;
+}
+
+.game-preview.project-card.expanded.expand-left {
+  position: relative;
+  z-index: 100;
+  transform: translateX(-140px);
+}
+
+.game-image-container {
+  width: 100%;
+  height: 240px;
+  position: relative;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* ThreeJS canvas styling - now the main focus */
+.threejs-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 2; /* Raised to be above the base card */
+  user-select: none;
+  will-change: width, height, transform;
+  pointer-events: auto; /* Allow canvas interactions */
+  object-fit: contain;
+}
+
+/* Fallback image styling */
+.game-image {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: white;
+  font-weight: bold;
+  font-size: 18px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  background-size: cover;
+  background-position: center;
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1; /* Behind the canvas */
+  user-select: none;
+}
+
+/* Overlay styles */
+.game-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 20px;
+  color: white;
+  opacity: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 3; /* Above the canvas */
+  user-select: none;
+}
+
+.game-preview:hover:not(.expanded) .game-overlay {
+  opacity: 1;
+}
+
+.game-preview.expanded .game-overlay {
+  display: none;
+}
+
+.game-preview.project-card.expanded .model-view-window {
+  height: 100%;
+}
+
+.game-title {
+  margin: 0;
+  user-select: none;
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  transform: translateY(8px);
+  opacity: 0;
+}
+
+.game-preview:hover:not(.expanded) .game-title {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.overlay-buttons {
+  display: flex;
+  gap: 10px;
+  transform: translateY(8px);
+  opacity: 0;
+  user-select: none;
+}
+
+.game-preview:hover:not(.expanded) .overlay-buttons {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.btn svg {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+}
+
+.btn-primary {
+  background-color: #4a6cf7;
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: #3a5ce5;
+}
+
+.btn-secondary {
+  background-color: #2c3e50;
+  color: white;
+}
+
+.btn-secondary:hover {
+  background-color: #1a2530;
+}
+
+.btn-play {
+  background: linear-gradient(140deg, #ff6b8b 0%, #ff8fab 100%);
+  color: white;
+  flex-grow: 1;
+}
+
+.btn-play:hover {
+  background: linear-gradient(140deg, #ff5a7d 0%, #ff7d9d 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(255, 107, 139, 0.3);
+}
+
+.btn-play:active {
+  transform: translateY(0);
+}
+
+.btn-play::before {
+  content: "▶ ";
+  font-size: 10px;
+}
+
+.btn-details {
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.btn-details:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.btn-details:active {
+  transform: translateY(0);
+}
+
+/* Expanded content styles - now with transparency */
+.expanded-content {
+  height: 0;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.85); /* Semi-transparent background */
+  backdrop-filter: blur(5px); /* Adds a blur effect to the background */
+  -webkit-backdrop-filter: blur(5px);
+  user-select: none;
+  position: relative;
+  z-index: 5; /* Above the canvas */
+  border-radius: 0 0 16px 16px; /* Rounded corners only at the bottom */
+}
+
+.game-preview.expanded .expanded-content {
+  height: auto;
+  max-height: calc(80vh - 240px);
+  overflow-y: auto;
+}
+
+.expanded-content-inner {
+  padding: 24px;
+  opacity: 0;
+  transform: translateY(20px);
+  user-select: none;
+  position: relative;
+  z-index: 200; /* Above the canvas */
+}
+
+.game-preview.expanded .expanded-content-inner {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.card-title {
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0 0 16px 0;
+  color: #222;
+  letter-spacing: -0.5px;
+  user-select: none;
+}
+
+.project-description {
+  font-size: 15px;
+  line-height: 1.6;
+  color: #555;
+  margin: 0 0 20px 0;
+  user-select: none;
+}
+
+.project-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 24px;
+  user-select: none;
+}
+
+.project-tag {
+  background-color: #f0eeff;
+  color: #6859ff;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  user-select: none;
+}
+
+.action-buttons {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 24px;
+  user-select: none;
+  position: relative;
+  z-index: 6; /* Ensure buttons are clickable */
+}
+
+.btn-full-details {
+  background: linear-gradient(140deg, #6859ff 0%, #9682ff 100%);
+  color: white;
+  flex-grow: 1;
+  box-shadow: 0 4px 12px rgba(104, 89, 255, 0.25);
+}
+
+.btn-full-details:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(104, 89, 255, 0.35);
+}
+
+.btn-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: rgba(0, 0, 0, 0.2);
+  border: none;
+  color: white;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 18px;
+  line-height: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  z-index: 20; /* Increased z-index to be above everything */
+  opacity: 0;
+  visibility: hidden;
+  user-select: none;
+}
+
+.game-preview.expanded .btn-close {
+  opacity: 1;
+  visibility: visible;
+}
+
+.btn-close:hover {
+  background: rgba(0, 0, 0, 0.4);
+  transform: scale(1.1);
+}
+
+.btn-back {
+  background: #f5f5f7;
+  color: #555;
+  border: 1px solid #ddd;
+}
+
+.btn-back:hover {
+  background: #eee;
+  transform: translateY(-2px);
+}
+
+/* Canvas container for expanded mode */
+.canvas-container {
+  position: absolute;
+  height: 240px;
+  width: 100%;
+  z-index: 1;
+}
+
+.model-view-window {
+  overscroll-behavior: none;
+  touch-action: none;
+  position: relative;
+  width: 100%;
+  height: 180px;
+  min-height: 120px; /* Prevent extreme squishing */
+  background-color: transparent;
+  border-radius: 8px;
+  overflow: hidden;
+  cursor: pointer;
+  z-index: 5;
+}
+
+/* Container for model content */
+.model-view-scroll-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+  z-index: 5; /* Above canvas in non-expanded state */
+}
+
+.model-interaction-hint {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  background-color: rgba(0, 0, 0, 0.5);
+  color: white;
+  padding: 3px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  opacity: 0.7;
+  pointer-events: none;
+  z-index: 11; /* Ensure it's visible above canvas */
+}
+
+.hidden-card {
+  opacity: 0;
+  position: absolute;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* Center the expanded card within its section */
+.section-centered-card {
+  position: absolute !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  z-index: 100 !important;
+  margin: 0 !important;
+}
+
+/* Make sure the card has room to expand */
+.game-preview.project-card.expanded.section-centered-card {
+  position: absolute !important; /* Container-relative positioning */
+  top: 50% !important;
+  left: 50% !important;
+  transform: tradwnslate(-50%, -50%) !important;
+  width: 90% !important;
+  max-width: 800px !important;
+  max-height: 80vh !important;
+  z-index: 9999 !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4) !important;
+  margin: 0 !important;
+}
+
+/* Prevent body scroll when card is expanded */
+body.overflow-hidden {
+  overflow: hidden;
+}
+
+/* Make the portfolio section position relative for proper card centering */
+#portfolio {
+  position: relative !important;
+}
+
+/* Responsive adjustments */
+@media (max-width: 900px) {
+  .game-preview {
+    width: 100%;
+  }
+
+  .game-preview.project-card.expanded.section-centered-card {
+    width: 95%;
+    max-width: 500px;
+  }
+}
+
+@media (max-height: 100px) {
+  .game-image-container {
+    display: none;
+  }
+
+  .game-preview {
+    height: auto;
+  }
+}

@@ -1,0 +1,177 @@
+/* Main container for the about section */
+#about {
+  position: relative;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 20px;
+}
+
+/* Account for sidebar width - adjust based on your sidebar width */
+@media (min-width: 768px) {
+  #about {
+    margin-left: 0; /* The main-content container already handles this offset */
+  }
+}
+
+/* Override XP content for reduced padding since it only contains text now */
+#about .xp-content {
+  padding: 16px;
+  background: #ece9d8;
+  min-height: 200px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #000;
+}
+
+/* Content wrapper for side-by-side layout */
+.about-content-wrapper {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  width: 100%;
+  margin-bottom: 40px; /* More space before image gallery */
+}
+
+/* Media container (image/canvas) - now outside XP window */
+.about-media {
+  flex-shrink: 0;
+  width: 160px;
+}
+
+.about-media img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border: 2px inset #ece9d8;
+  box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+  transform: rotate(-15deg);
+}
+
+/* XP window now contains only the text */
+#about .xp-window {
+  flex: 1;
+  min-width: 0; /* Prevents flex item from overflowing */
+}
+
+/* About text content inside XP window */
+.about-text {
+  line-height: 1.6;
+  font-size: 12px;
+}
+
+.about-text p {
+  margin: 0 0 12px 0;
+  color: #000;
+}
+
+.about-text p:last-child {
+  margin-bottom: 0;
+}
+
+/* About image gallery - now completely outside XP window */
+.about-images {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+/* Individual image cards with enhanced styling since they're outside XP window */
+.image-card {
+  width: 180px;
+  background: #ece9d8;
+  border: 2px outset #ece9d8;
+  overflow: hidden;
+  transition: all 0.2s ease;
+  text-align: center;
+  cursor: pointer;
+  box-shadow: 2px 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.image-card:hover {
+  border: 2px inset #ece9d8;
+  transform: translateY(-2px);
+  box-shadow: 3px 3px 8px rgba(0, 0, 0, 0.4);
+}
+
+.image-card:active {
+  border: 2px inset #ece9d8;
+  background: #d4d0c8;
+  transform: translateY(0);
+  box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.image-card img {
+  width: 100%;
+  height: 120px;
+  display: block;
+  object-fit: cover;
+  border-bottom: 1px solid #aca899;
+}
+
+.image-card p {
+  padding: 8px 6px;
+  font-size: 12px;
+  color: #000;
+  background: #ece9d8;
+  margin: 0;
+  font-weight: bold;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  #about {
+    padding: 10px;
+  }
+
+  .about-content-wrapper {
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 20px;
+    margin-bottom: 30px;
+  }
+
+  .about-media {
+    width: 140px;
+  }
+
+  .about-media canvas {
+    height: 140px !important;
+  }
+
+  #about .xp-window {
+    width: 100%;
+  }
+
+  .about-text {
+    text-align: left;
+  }
+
+  .image-card {
+    width: calc(50% - 8px); /* Two cards per row on smaller screens */
+  }
+}
+
+@media (max-width: 480px) {
+  .about-media {
+    width: 120px;
+  }
+
+  .about-media canvas {
+    height: 120px !important;
+  }
+
+  #about .xp-content {
+    padding: 12px;
+  }
+
+  .image-card {
+    width: 100%; /* Full width on very small screens */
+  }
+
+  .about-images {
+    gap: 12px;
+  }
+}

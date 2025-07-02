@@ -2,6 +2,7 @@
 .env*
 
 # Editor directories and files
+.idea
 .vscode
 .history
 .cache_ggshield
@@ -22,3 +23,10 @@ node_modules/
 
 # Python venv
 .venv/
+
+# Vite Cache
+.vite-cache
+
+# SonarQube Server and CLI
+sonar-project.properties
+.scannerwork/*

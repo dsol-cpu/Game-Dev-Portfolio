@@ -1,0 +1,324 @@
+.xp-window {
+  max-width: 100%;
+  min-width: 120px;
+  margin: 0 auto;
+  background: #ece9d8;
+  border: 2px solid #0054e3;
+  border-top: 2px solid #4a90e2;
+  border-left: 2px solid #4a90e2;
+  border-right: 2px solid #003d7a;
+  border-bottom: 2px solid #003d7a;
+  box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3),
+    0 0 0 1px rgba(255, 255, 255, 0.2) inset;
+  overflow: hidden;
+  position: relative;
+  animation: windowFadeIn 0.3s ease-out;
+}
+
+@keyframes windowFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.xp-window::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.6) 20%,
+    rgba(255, 255, 255, 0.6) 80%,
+    transparent
+  );
+  z-index: 1;
+}
+
+.xp-titlebar {
+  background: linear-gradient(
+    to bottom,
+    #1cb3ff 0%,
+    #0997ff 25%,
+    #0078ee 50%,
+    #0053ee 75%,
+    #316ac5 100%
+  );
+  height: 24px;
+  display: flex;
+  align-items: center;
+  padding: 2px 4px 2px 8px;
+  user-select: none;
+  font-size: 11px;
+  border-bottom: 1px solid #225588;
+  position: relative;
+  overflow: hidden;
+  z-index: 100;
+}
+
+.xp-titlebar::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 50%;
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0.3),
+    rgba(255, 255, 255, 0.1) 30%,
+    rgba(255, 255, 255, 0.05) 70%,
+    transparent
+  );
+}
+
+.xp-titlebar.inactive {
+  background: linear-gradient(
+    to bottom,
+    #a5b2c1 0%,
+    #8a97a6 25%,
+    #7d8794 50%,
+    #6c7882 75%,
+    #5c6570 100%
+  );
+}
+
+.xp-icon {
+  width: 16px;
+  height: 16px;
+  margin-right: 8px;
+  background: linear-gradient(135deg, #4a90e2, #316ac5);
+  border: 1px solid #0054e3;
+  border-radius: 2px;
+  box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.3);
+  position: relative;
+}
+
+.xp-icon::after {
+  content: "📁";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 10px;
+}
+
+.xp-title {
+  color: white;
+  font-size: 11px;
+  font-weight: bold;
+  flex: 1;
+  text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
+  letter-spacing: 0.5px;
+  text-align: center;
+}
+
+.xp-controls {
+  display: flex;
+  gap: 2px;
+}
+
+.xp-button {
+  width: 21px;
+  height: 21px;
+  background: linear-gradient(to bottom, #f0ede6 0%, #ddd6ce 50%, #c9c2ba 100%);
+  border: 1px solid #aca899;
+  border-top: 1px solid #ffffff;
+  border-left: 1px solid #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.1s ease;
+  position: relative;
+}
+
+.xp-button::before {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 1px;
+  right: 1px;
+  height: 40%;
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.4), transparent);
+  border-radius: 1px;
+}
+
+.xp-button:hover {
+  background: linear-gradient(to bottom, #f8f5ee 0%, #e6dfd6 50%, #d1cac2 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.xp-button:active {
+  background: linear-gradient(to bottom, #c9c2ba 0%, #ddd6ce 100%);
+  border-top: 1px solid #7c7c7c;
+  border-left: 1px solid #7c7c7c;
+  border-right: 1px solid #ffffff;
+  border-bottom: 1px solid #ffffff;
+  box-shadow: inset 1px 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.xp-button.minimize::after {
+  content: "";
+  width: 9px;
+  height: 2px;
+  background: #000;
+  margin-top: 3px;
+}
+
+.xp-button.maximize::after {
+  content: "";
+  width: 9px;
+  height: 9px;
+  border: 1px solid #000;
+  border-top: 2px solid #000;
+}
+
+.xp-button.close::after {
+  content: "×";
+  color: #000;
+  font-size: 16px;
+  font-weight: bold;
+  line-height: 1;
+}
+
+.xp-button.close:hover {
+  background: linear-gradient(to bottom, #ff6b6b 0%, #ee5555 50%, #dd4444 100%);
+}
+
+.xp-button.close:hover::after {
+  color: white;
+  text-shadow: 1px 1px 1px rgba(0, 0, 0, 0.5);
+}
+
+.xp-content {
+  padding: 12px;
+  background: linear-gradient(135deg, #ece9d8 0%, #f2efea 50%, #ece9d8 100%);
+  min-height: 180px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #000;
+  position: relative;
+}
+
+.xp-content::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(0, 0, 0, 0.1) 50%,
+    transparent
+  );
+}
+
+.xp-content h3 {
+  margin: 0 0 12px 0;
+  font-size: 12px;
+  font-weight: bold;
+  color: #0054e3;
+  text-shadow: 1px 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.xp-content p {
+  margin: 0 0 10px 0;
+}
+
+.xp-sub-window {
+  width: 100%;
+  min-height: 120px;
+  background: white;
+  border: 2px inset #ece9d8;
+  box-sizing: border-box;
+  box-shadow: inset 1px 1px 2px rgba(0, 0, 0, 0.1);
+  position: relative;
+  overflow: auto;
+  padding: 8px;
+  font-size: 11px;
+  font-family: "Tahoma", "MS Sans Serif", sans-serif;
+  line-height: 1.4;
+  color: #000;
+}
+
+/* Styles for content you might add */
+.xp-sub-window img {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid #ccc;
+  box-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.xp-sub-window p {
+  margin: 0 0 8px 0;
+}
+
+.xp-sub-window ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
+.xp-sub-window li {
+  margin-bottom: 2px;
+}
+
+.xp-button-standard {
+  background: linear-gradient(to bottom, #f0ede6 0%, #ece9d8 50%, #d4d0c8 100%);
+  border: 1px solid #aca899;
+  border-top: 1px solid #ffffff;
+  border-left: 1px solid #ffffff;
+  padding: 6px 18px;
+  margin: 12px 6px 0 0;
+  font-size: 11px;
+  color: #000;
+  display: inline-block;
+  position: relative;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset;
+}
+
+.xp-status-bar {
+  height: 22px;
+  background: linear-gradient(to bottom, #f0ede6 0%, #ece9d8 100%);
+  border-top: 1px solid #dfdfdf;
+  display: flex;
+  align-items: center;
+  padding: 0 8px;
+  font-size: 11px;
+  color: #666;
+}
+
+.xp-status-bar::before {
+  content: "";
+  position: absolute;
+  bottom: 22px;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(0, 0, 0, 0.1) 50%,
+    transparent
+  );
+}
+
+@media (max-width: 640px) {
+  .xp-window {
+    width: 95%;
+    max-width: 420px;
+    margin: 10px auto;
+  }
+}

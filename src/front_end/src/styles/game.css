@@ -1,0 +1,243 @@
+.game-icons {
+  display: none;
+}
+
+/* Game Controls Container */
+.game-controls-info {
+  position: absolute;
+  bottom: 30px;
+  left: 30px;
+  background-color: rgba(15, 23, 42, 0.85);
+  color: white;
+  padding: 16px 20px;
+  border-radius: 12px;
+  z-index: 1001;
+  font-family: "Arial", sans-serif;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
+  max-width: 320px;
+}
+
+/* Controls Header */
+.controls-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.controls-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.controls-header .controller-icon {
+  width: 20px;
+  height: 20px;
+  margin-right: 8px;
+}
+
+/* Controls List */
+.controls-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.control-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 14px;
+  transition: transform 0.2s ease;
+}
+
+.control-item:last-child {
+  margin-bottom: 0;
+}
+
+/* Key Icons Container */
+.key-icons {
+  display: flex;
+  align-items: center;
+  margin-right: 12px;
+  min-width: 80px;
+}
+
+/* Individual Key Styling */
+.key {
+  color: white;
+  background-color: rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-right: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  height: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.2);
+  transition: all 0.2s ease;
+}
+
+.key:hover {
+  background-color: rgba(255, 255, 255, 0.25);
+  transform: translateY(-2px);
+}
+
+.key.arrow {
+  font-size: 14px;
+}
+
+.key.space {
+  min-width: 60px;
+}
+
+.key-group {
+  display: flex;
+  align-items: center;
+}
+
+.key-group .key:not(:last-child) {
+  margin-right: 2px;
+}
+
+.key-separator {
+  margin: 0 4px;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+}
+
+/* Command Description */
+.command-desc {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* Arrow Keys & WASD Grid Layout */
+.key-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 2px;
+  margin-right: 8px;
+}
+
+.key-grid .key:first-child {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.key-grid .key:nth-child(2) {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.key-grid .key:nth-child(3) {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.key-grid .key:nth-child(4) {
+  grid-column: 3;
+  grid-row: 2;
+}
+
+/* Active Key State */
+.key.active {
+  background-color: rgba(110, 231, 183, 0.6);
+  transform: translateY(2px);
+  box-shadow: 0 0px 0 rgba(0, 0, 0, 0.2);
+  border-color: rgba(110, 231, 183, 0.8);
+}
+
+/* Minimize/Expand Button */
+.toggle-btn {
+  position: absolute;
+  top: 10px;
+  right: 40px;
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+.toggle-btn:hover {
+  color: white;
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .game-controls-info {
+    left: 20px;
+    bottom: 20px;
+    padding: 12px 16px;
+  }
+
+  .key {
+    min-width: 20px;
+    height: 20px;
+    padding: 2px 6px;
+    font-size: 10px;
+  }
+
+  .key.space {
+    min-width: 40px;
+  }
+
+  .command-desc {
+    font-size: 12px;
+  }
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Collapsed State */
+.game-controls-info.collapsed {
+  width: auto;
+  height: auto;
+  padding: 12px;
+}
+
+.game-controls-info.collapsed .controls-content {
+  display: none;
+}
+
+.game-controls-info.collapsed .controls-header {
+  margin-bottom: 0;
+  padding-bottom: 0;
+  border-bottom: none;
+}
+
+/* Game mode body state */
+body.game-mode {
+  overflow: hidden;
+}

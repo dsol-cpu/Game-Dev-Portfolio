@@ -1,17 +1,46 @@
+# robots.txt for SEO optimization
+# Last updated: May 14, 2025
+
+# Default rule - block all bots
 User-agent: *
 Disallow: /
 
+# Allow major search engines
 User-agent: Googlebot
 Allow: /
+Crawl-delay: 1
+
+User-agent: Googlebot-Image
+Allow: /images/
+Allow: /photos/
 
 User-agent: DuckDuckBot
 Allow: /
+Crawl-delay: 1
 
 User-agent: Bingbot
 Allow: /
+Crawl-delay: 2
 
-User-agent: Slurp
+User-agent: Yahoo Slurp
 Allow: /
+Crawl-delay: 2
 
-Baidu: Baiduspider
+User-agent: Baiduspider
 Allow: /
+Crawl-delay: 3
+
+User-agent: Yandexbot
+Allow: /
+Crawl-delay: 2
+
+# Block specific paths from all bots
+User-agent: *
+Disallow: /admin/
+Disallow: /private/
+Disallow: /cart/
+Disallow: /checkout/
+Disallow: /user/
+Disallow: /account/
+Disallow: /cgi-bin/
+Disallow: /tmp/
