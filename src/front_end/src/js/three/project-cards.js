@@ -12,12 +12,14 @@ import { PROJECT_CARD_DATA } from "../data/projects.js";
 const state = {
   models: new Map(),
   spotlights: new Map(),
-  modelZoomLevels: new Map(), // Store zoom levels for each model
+  modelZoomLevels: new Map(), // Store zoom levels for each model in grid mode
+  modelExpandedZoomLevels: new Map(), // Store zoom levels for each model in expanded mode
+  modelOriginalScales: new Map(), // Store original default scales for each model
+  modelRotations: new Map(), // Store rotation states for each model
   scene: null,
   camera: null,
   canvas: null,
   dragging: { active: false, model: null, lastX: 0 },
-  isTransitioning: false,
 };
 
 const el = (tag, cls, attrs = {}) => {
@@ -49,19 +51,74 @@ const getExpandedScaleMultiplier = () => {
   return 1;
 };
 
+// Initialize original scales for a model if not already set
+const initializeOriginalScales = (modelName) => {
+  if (state.modelOriginalScales.has(modelName)) return;
+
+  const baseScale = getResponsiveBaseScale();
+  const expandedScale = baseScale * getExpandedScaleMultiplier();
+
+  state.modelOriginalScales.set(modelName, {
+    grid: baseScale,
+    expanded: expandedScale,
+  });
+};
+
 // Get the current zoom level for a model, or default if not set
 const getModelZoomLevel = (modelName, isExpanded = false) => {
-  const storedZoom = state.modelZoomLevels.get(modelName);
+  // Ensure original scales are initialized
+  initializeOriginalScales(modelName);
+
+  const zoomMap = isExpanded
+    ? state.modelExpandedZoomLevels
+    : state.modelZoomLevels;
+  const storedZoom = zoomMap.get(modelName);
   if (storedZoom !== undefined) return storedZoom;
 
-  // Default zoom level
-  const baseScale = getResponsiveBaseScale();
-  return isExpanded ? baseScale * getExpandedScaleMultiplier() : baseScale;
+  // Return original default scale
+  const originalScales = state.modelOriginalScales.get(modelName);
+  return isExpanded ? originalScales.expanded : originalScales.grid;
 };
 
 // Set the zoom level for a model
-const setModelZoomLevel = (modelName, zoomLevel) => {
-  state.modelZoomLevels.set(modelName, zoomLevel);
+const setModelZoomLevel = (modelName, zoomLevel, isExpanded = false) => {
+  const zoomMap = isExpanded
+    ? state.modelExpandedZoomLevels
+    : state.modelZoomLevels;
+  zoomMap.set(modelName, zoomLevel);
+};
+
+// Reset a model's scale to its original default
+const resetModelToOriginalScale = (modelName, isExpanded = false) => {
+  initializeOriginalScales(modelName);
+  const originalScales = state.modelOriginalScales.get(modelName);
+  const originalScale = isExpanded
+    ? originalScales.expanded
+    : originalScales.grid;
+
+  // Clear the stored user-modified scale
+  const zoomMap = isExpanded
+    ? state.modelExpandedZoomLevels
+    : state.modelZoomLevels;
+  zoomMap.delete(modelName);
+
+  return originalScale;
+};
+
+// Get the current rotation for a model, or default if not set
+const getModelRotation = (modelName) => {
+  return state.modelRotations.get(modelName) || { x: 0, y: 0, z: 0 };
+};
+
+// Set the rotation for a model
+const setModelRotation = (modelName, rotation) => {
+  state.modelRotations.set(modelName, { ...rotation });
+};
+
+// Reset a model's rotation to default
+const resetModelToOriginalRotation = (modelName) => {
+  state.modelRotations.delete(modelName);
+  return { x: 0, y: 0, z: 0 };
 };
 
 const createSpotlight = (modelName) => {
@@ -162,7 +219,7 @@ const calculateExpandedPosition = (expandedCard) => {
   return state.camera.position.clone().add(direction.multiplyScalar(6));
 };
 
-// Updated model positioning - preserves user zoom levels
+// Updated model positioning - preserves user zoom levels and rotations
 const updateAllModelPositions = () => {
   const expandedCard = document.querySelector(".project-card.expanded");
   const isAnyCardExpanded = !!expandedCard;
@@ -186,8 +243,11 @@ const updateAllModelPositions = () => {
       if (isExpandedModel) {
         const position = calculateExpandedPosition(expandedCard);
         const scale = getModelZoomLevel(modelName, true);
+        const rotation = getModelRotation(modelName);
+
         model.position.copy(position);
         model.scale.setScalar(scale);
+        model.rotation.set(rotation.x, rotation.y, rotation.z);
         updateSpotlightPosition(modelName, position, true);
       }
     } else {
@@ -197,9 +257,13 @@ const updateAllModelPositions = () => {
 
       if (isVisible) {
         const position = calculateModelPosition(modelName);
+        // Use stored zoom level for grid mode too - this preserves user's zoom from expanded state
         const scale = getModelZoomLevel(modelName, false);
+        const rotation = getModelRotation(modelName);
+
         model.position.copy(position);
         model.scale.setScalar(scale);
+        model.rotation.set(rotation.x, rotation.y, rotation.z);
         updateSpotlightPosition(modelName, position, false);
       }
     }
@@ -260,6 +324,35 @@ const createButtons = (project, type, id) => {
   close.onclick = (e) => toggleExpand(e, id);
   btnWrapper.appendChild(close);
 
+  // Add reset button for expanded view
+  const reset = el("button", "btn btn-secondary", {
+    textContent: "Reset View",
+  });
+  reset.onclick = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const card = document.getElementById(id);
+    const modelName = card?.dataset.model;
+
+    if (modelName) {
+      const model = state.models.get(modelName);
+      if (model) {
+        // Reset to original scale and rotation
+        const originalScale = resetModelToOriginalScale(modelName, true);
+        const originalRotation = resetModelToOriginalRotation(modelName);
+
+        model.scale.setScalar(originalScale);
+        model.rotation.set(
+          originalRotation.x,
+          originalRotation.y,
+          originalRotation.z
+        );
+      }
+    }
+  };
+  btnWrapper.appendChild(reset);
+
   frag.appendChild(btnWrapper);
   return frag;
 };
@@ -273,33 +366,7 @@ const createCard = (project) => {
     "data-model": project.modelName || "",
   });
 
-  const container = el("div", "game-image-container portfolio-canvas");
-
-  if (isLowPoweredDevice() && project.imageUrl) {
-    container.appendChild(
-      el("img", "fallback-image", {
-        src: project.imageUrl,
-        alt: project.title || "Project image",
-        loading: "lazy",
-      })
-    );
-  } else {
-    const window = el("div", "model-view-window", {
-      "data-model-name": project.modelName || "",
-    });
-    const hint = el("div", "model-interaction-hint", {
-      textContent: "Drag to rotate",
-    });
-    window.appendChild(hint);
-    window.onmouseenter = () => (hint.style.opacity = "0.7");
-    window.onmouseleave = () => (hint.style.opacity = "0");
-    container.appendChild(window);
-  }
-
-  const close = el("button", "btn-close", { textContent: "×" });
-  close.onclick = (e) => toggleExpand(e, project.id);
-  container.appendChild(close);
-
+  // Create the overlay and expanded content first
   const overlay = el("div", "game-overlay");
   overlay.appendChild(
     el("h3", "game-title", { textContent: project.title || "Untitled" })
@@ -328,30 +395,112 @@ const createCard = (project) => {
 
   inner.appendChild(createButtons(project, "action", project.id));
   expanded.appendChild(inner);
+
+  // Create model-view-window for expanded content if not low-powered device
+  if (!isLowPoweredDevice() && (project.modelName || "")) {
+    const expandedWindow = el("div", "model-view-window", {
+      "data-model-name": project.modelName || "",
+    });
+    const expandedHint = el("div", "model-interaction-hint", {
+      textContent: "Drag to rotate • Scroll to zoom • Reset View to restore",
+    });
+    expandedWindow.appendChild(expandedHint);
+    expandedWindow.onmouseenter = () => (expandedHint.style.opacity = "0.7");
+    expandedWindow.onmouseleave = () => (expandedHint.style.opacity = "0");
+
+    // Add close button to expanded model window
+    const expandedClose = el("button", "btn-close", { textContent: "×" });
+    expandedClose.onclick = (e) => toggleExpand(e, project.id);
+    expandedWindow.appendChild(expandedClose);
+
+    inner.appendChild(expandedWindow);
+  }
+
+  // Only create game-image-container for the card preview (not expanded view)
+  const container = el("div", "game-image-container");
+
+  // Only add fallback image for low-powered devices
+  if (isLowPoweredDevice()) {
+    if (project.imageUrl) {
+      container.appendChild(
+        el("img", "fallback-image", {
+          src: project.imageUrl,
+          alt: project.title || "Project image",
+          loading: "lazy",
+        })
+      );
+    }
+  } else {
+    // Add model-view-window for card preview on non-low-powered devices
+    const window = el("div", "model-view-window", {
+      "data-model-name": project.modelName || "",
+    });
+    const hint = el("div", "model-interaction-hint", {
+      textContent: "Drag to rotate",
+    });
+    window.appendChild(hint);
+    window.onmouseenter = () => (hint.style.opacity = "0.7");
+    window.onmouseleave = () => (hint.style.opacity = "0");
+    container.appendChild(window);
+  }
+
+  const close = el("button", "btn-close", { textContent: "×" });
+  close.onclick = (e) => toggleExpand(e, project.id);
+  container.appendChild(close);
+
+  // Append elements to card - container only appears in card preview
   card.append(container, overlay, expanded);
   return card;
 };
 
-const toggleExpand = async (e, id) => {
+const toggleExpand = (e, id) => {
   e?.preventDefault();
   e?.stopPropagation();
 
   const card = document.getElementById(id);
-  if (!card || state.isTransitioning) return;
+  if (!card) return;
 
   const expanding = !card.classList.contains("expanded");
   const modelName = card.dataset.model;
-  state.isTransitioning = true;
 
-  // If unexpanding, reset zoom and rotation
-  if (!expanding && modelName) {
+  // Handle container height when expanding/collapsing
+  const portfolioSection = document.querySelector("#portfolio");
+  const container = portfolioSection?.querySelector(".container");
+
+  if (container) {
+    if (expanding) {
+      // Store original height and set to full viewport
+      container.dataset.originalMinHeight =
+        getComputedStyle(container).minHeight;
+      container.style.minHeight = "100vh";
+      container.classList.add("has-expanded-card");
+    } else {
+      // Restore original height
+      const originalHeight = container.dataset.originalMinHeight;
+      if (originalHeight) {
+        container.style.minHeight = originalHeight;
+        delete container.dataset.originalMinHeight;
+      } else {
+        container.style.minHeight = "fit-content";
+      }
+      container.classList.remove("has-expanded-card");
+    }
+  }
+
+  // Store current model state before any changes
+  if (modelName) {
     const model = state.models.get(modelName);
     if (model) {
-      // Reset rotation
-      model.rotation.set(0, 0, 0);
+      // Always preserve the current rotation state
+      setModelRotation(modelName, {
+        x: model.rotation.x,
+        y: model.rotation.y,
+        z: model.rotation.z,
+      });
 
-      // Reset zoom level to default
-      state.modelZoomLevels.delete(modelName);
+      // Store scale based on current mode
+      const isCurrentlyExpanded = card.classList.contains("expanded");
+      setModelZoomLevel(modelName, model.scale.x, isCurrentlyExpanded);
     }
   }
 
@@ -366,26 +515,56 @@ const toggleExpand = async (e, id) => {
 
   document.body.classList.toggle("overflow-hidden", expanding);
 
-  // Wait for CSS transitions to complete
-  await new Promise((resolve) => setTimeout(resolve, 300));
+  // When expanding, reset the model to original state for expanded view
+  if (expanding && modelName) {
+    const model = state.models.get(modelName);
+    if (model) {
+      // Reset to original expanded scale and rotation
+      const originalScale = resetModelToOriginalScale(modelName, true);
+      const originalRotation = resetModelToOriginalRotation(modelName);
 
-  // Update model positions after layout settles
+      model.scale.setScalar(originalScale);
+      model.rotation.set(
+        originalRotation.x,
+        originalRotation.y,
+        originalRotation.z
+      );
+    }
+  }
+
+  // Update model positions immediately
   updateAllModelPositions();
 
-  state.isTransitioning = false;
-
   if (expanding) {
-    setTimeout(() => {
-      card.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 100);
+    card.scrollIntoView({ behavior: "instant", block: "center" });
   }
 };
 
 const setupInteraction = () => {
   const handleMove = (x, y) => {
     if (!state.dragging.active || !state.dragging.model) return;
-    state.dragging.model.rotation.y += (x - state.dragging.lastX) * 0.01;
+
+    // Calculate the delta movement
+    const deltaX = x - state.dragging.lastX;
+
+    // Apply rotation based on delta - consistent direction
+    state.dragging.model.rotation.y += deltaX * 0.01;
+
+    // Update last position
     state.dragging.lastX = x;
+
+    // Store the updated rotation
+    const modelName = [...state.models.entries()].find(
+      ([name, model]) => model === state.dragging.model
+    )?.[0];
+
+    if (modelName) {
+      setModelRotation(modelName, {
+        x: state.dragging.model.rotation.x,
+        y: state.dragging.model.rotation.y,
+        z: state.dragging.model.rotation.z,
+      });
+    }
   };
 
   const startDrag = (element, x) => {
@@ -393,42 +572,72 @@ const setupInteraction = () => {
     const model = win && state.models.get(win.dataset.modelName);
     if (!model) return false;
 
-    state.dragging = { active: true, model, lastX: x };
+    // Store initial drag state
+    state.dragging = {
+      active: true,
+      model,
+      lastX: x,
+      startX: x, // Store starting position for reference
+    };
+
     document.body.style.cursor = "grabbing";
     return true;
   };
 
   const endDrag = () => {
     state.dragging.active = false;
+    state.dragging.model = null;
     document.body.style.cursor = "";
   };
 
+  // Mouse events
   document.addEventListener("mousedown", (e) => {
-    if (!e.button && startDrag(e.target, e.clientX)) e.preventDefault();
+    if (e.button === 0 && startDrag(e.target, e.clientX)) {
+      e.preventDefault();
+    }
   });
-  document.addEventListener("mousemove", (e) =>
-    handleMove(e.clientX, e.clientY)
-  );
+
+  document.addEventListener("mousemove", (e) => {
+    handleMove(e.clientX, e.clientY);
+  });
+
   document.addEventListener("mouseup", endDrag);
 
+  // Touch events - handle single touch only
   document.addEventListener(
     "touchstart",
     (e) => {
-      if (e.touches.length === 1) startDrag(e.target, e.touches[0].clientX);
+      if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        startDrag(e.target, touch.clientX);
+      }
     },
     { passive: true }
   );
+
   document.addEventListener(
     "touchmove",
     (e) => {
-      if (e.touches.length === 1)
-        handleMove(e.touches[0].clientX, e.touches[0].clientY);
+      if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        handleMove(touch.clientX, touch.clientY);
+      }
     },
     { passive: true }
   );
-  document.addEventListener("touchend", endDrag, { passive: true });
 
-  // Updated wheel event handler - now stores the zoom level
+  document.addEventListener(
+    "touchend",
+    (e) => {
+      // Only end drag if no touches remain
+      if (e.touches.length === 0) {
+        endDrag();
+      }
+    },
+    { passive: true }
+  );
+
+  // Wheel event for zooming
   document.addEventListener(
     "wheel",
     (e) => {
@@ -448,13 +657,14 @@ const setupInteraction = () => {
         // Update the model scale
         model.scale.setScalar(newScale);
 
-        // Store the new zoom level
-        setModelZoomLevel(modelName, newScale);
+        // Store the new zoom level for expanded mode
+        setModelZoomLevel(modelName, newScale, true);
       }
     },
     { passive: false }
   );
 
+  // Keyboard events
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       const expanded = document.querySelector(".project-card.expanded");
@@ -462,15 +672,43 @@ const setupInteraction = () => {
     }
   });
 
+  // Resize handling
   const handleResize = () => {
     if (!state.canvas || !state.camera) return;
 
-    state.canvas.width = state.canvas.clientWidth;
-    state.canvas.height = state.canvas.clientHeight;
-    state.camera.aspect = state.canvas.width / state.canvas.height;
-    state.camera.updateProjectionMatrix();
+    // Get the actual client dimensions
+    const clientWidth = state.canvas.clientWidth;
+    const clientHeight = state.canvas.clientHeight;
+
+    // Skip if dimensions are invalid
+    if (clientWidth <= 0 || clientHeight <= 0) return;
+
+    // Only update if dimensions actually changed
+    if (
+      state.canvas.width !== clientWidth ||
+      state.canvas.height !== clientHeight
+    ) {
+      state.canvas.width = clientWidth;
+      state.canvas.height = clientHeight;
+
+      // Update camera aspect ratio
+      const aspect = clientWidth / clientHeight;
+      state.camera.aspect = aspect;
+      state.camera.updateProjectionMatrix();
+
+      console.log(
+        `Canvas resized to ${clientWidth}x${clientHeight}, aspect: ${aspect}`
+      );
+    }
 
     updateAllModelPositions();
+
+    // Update original scales when window is resized
+    state.models.forEach((model, modelName) => {
+      // Clear existing original scales so they get recalculated with new responsive values
+      state.modelOriginalScales.delete(modelName);
+      initializeOriginalScales(modelName);
+    });
   };
 
   window.addEventListener("resize", handleResize);
@@ -498,6 +736,10 @@ const loadProjectModel = async (name) => {
     const model = await loadModel(name);
     state.scene.add(model);
     createSpotlight(name);
+
+    // Initialize original scales for this model
+    initializeOriginalScales(name);
+
     return model;
   } catch (err) {
     console.error(`Failed to load model ${name}:`, err);
@@ -510,15 +752,33 @@ export const resetExpandedCards = () => {
   if (expandedCard) {
     const modelName = expandedCard.dataset.model;
 
-    // Reset zoom and rotation before unexpanding
+    // Reset container height
+    const portfolioSection = document.querySelector("#portfolio");
+    const container = portfolioSection?.querySelector(".container");
+
+    if (container) {
+      const originalHeight = container.dataset.originalMinHeight;
+      if (originalHeight) {
+        container.style.minHeight = originalHeight;
+        delete container.dataset.originalMinHeight;
+      } else {
+        container.style.minHeight = "fit-content";
+      }
+      container.classList.remove("has-expanded-card");
+    }
+
+    // Preserve current state before closing
     if (modelName) {
       const model = state.models.get(modelName);
       if (model) {
-        // Reset rotation
-        model.rotation.set(0, 0, 0);
-
-        // Reset zoom level to default
-        state.modelZoomLevels.delete(modelName);
+        // Store current rotation and zoom before closing
+        setModelRotation(modelName, {
+          x: model.rotation.x,
+          y: model.rotation.y,
+          z: model.rotation.z,
+        });
+        // Store expanded scale separately
+        setModelZoomLevel(modelName, model.scale.x, true);
       }
     }
 

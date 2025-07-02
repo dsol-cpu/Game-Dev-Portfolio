@@ -405,6 +405,11 @@ export function toggleGameView(elements = null) {
   // Update button text
   viewLabel.textContent = switchingToGameView ? "Scroll View" : "Game View";
 
+  // Remove focus from the button to prevent space key activation
+  if (document.activeElement === viewToggleBtn) {
+    viewToggleBtn.blur();
+  }
+
   if (switchingToGameView) {
     const sidebarWidth = sidebar.offsetWidth;
     const styleUpdates = {
@@ -556,7 +561,7 @@ let inputBindingsInitialized = false;
 function initGameInputBindings() {
   if (inputBindingsInitialized) return;
 
-  const keysToUnbind = ["Escape", "KeyC", "KeyT", "KeyR", "KeyI"];
+  const keysToUnbind = ["Escape", "KeyC", "KeyT", "KeyR", "KeyI", "Space"];
   keysToUnbind.forEach((key) => unbindKey(key));
 
   const bindingConfigs = [
@@ -623,6 +628,19 @@ function initGameInputBindings() {
         }
       },
     },
+    {
+      key: "Space",
+      action: () => {
+        // Prevent space from accidentally triggering buttons when focused
+        if (
+          document.activeElement &&
+          document.activeElement.tagName === "BUTTON"
+        ) {
+          document.activeElement.blur();
+        }
+      },
+      preventDefault: true,
+    },
   ];
 
   bindingConfigs.forEach(({ key, action, preventDefault }) => {
@@ -679,6 +697,11 @@ export async function initGame() {
       .game-mode-transition {
         transition: all 0.5s ease-in-out;
       }
+
+      /* Prevent focus outline on toggle button after click */
+      #view-toggle-btn:focus:not(:focus-visible) {
+        outline: none;
+      }
     `;
     document.head.appendChild(style);
   }
@@ -686,8 +709,27 @@ export async function initGame() {
   await initGameScene();
   elements.gameViewContainer.style.display = "none";
 
-  elements.viewToggleBtn.addEventListener("click", () => {
+  // Add enhanced click handler for the toggle button
+  elements.viewToggleBtn.addEventListener("click", (event) => {
     toggleGameView(elements);
+
+    // Prevent the button from staying focused after click
+    setTimeout(() => {
+      if (document.activeElement === elements.viewToggleBtn) {
+        elements.viewToggleBtn.blur();
+      }
+    }, 100);
+  });
+
+  // Add keyboard event handler to prevent space activation on focused button
+  elements.viewToggleBtn.addEventListener("keydown", (event) => {
+    if (
+      event.code === "Space" &&
+      document.activeElement === elements.viewToggleBtn
+    ) {
+      event.preventDefault();
+      elements.viewToggleBtn.blur();
+    }
   });
 
   updateGameViewSize(elements);

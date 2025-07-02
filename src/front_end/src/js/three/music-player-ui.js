@@ -1,4 +1,3 @@
-import { random } from "../utils/random.js";
 import {
   toggleAudio,
   setVolume,
@@ -6,7 +5,6 @@ import {
   isAudioEnabled,
   playMusic,
   pauseMusic,
-  stopMusic,
   isMusicPlaying,
   addMusic,
   initAudio,
@@ -48,7 +46,7 @@ const CONFIG = {
 
 // Consolidated state
 const state = {
-  isExpanded: true,
+  isExpanded: false, // Changed from true to false
   lastKnownVolume: 0.7,
   initialized: false,
   syncInterval: null,
@@ -86,7 +84,10 @@ const createButton = (
   return createEl("button", {
     innerHTML: content,
     title,
-    onclick: onClick,
+    onclick: (e) => {
+      onClick(e);
+      e.target.blur();
+    },
     className: "music-btn",
     style: {
       width: `${size}px`,
@@ -99,6 +100,8 @@ const createButton = (
       cursor: "pointer",
       color: CONFIG.theme.text,
       transition: "all 0.2s ease",
+      userSelect: "none",
+      outline: "none",
       ...extraStyles,
     },
   });
@@ -426,11 +429,12 @@ const createPlayer = () => {
     ),
     muteBtn: createButton("🔊", "Mute", handleMute, CONFIG.smallControlSize),
     expandBtn: createButton(
-      "🔽",
-      "Collapse",
+      "🔼", // Changed from "🔽" to "🔼" since we start unexpanded
+      "Expand", // Changed from "Collapse" to "Expand"
       () => {
         state.isExpanded = !state.isExpanded;
         elements.expandBtn.innerHTML = state.isExpanded ? "🔽" : "🔼";
+        elements.expandBtn.title = state.isExpanded ? "Collapse" : "Expand";
         elements.playlist.style.display = state.isExpanded ? "block" : "none";
         container.style.height = state.isExpanded
           ? "auto"
@@ -488,7 +492,7 @@ const createPlayer = () => {
     }),
     playlist: createEl("div", {
       style: {
-        display: "block",
+        display: "none", // Changed from "block" to "none"
         maxHeight: "180px",
         overflowY: "auto",
         background: "rgba(255, 255, 255, 0.025)",

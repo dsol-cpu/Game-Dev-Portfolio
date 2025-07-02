@@ -42,22 +42,14 @@ body {
   overflow-x: hidden;
 }
 
+button {
+  outline: none;
+  user-select: none;
+}
+
 .pdf {
   width: 100%;
   aspect-ratio: 4 / 3;
-}
-
-p,
-h1,
-h2,
-h3,
-h4,
-h5,
-h6,
-span,
-li,
-a:not(.nav-links a) {
-  color: var(--dark-color);
 }
 
 /* Main content styles */
@@ -69,22 +61,22 @@ a:not(.nav-links a) {
 }
 
 section {
-  padding-bottom: 2rem;
-  /* max-height: 50vh; */
   display: block;
   background-color: var(--light-color);
 }
 
 section .container {
   position: relative;
-  min-height: 50vh;
+  min-height: 550px;
   background-color: var(--light-color);
   margin: 3px;
   border-width: 5px;
   border-color: var(--accent-color);
   display: flex;
   flex-direction: column;
+  transition: min-height 0.3s ease; /* Smooth transition */
 }
+
 .skill-bar {
   margin-bottom: 1.5rem;
 }
@@ -125,6 +117,7 @@ section .container {
   flex-wrap: wrap;
   z-index: 3;
   justify-content: center;
+  position: relative;
 }
 
 .filter-button {

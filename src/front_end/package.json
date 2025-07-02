@@ -5,10 +5,10 @@
   },
   "devDependencies": {
     "purgecss": "^7.0.2",
-    "terser": "^5.42.0",
+    "terser": "^5.43.1",
     "vite": "^6.3.5",
     "vite-plugin-chunk-split": "^0.5.0",
-    "vite-plugin-glsl": "^1.5.0",
+    "vite-plugin-glsl": "^1.5.1",
     "vite-plugin-gltf": "^4.0.0",
     "vite-plugin-html": "^3.2.2",
     "vite-plugin-imagemin": "^0.6.1",
